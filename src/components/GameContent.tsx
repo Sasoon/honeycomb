@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react';
 import HexGrid, { HexCell } from './HexGrid';
 import PlayerHand, { LetterTile } from './PlayerHand';
-import { MAX_PLACEMENT_TILES } from '../lib/gameUtils';
+import { MAX_PLACEMENT_TILES, PathConnection } from '../lib/gameUtils';
 
 interface GameContentProps {
   grid: HexCell[];
@@ -18,6 +18,7 @@ interface GameContentProps {
   score: number;
   turns: number;
   cursedWordHint: string;
+  pathConnections: PathConnection[];
   onCellClick: (cell: HexCell) => void;
   onTileSelect: (tile: LetterTile) => void;
   onBurnTile: () => void;
@@ -40,6 +41,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   score,
   turns,
   cursedWordHint,
+  pathConnections,
   onCellClick,
   onTileSelect,
   onBurnTile,
@@ -49,7 +51,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   return (
     <div 
       ref={ref}
-      className="flex-grow"
+      className="flex-grow p-3 md:p-4"
     >
       {/* Game info section for mobile only - simplified */}
       <div className="md:hidden bg-white shadow-sm p-3 mb-4">
@@ -86,6 +88,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
           isWordValid={currentWord.length >= 3 ? isWordValid : undefined}
           isPlacementPhase={isPlacementPhase}
           isWordAlreadyScored={isWordAlreadyScored}
+          connections={pathConnections}
         />
       </div>
       

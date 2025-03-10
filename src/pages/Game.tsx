@@ -36,6 +36,7 @@ const Game = ({ isSidebarOpen, setIsSidebarOpen, openMenu, closeMenu }: GameProp
     isWordAlreadyScored,
     potentialScore,
     isShuffleAnimating,
+    pathConnections,
     handleTileSelect,
     handleCellClick,
     handleEndPlacementPhase,
@@ -161,6 +162,7 @@ const Game = ({ isSidebarOpen, setIsSidebarOpen, openMenu, closeMenu }: GameProp
           onBurnTile={handleBurnWithAnimation}
           onEndPlacementPhase={handleEndPlacementPhase}
           onScoreWord={handleScoreWord}
+          pathConnections={pathConnections}
           ref={mainContentRef}
         />
       </div>

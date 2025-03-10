@@ -208,3 +208,97 @@ body {
 .game-button:hover {
   background-color: #FF9800;
 }
+
+/* Add the following CSS for our hexagon grid at appropriate location */
+
+/* Honeycomb/Hexagon Grid Styles */
+.honeycomb-container {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.honeycomb-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.honeycomb-row-odd {
+  margin-left: 30px; /* Half the width of a hexagon */
+}
+
+/* Hexagon shape and styling */
+.hexagon {
+  width: 60px;
+  height: 60px;
+  margin: 0 2px;
+  position: relative;
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hexagon:hover {
+  transform: scale(1.05);
+}
+
+.hex-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* Border styles */
+.hex-border-blue {
+  box-shadow: inset 0 0 0 3px #0ea5e9;
+}
+
+.hex-border-green {
+  box-shadow: inset 0 0 0 3px #10b981;
+}
+
+.hex-border-red {
+  box-shadow: inset 0 0 0 3px #ef4444;
+}
+
+.hex-border-amber {
+  box-shadow: inset 0 0 0 3px #f59e0b;
+}
+
+.hex-border-gray {
+  box-shadow: inset 0 0 0 2px #e2e8f0;
+}
+
+.hex-border-dashed {
+  box-shadow: inset 0 0 0 2px #e2e8f0;
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.05) 5px, rgba(0,0,0,0.05) 10px);
+}
+
+/* Double score indicator */
+.double-score::after {
+  content: "2×";
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 0.6rem;
+  background-color: #fcd34d;
+  color: #78350f;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}

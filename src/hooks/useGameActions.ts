@@ -10,7 +10,9 @@ import {
     isAdjacentToCell,
     calculateWordScore,
     checkGameOver,
-    MAX_PLACEMENT_TILES
+    MAX_PLACEMENT_TILES,
+    isCellAvailableForSelection,
+    PathConnection
 } from '../lib/gameUtils';
 import VictoryScreen from '../components/VictoryScreen';
 
@@ -19,6 +21,7 @@ export interface GameActionsResult {
     isWordAlreadyScored: boolean;
     potentialScore: number;
     isShuffleAnimating: boolean;
+    pathConnections: PathConnection[];
     handleTileSelect: (tile: LetterTile) => void;
     handleCellClick: (cell: HexCell) => void;
     handleEndPlacementPhase: () => void;
@@ -34,6 +37,7 @@ export function useGameActions(): GameActionsResult {
     const [isWordAlreadyScored, setIsWordAlreadyScored] = useState(false);
     const [potentialScore, setPotentialScore] = useState(0);
     const [isShuffleAnimating, setIsShuffleAnimating] = useState(false);
+    const [pathConnections, setPathConnections] = useState<PathConnection[]>([]);
 
     const {
         gameInitialized,
@@ -203,8 +207,10 @@ export function useGameActions(): GameActionsResult {
                 }]
             });
         } else {
-            // In word formation phase, we select letters to form words
-            if (!cell.letter) return; // Skip empty cells
+            // Word formation phase - Updated to support double usage
+
+            // Skip empty cells
+            if (!cell.letter) return;
 
             // Find if this cell is already in the word path
             const pathIndex = wordPath.findIndex(pathCell => pathCell.id === cell.id);
@@ -217,6 +223,13 @@ export function useGameActions(): GameActionsResult {
                     // Remove this letter from the word path
                     const newPath = wordPath.slice(0, wordPath.length - 1);
 
+                    // Update connections
+                    let newConnections = [...pathConnections];
+                    if (newConnections.length > 0) {
+                        // Remove the last connection
+                        newConnections = newConnections.slice(0, newConnections.length - 1);
+                    }
+
                     // Update grid to reflect selection
                     const updatedGrid = grid.map(c => ({
                         ...c,
@@ -229,6 +242,7 @@ export function useGameActions(): GameActionsResult {
                         grid: updatedGrid,
                         currentWord: newPath.map(c => c.letter).join('')
                     });
+                    setPathConnections(newConnections);
                 }
                 // If it's the first letter, reset the entire word
                 else if (pathIndex === 0) {
@@ -236,6 +250,12 @@ export function useGameActions(): GameActionsResult {
                 }
             } else {
                 // Cell is not in path, attempt to add it
+
+                // Check if this cell is available for selection based on usage count
+                if (!isCellAvailableForSelection(cell, wordPath)) {
+                    toast.error("This cell has already been used twice or is unavailable.");
+                    return;
+                }
 
                 // Check if this cell is adjacent to the last selected cell or is the first cell
                 const canAddCell =
@@ -246,6 +266,19 @@ export function useGameActions(): GameActionsResult {
                     // Add this letter to the word path
                     const newPath = [...wordPath, cell];
 
+                    // Create new connection
+                    let newConnections = [...pathConnections];
+                    if (wordPath.length > 0) {
+                        const lastCell = wordPath[wordPath.length - 1];
+                        const isDotted = wordPath.some(p => p.id === cell.id); // If cell reused, dotted line
+
+                        newConnections.push({
+                            from: lastCell.id,
+                            to: cell.id,
+                            dotted: isDotted
+                        });
+                    }
+
                     // Update grid to reflect selection
                     const updatedGrid = grid.map(c => ({
                         ...c,
@@ -258,6 +291,9 @@ export function useGameActions(): GameActionsResult {
                         grid: updatedGrid,
                         currentWord: newPath.map(c => c.letter).join('')
                     });
+                    setPathConnections(newConnections);
+                } else {
+                    toast.error("You can only add adjacent cells to your word.");
                 }
             }
         }
@@ -297,6 +333,9 @@ export function useGameActions(): GameActionsResult {
             grid: updatedGrid,
             currentWord: ''
         });
+
+        // Clear path connections
+        setPathConnections([]);
     };
 
     const updateCursedWordHint = () => {
@@ -412,6 +451,9 @@ export function useGameActions(): GameActionsResult {
             grid: updatedGrid
         });
 
+        // Clear path connections
+        setPathConnections([]);
+
         toast.success(`+${wordScore} points for "${currentWord}"!`);
 
         // End the turn after scoring
@@ -516,6 +558,7 @@ export function useGameActions(): GameActionsResult {
         isWordAlreadyScored,
         potentialScore,
         isShuffleAnimating,
+        pathConnections,
         handleTileSelect,
         handleCellClick,
         handleEndPlacementPhase,
