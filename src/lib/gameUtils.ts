@@ -218,27 +218,4 @@ export interface PathConnection {
     from: string; // Cell ID
     to: string;   // Cell ID
     dotted: boolean; // Whether the connection should be drawn with dotted line
-}
-
-// Check if a cell is available for selection based on usage count
-export const isCellAvailableForSelection = (
-    cell: HexCell,
-    currentPath: HexCell[]
-): boolean => {
-    // If the cell doesn't have a letter, it's not available
-    if (!cell.letter) return false;
-
-    // Check if this cell is already in the path
-    const existingIndex = currentPath.findIndex(pathCell => pathCell.id === cell.id);
-
-    // Not in path, it's available
-    if (existingIndex === -1) return true;
-
-    // Cell is already in path
-    // Check if it's the last cell (can't backtrack to previous cells)
-    if (existingIndex === currentPath.length - 1) return false;
-
-    // If the cell usage count is already 2 or more, it's not available
-    const usageCount = currentPath.filter(pathCell => pathCell.id === cell.id).length;
-    return usageCount < 2;
-}; 
+} 

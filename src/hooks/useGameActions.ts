@@ -11,7 +11,6 @@ import {
     calculateWordScore,
     checkGameOver,
     MAX_PLACEMENT_TILES,
-    isCellAvailableForSelection,
     PathConnection
 } from '../lib/gameUtils';
 import VictoryScreen from '../components/VictoryScreen';
@@ -248,14 +247,53 @@ export function useGameActions(): GameActionsResult {
                 else if (pathIndex === 0) {
                     handleResetWord();
                 }
-            } else {
-                // Cell is not in path, attempt to add it
-
-                // Check if this cell is available for selection based on usage count
-                if (!isCellAvailableForSelection(cell, wordPath)) {
-                    toast.error("This cell has already been used twice or is unavailable.");
+                // Don't allow adding a cell that was just used (preventing immediate backtracking)
+                else if (pathIndex === wordPath.length - 2) {
+                    // Can't backtrack to the previous cell
+                    toast.error("Can't backtrack to the previous cell");
                     return;
                 }
+                else {
+                    // For any other existing cell - allow reusing if not at maximum
+                    const occurrences = wordPath.filter(p => p.id === cell.id).length;
+                    if (occurrences >= 2) {
+                        toast.error("Cell already used twice");
+                        return;
+                    }
+
+                    // Check adjacency with last cell
+                    const lastCell = wordPath[wordPath.length - 1];
+                    if (!isAdjacentToCell(cell, lastCell)) {
+                        toast.error("Cell must be adjacent to the last selected cell");
+                        return;
+                    }
+
+                    // Add this letter to the word path again
+                    const newPath = [...wordPath, cell];
+
+                    // Create connection with dotted line
+                    const newConnections = [...pathConnections, {
+                        from: lastCell.id,
+                        to: cell.id,
+                        dotted: true
+                    }];
+
+                    // Update grid to reflect selection
+                    const updatedGrid = grid.map(c => ({
+                        ...c,
+                        isSelected: newPath.some(p => p.id === c.id)
+                    }));
+
+                    // Update state
+                    setGameState({
+                        wordPath: newPath,
+                        grid: updatedGrid,
+                        currentWord: newPath.map(c => c.letter).join('')
+                    });
+                    setPathConnections(newConnections);
+                }
+            } else {
+                // Cell is not in path, attempt to add it
 
                 // Check if this cell is adjacent to the last selected cell or is the first cell
                 const canAddCell =
@@ -270,12 +308,11 @@ export function useGameActions(): GameActionsResult {
                     let newConnections = [...pathConnections];
                     if (wordPath.length > 0) {
                         const lastCell = wordPath[wordPath.length - 1];
-                        const isDotted = wordPath.some(p => p.id === cell.id); // If cell reused, dotted line
-
+                        // For first use of a cell, use solid line
                         newConnections.push({
                             from: lastCell.id,
                             to: cell.id,
-                            dotted: isDotted
+                            dotted: false
                         });
                     }
 
