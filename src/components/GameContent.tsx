@@ -12,11 +12,10 @@ interface GameContentProps {
   isWordValid: boolean;
   isWordAlreadyScored: boolean;
   potentialScore: number;
-  isShuffleAnimating: boolean;
+  isDictionaryLoading: boolean;
   placedTilesThisTurn: HexCell[];
   score: number;
   turns: number;
-  cursedWordHint: string;
   onCellClick: (cell: HexCell) => void;
   onTileSelect: (tile: LetterTile) => void;
   onBurnTile: () => void;
@@ -34,16 +33,15 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   isWordValid,
   isWordAlreadyScored,
   potentialScore,
-  isShuffleAnimating,
+  isDictionaryLoading,
   placedTilesThisTurn,
   score,
   turns,
-  cursedWordHint,
   onCellClick,
   onTileSelect,
   onBurnTile,
   onEndPlacementPhase,
-  onScoreWord
+  onScoreWord,
 }, ref) => {
   return (
     <div 
@@ -52,30 +50,22 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
     >
       {/* Game info section for mobile only - simplified */}
       <div className="md:hidden bg-white shadow-sm p-3 mb-4">
-        <div className="flex flex-wrap items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="text-amber-900 font-bold">
-              Score: {score}
-            </div>
-            <div className="text-gray-600">
-              Turn: {turns}
-            </div>
-            <div className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-full">
-              {letterBagCount} tiles left
-            </div>
+        <div className="flex justify-between items-center">
+          <div>
+            <div className="text-xs text-gray-500">Score</div>
+            <div className="text-xl font-bold">{score}</div>
           </div>
-          
-          <div className="mt-2 w-full">
-            <div className="text-xs text-gray-600">
-              {isPlacementPhase ? 'Placement Phase' : 'Word Formation Phase'}
-            </div>
-            <div className="text-xs text-red-600 font-medium">
-              Cursed Word: {cursedWordHint}
-            </div>
+          <div>
+            <div className="text-xs text-gray-500">Turn</div>
+            <div className="text-xl font-bold">{turns}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">Tiles</div>
+            <div className="text-xl font-bold">{letterBagCount}</div>
           </div>
         </div>
       </div>
-      
+       
       {/* Grid container */}
       <div className="grid-container flex justify-center mb-4 md:mb-6 mt-4 md:mt-0">
         <HexGrid 
@@ -91,33 +81,18 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
       
       {/* Action buttons - moved above player hand */}
       {!isPlacementPhase ? (
-        <div className="flex items-center justify-center mx-auto max-w-lg mb-4 px-2">
-          {/* Current word display */}
-          {currentWord.length > 0 && (
-            <div className={`px-3 py-1.5 rounded-lg shadow-sm mr-2 ${
-              isWordAlreadyScored 
-                ? 'bg-red-50 border border-red-200' 
-                : 'bg-white'
-            }`}>
-              <span className="text-sm font-medium">Word: </span>
-              <span className={`text-base font-bold ${
-                isWordAlreadyScored ? 'text-red-500' : ''
-              }`}>{currentWord}</span>
-            </div>
-          )}
-          
-          {/* Score Word button */}
-          <button 
-            className={`py-1.5 px-3 rounded-md shadow-sm flex items-center justify-center transition-colors text-sm font-medium ${
-              isWordValid && !isWordAlreadyScored
-                ? 'bg-green-500 hover:bg-green-600 text-white' 
-                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-            onClick={onScoreWord}
-            disabled={!isWordValid || isWordAlreadyScored}
+        <div className="flex justify-center mb-4">
+          <button
+            className="py-1.5 px-3 bg-red-500 hover:bg-red-600 text-white rounded-md shadow-sm
+                      flex items-center justify-center transition-colors text-sm font-medium mr-2"
+            onClick={() => onScoreWord()}
+            disabled={!isWordValid || isWordAlreadyScored || currentWord.length < 3}
             aria-label="Score word"
           >
             Score Word <span className="ml-1">({potentialScore})</span>
+            {isDictionaryLoading && (
+              <span className="ml-1 animate-pulse">•••</span>
+            )}
           </button>
         </div>
       ) : (
@@ -150,17 +125,15 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
             onClick={onBurnTile}
             disabled={!isPlacementPhase || !playerHand.some(t => t.isSelected)}
             className={`h-12 w-12 ml-2 order-2 flex items-center justify-center
-                       relative hover:scale-105 ${isShuffleAnimating ? 'animate-spin' : ''}`}
+                       relative hover:scale-105`}
             aria-label="Burn selected tile"
             style={{ 
-              opacity: (!isPlacementPhase || !playerHand.some(t => t.isSelected)) ? 0.5 : 1,
-              transition: 'transform 0.3s ease'
+              opacity: !isPlacementPhase || !playerHand.some(t => t.isSelected) ? 0.5 : 1,
+              transition: 'all 0.2s ease'
             }}
-            title="Burn selected tile"
           >
-            <svg viewBox="0 0 24 24" className="w-full h-full text-red-500">
-              <circle cx="12" cy="12" r="11" fill="currentColor" />
-              <path d="M17 8l-5 5-5-5M7 12l5 5 5-5" stroke="white" strokeWidth="2" fill="none" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-red-500">
+              <path fillRule="evenodd" d="M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 016.648 6.61a.75.75 0 00-1.152.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133 1a5.99 5.99 0 011.925-3.545 3.75 3.75 0 013.255 3.717z" clipRule="evenodd" />
             </svg>
           </button>
         </div>

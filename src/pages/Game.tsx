@@ -34,7 +34,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     isWordValid,
     isWordAlreadyScored,
     potentialScore,
-    isShuffleAnimating,
+    isDictionaryLoading,
     handleTileSelect,
     handleCellClick,
     handleEndPlacementPhase,
@@ -139,28 +139,29 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
         />
         
         {/* Main game content */}
-        <GameContent
-          grid={grid}
-          gridSize={gridSize}
-          playerHand={playerHand}
-          letterBagCount={letterBag.length}
-          currentWord={currentWord}
-          isPlacementPhase={isPlacementPhase}
-          isWordValid={isWordValid}
-          isWordAlreadyScored={isWordAlreadyScored}
-          potentialScore={potentialScore}
-          isShuffleAnimating={isShuffleAnimating}
-          placedTilesThisTurn={placedTilesThisTurn}
-          score={score}
-          turns={turns}
-          cursedWordHint={cursedWordHint}
-          onCellClick={handleCellClick}
-          onTileSelect={handleTileSelect}
-          onBurnTile={handleBurnWithAnimation}
-          onEndPlacementPhase={handleEndPlacementPhase}
-          onScoreWord={handleScoreWord}
-          ref={mainContentRef}
-        />
+        <div className="flex-1 overflow-auto">
+          <GameContent
+            ref={mainContentRef}
+            grid={grid}
+            gridSize={gridSize}
+            playerHand={playerHand}
+            letterBagCount={letterBag.length}
+            currentWord={currentWord}
+            isPlacementPhase={isPlacementPhase}
+            isWordValid={isWordValid}
+            isWordAlreadyScored={isWordAlreadyScored}
+            potentialScore={potentialScore}
+            isDictionaryLoading={isDictionaryLoading}
+            placedTilesThisTurn={placedTilesThisTurn}
+            score={score}
+            turns={turns}
+            onCellClick={handleCellClick}
+            onTileSelect={handleTileSelect}
+            onBurnTile={handleBurnWithAnimation}
+            onEndPlacementPhase={handleEndPlacementPhase}
+            onScoreWord={handleScoreWord}
+          />
+        </div>
       </div>
       <Toaster position="bottom-center" />
     </div>

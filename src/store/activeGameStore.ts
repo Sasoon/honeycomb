@@ -33,6 +33,10 @@ interface ActiveGameState {
     cursedWord: string;
     cursedWordHint: string;
 
+    // Piston mechanics
+    isPistonActive: boolean;
+    pistonSourceCell: HexCell | null;
+
     // Actions
     setGameState: (state: Partial<ActiveGameState>) => void;
     resetGame: () => void;
@@ -62,6 +66,10 @@ export const useActiveGameStore = create<ActiveGameState>()(
             cursedWord: 'HONEY',
             cursedWordHint: 'H _ _ _ _',
 
+            // Piston mechanics
+            isPistonActive: false,
+            pistonSourceCell: null,
+
             // Actions
             setGameState: (state) => set((currentState) => ({
                 ...currentState,
@@ -87,6 +95,10 @@ export const useActiveGameStore = create<ActiveGameState>()(
                 reshuffleCost: 2,
                 cursedWord: 'HONEY',
                 cursedWordHint: 'H _ _ _ _',
+
+                // Piston mechanics
+                isPistonActive: false,
+                pistonSourceCell: null,
             })
         }),
         {
@@ -107,7 +119,11 @@ export const useActiveGameStore = create<ActiveGameState>()(
                     wordHistory,
                     reshuffleCost,
                     cursedWord,
-                    cursedWordHint
+                    cursedWordHint,
+
+                    // Piston mechanics
+                    isPistonActive,
+                    pistonSourceCell
                 } = state;
 
                 return {
@@ -124,7 +140,11 @@ export const useActiveGameStore = create<ActiveGameState>()(
                     wordHistory,
                     reshuffleCost,
                     cursedWord,
-                    cursedWordHint
+                    cursedWordHint,
+
+                    // Piston mechanics
+                    isPistonActive,
+                    pistonSourceCell
                 };
             }
         }

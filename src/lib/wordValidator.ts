@@ -17,9 +17,31 @@ class WordValidator {
     private dictionaryPromise: Promise<Dictionary> | null = null;
     private usedWords: Set<string>;
     private isLoading = false;
+    private _isReady = false;  // New property to track if dictionary is fully loaded
 
     constructor() {
         this.usedWords = new Set<string>();
+        // Start preloading immediately
+        this.preloadDictionary();
+    }
+
+    /**
+     * Preload the dictionary as soon as possible
+     * This can be called during app initialization
+     */
+    preloadDictionary(): Promise<void> {
+        return this.loadDictionaryIfNeeded()
+            .then(() => {
+                this._isReady = true;
+                console.log('Dictionary preloaded and ready');
+            });
+    }
+
+    /**
+     * Check if the dictionary is ready for use
+     */
+    get isReady(): boolean {
+        return this._isReady;
     }
 
     /**
@@ -40,6 +62,7 @@ class WordValidator {
                 this.dictionary = module.default as Dictionary;
                 console.log(`Dictionary loaded with ${Object.keys(this.dictionary).length} words`);
                 this.isLoading = false;
+                this._isReady = true;
                 return this.dictionary;
             })
             .catch(error => {
@@ -83,15 +106,17 @@ class WordValidator {
             return isValid;
         }
 
-        // If dictionary isn't loaded yet, start loading and return false for now
-        // (client code will re-validate later)
+        // If dictionary isn't loaded yet, start loading if not already doing so
         if (!this.isLoading) {
             this.loadDictionaryIfNeeded().then(() => {
-                // Once loaded, client code can re-check
+                // Dictionary is now loaded, but we already returned false below
+                // Client code should re-check later or use validateWordAsync instead
+                console.log(`Dictionary loaded, "${normalized}" can now be validated`);
             });
         }
 
-        // Default to invalid until we know otherwise
+        // Default to false until dictionary is loaded
+        // For better UX, it's recommended to use validateWordAsync instead
         return false;
     }
 

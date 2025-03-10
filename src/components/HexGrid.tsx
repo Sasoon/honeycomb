@@ -15,6 +15,8 @@ export type HexCell = {
   isPlaced: boolean;
   isDoubleScore: boolean;
   placedThisTurn?: boolean;
+  isPistonTarget?: boolean; // Indicates if the cell is a valid target for piston movement
+  isAdjacentToPistonSource?: boolean; // Highlights adjacent cells when a piston is being used
 };
 
 type HexGridProps = {
@@ -45,7 +47,23 @@ const HexGrid = ({
       placedCell => placedCell.id === cell.id
     );
     
-    if (cell.isSelected) {
+    if (cell.isPistonTarget) {
+      // Highlight the cell targeted by a piston (highest priority)
+      bgColor = 'bg-amber-100';
+      extraClasses += ' scale-105';
+    } else if (cell.isAdjacentToPistonSource) {
+      // Highlight cells adjacent to a selected piston target
+      // Style differently based on whether the cell is empty or occupied
+      if (cell.isPlaced) {
+        // Occupied adjacent cells - use orange to indicate replacement
+        bgColor = 'bg-orange-100';
+        extraClasses = 'pulse-glow';
+      } else {
+        // Empty adjacent cells - use purple as before
+        bgColor = 'bg-purple-100';
+        extraClasses = 'pulse-glow';
+      }
+    } else if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
       if (!isPlacementPhase) {
         if (isWordAlreadyScored) {
@@ -62,25 +80,27 @@ const HexGrid = ({
           bgColor = 'bg-blue-500';
           border = 'hex-border-blue';
         }
+        textColor = 'text-white';
       } else {
-        bgColor = 'bg-blue-500';
-        border = 'hex-border-blue';
+        // Placement phase highlighting
+        bgColor = 'bg-amber-200';
+        textColor = 'text-amber-900';
       }
-      textColor = 'text-white';
-    } else if (isPlacedThisTurn && isPlacementPhase) {
-      bgColor = 'bg-blue-100';
-      border = 'hex-border-blue';
-      extraClasses = 'pulse-subtle';
     } else if (cell.isPlaced) {
-      bgColor = 'bg-green-100';
-      border = 'hex-border-green';
+      // Regular placed tile styling
+      bgColor = cell.isPrePlaced ? 'bg-slate-200' : 'bg-blue-100';
+      
+      // Highlight tiles placed in the current turn
+      if (isPlacedThisTurn) {
+        bgColor = 'bg-green-100';
+        border = 'border-green-500';
+      }
     } else if (cell.isPrePlaced) {
       bgColor = 'bg-honeycomb-light';
       border = 'hex-border-honeycomb';
-    } else {
-      border = 'hex-border-gray';
     }
     
+    // If double score, add that class
     if (cell.isDoubleScore) {
       extraClasses = 'hex-double-score';
     }

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import {
     generateInitialGrid,
     generateLetterBag,
+    generatePistonTile,
     isAdjacentToCell,
     calculateWordScore,
     checkGameOver,
@@ -18,12 +19,14 @@ export interface GameActionsResult {
     isWordAlreadyScored: boolean;
     potentialScore: number;
     isShuffleAnimating: boolean;
+    isDictionaryLoading: boolean;
     handleTileSelect: (tile: LetterTile) => void;
     handleCellClick: (cell: HexCell) => void;
     handleEndPlacementPhase: () => void;
     handleResetWord: () => void;
     handleScoreWord: () => void;
     handleBurnWithAnimation: () => void;
+    handlePistonMove: (targetCell: HexCell) => void;
     drawTiles: (count: number) => void;
     showVictoryScreen: () => void;
 }
@@ -32,7 +35,8 @@ export function useGameActions(): GameActionsResult {
     const [isWordValid, setIsWordValid] = useState(false);
     const [isWordAlreadyScored, setIsWordAlreadyScored] = useState(false);
     const [potentialScore, setPotentialScore] = useState(0);
-    const [isShuffleAnimating, setIsShuffleAnimating] = useState(false);
+    const [isShuffleAnimating] = useState(false);
+    const [isDictionaryLoading, setIsDictionaryLoading] = useState(!wordValidator.isReady);
 
     const {
         gameInitialized,
@@ -50,7 +54,9 @@ export function useGameActions(): GameActionsResult {
         scoredWords: scoredWordsArray,
         cursedWord,
         setGameState,
-        wordHistory
+        wordHistory,
+        isPistonActive,
+        pistonSourceCell
     } = useActiveGameStore();
 
     // Convert the scoredWords array to a Set for faster lookups
@@ -62,15 +68,18 @@ export function useGameActions(): GameActionsResult {
             const initialGrid = generateInitialGrid(gridSize);
             const initialLetterBag = generateLetterBag();
 
-            // Draw initial hand
-            const drawnTiles = initialLetterBag.slice(0, 5);
-            const remainingBag = initialLetterBag.slice(5);
+            // Draw initial hand (4 tiles instead of 5, to leave room for piston)
+            const drawnTiles = initialLetterBag.slice(0, 4);
+            const remainingBag = initialLetterBag.slice(4);
+
+            // Create a piston tile and add it to the hand
+            const pistonTile = generatePistonTile();
 
             setGameState({
                 gameInitialized: true,
                 grid: initialGrid,
                 letterBag: remainingBag,
-                playerHand: drawnTiles,
+                playerHand: [...drawnTiles, pistonTile], // Add piston tile to starting hand
                 score: 0,
                 turns: 0,
                 isPlacementPhase: true,
@@ -85,34 +94,50 @@ export function useGameActions(): GameActionsResult {
             // Get the actual word from letters (more reliable than state)
             const wordFromPath = wordPath.map(cell => cell.letter).join('');
 
-            // Check if word is valid
-            const valid = wordValidator.isValidWord(wordFromPath);
-
-            // Check if the word has already been scored
-            const isAlreadyScored = scoredWords.has(wordFromPath);
-
-            setIsWordValid(valid && !isAlreadyScored);
-            setIsWordAlreadyScored(valid && isAlreadyScored);
-
-            // Calculate potential score if word is valid
-            if (valid && !isAlreadyScored) {
-                const score = calculateWordScore(wordPath, grid);
-                setPotentialScore(score);
-            } else {
-                setPotentialScore(0);
+            // Track dictionary loading state
+            if (!wordValidator.isReady) {
+                setIsDictionaryLoading(true);
             }
 
-            if (valid && isAlreadyScored) {
-                // Show toast notification only once per word
-                toast.error(`"${wordFromPath}" has already been scored!`, {
-                    id: `duplicate-${wordFromPath}`,
-                    duration: 2000,
-                });
-            }
+            // Use async validation for better user experience
+            const validateWordAsynchronously = async () => {
+                try {
+                    // Check if word is valid
+                    const valid = await wordValidator.validateWordAsync(wordFromPath);
+
+                    // Check if the word has already been scored
+                    const isAlreadyScored = scoredWords.has(wordFromPath);
+
+                    setIsWordValid(valid && !isAlreadyScored);
+                    setIsWordAlreadyScored(valid && isAlreadyScored);
+
+                    // Calculate potential score if word is valid
+                    if (valid && !isAlreadyScored) {
+                        const score = calculateWordScore(wordPath, grid);
+                        setPotentialScore(score);
+                    } else {
+                        setPotentialScore(0);
+                    }
+
+                    if (valid && isAlreadyScored) {
+                        // Show toast notification only once per word
+                        toast.error(`"${wordFromPath}" has already been scored!`, {
+                            id: `duplicate-${wordFromPath}`,
+                            duration: 2000,
+                        });
+                    }
+                } finally {
+                    // Dictionary should be loaded by now
+                    setIsDictionaryLoading(false);
+                }
+            };
+
+            validateWordAsynchronously();
         } else {
             setIsWordValid(false);
             setIsWordAlreadyScored(false);
             setPotentialScore(0);
+            setIsDictionaryLoading(false);
         }
     }, [currentWord, scoredWords, wordPath, grid]);
 
@@ -130,32 +155,96 @@ export function useGameActions(): GameActionsResult {
     };
 
     const handleTileSelect = (tile: LetterTile) => {
-        if (!isPlacementPhase) return;
-
-        // Deselect if already selected
-        if (tile.isSelected) {
-            setGameState({
-                playerHand: playerHand.map(t =>
-                    t.id === tile.id ? { ...t, isSelected: false } : t
-                ),
-                selectedHandTile: null
-            });
+        // If we're not in placement phase, ignore
+        if (!isPlacementPhase) {
+            toast.error("Complete or reset your current word first");
             return;
         }
 
-        // Deselect any previously selected tile
-        const newHand = playerHand.map(t => ({
+        // Update the selected tile in the player's hand
+        const updatedHand = playerHand.map(t => ({
             ...t,
             isSelected: t.id === tile.id
         }));
 
+        // Set the selected tile
         setGameState({
-            playerHand: newHand,
-            selectedHandTile: { ...tile, isSelected: true }
+            playerHand: updatedHand,
+            selectedHandTile: tile
         });
+
+        // If this is a piston tile, reset any existing cell selection
+        // We will require the player to click on a placed tile first
+        if (tile.tileType === 'piston') {
+            // Reset any existing piston state and enter piston mode
+            const clearedGrid = grid.map(cell => ({
+                ...cell,
+                isSelected: false,
+                isPistonTarget: false,
+                isAdjacentToPistonSource: false
+            }));
+
+            setGameState({
+                grid: clearedGrid,
+                isPistonActive: true,
+                pistonSourceCell: null
+            });
+
+            toast.success("Select a tile to move with the piston");
+        } else {
+            // For regular tiles, turn off piston mode
+            setGameState({
+                isPistonActive: false,
+                pistonSourceCell: null
+            });
+        }
     };
 
     const handleCellClick = (cell: HexCell) => {
+        // For piston tiles, we need to check if the cell is valid
+        if (selectedHandTile?.tileType === 'piston' && isPistonActive) {
+            // If no source cell is selected yet and this cell has a letter, select it as the source
+            if (!pistonSourceCell && cell.isPlaced) {
+                // Mark this cell as the piston target
+                const updatedGrid = grid.map(c => {
+                    // The clicked cell becomes the piston source
+                    if (c.id === cell.id) {
+                        return { ...c, isPistonTarget: true };
+                    }
+
+                    // Find and mark all adjacent cells
+                    const isAdjacent = isAdjacentToCell(c, cell);
+                    // Allow adjacent cells whether they're empty or occupied
+                    return {
+                        ...c,
+                        isAdjacentToPistonSource: isAdjacent
+                    };
+                });
+
+                setGameState({
+                    grid: updatedGrid,
+                    pistonSourceCell: cell
+                });
+
+                toast.success("Now select any adjacent space to move this tile");
+                return;
+            }
+
+            // If source is selected and this is an adjacent cell, move the tile
+            // We've removed the check for empty cells
+            if (pistonSourceCell && cell.isAdjacentToPistonSource) {
+                handlePistonMove(cell);
+                return;
+            }
+
+            // If clicking on a non-adjacent cell, show error
+            if (pistonSourceCell) {
+                toast.error("Select an adjacent space");
+                return;
+            }
+        }
+
+        // Regular tile placement logic (existing code)
         if (isPlacementPhase) {
             // Placement phase logic
 
@@ -176,7 +265,8 @@ export function useGameActions(): GameActionsResult {
                     id: `restored-${placedTile.id}`,
                     letter: placedTile.letter,
                     isSelected: false,
-                    frequency: 'common'
+                    frequency: 'common',
+                    tileType: 'regular'
                 };
 
                 // Remove the letter from the cell
@@ -211,8 +301,21 @@ export function useGameActions(): GameActionsResult {
                 return;
             }
 
-            // If the cell already has a letter (and wasn't placed this turn), do nothing
-            if (cell.letter) return;
+            // If the cell already has a letter (and wasn't placed this turn), show a hint
+            if (cell.letter) {
+                // Check if this is a pre-placed tile or a tile placed in a previous turn
+                const isPrePlacedOrPreviousTurn = cell.isPrePlaced ||
+                    (cell.isPlaced && !placedTilesThisTurn.some(t => t.id === cell.id));
+
+                // Only show the hint if the user has a tile selected
+                if (isPrePlacedOrPreviousTurn && selectedHandTile) {
+                    toast.success("Tap an empty cell to place your selected tile", {
+                        duration: 2000,
+                        icon: '👆',
+                    });
+                }
+                return;
+            }
 
             // If we already placed the maximum number of tiles, show a message and return
             if (placedTilesThisTurn.length >= MAX_PLACEMENT_TILES) {
@@ -220,8 +323,14 @@ export function useGameActions(): GameActionsResult {
                 return;
             }
 
-            // If no tile is selected from the hand, do nothing
-            if (!selectedHandTile) return;
+            // If no tile is selected from the hand, show a helpful hint
+            if (!selectedHandTile) {
+                toast.success("Select a tile from your hand first", {
+                    duration: 2000,
+                    icon: '👇',
+                });
+                return;
+            }
 
             // Place the letter from the selected hand tile into the cell
             const updatedGrid = grid.map(c => {
@@ -473,13 +582,19 @@ export function useGameActions(): GameActionsResult {
         }, 500);
     };
 
-    // Handle burning a tile (replacing the reshuffle function)
-    const handleBurnTile = () => {
-        // Can only burn in placement phase and when a tile is selected
+    // Replace the handleShuffleWithAnimation with handleBurnWithAnimation
+    const handleBurnWithAnimation = () => {
+        // Check if we're in placement phase and have a selected tile
         if (!isPlacementPhase || !selectedHandTile) {
+            if (!isPlacementPhase) {
+                toast.error('Can only burn tiles during placement phase');
+            } else if (!selectedHandTile) {
+                toast.error('Select a tile to burn first');
+            }
             return;
         }
 
+        // Process the tile burning
         // Remove the selected tile from the player's hand
         const updatedHand = playerHand.filter(tile => tile.id !== selectedHandTile.id);
 
@@ -515,24 +630,66 @@ export function useGameActions(): GameActionsResult {
         }, 500);
     };
 
-    // Replace the handleShuffleWithAnimation with handleBurnWithAnimation
-    const handleBurnWithAnimation = () => {
-        // Check if we're in placement phase and have a selected tile
-        if (!isPlacementPhase || !selectedHandTile) {
-            if (!isPlacementPhase) {
-                toast.error('Can only burn tiles during placement phase');
-            } else if (!selectedHandTile) {
-                toast.error('Select a tile to burn first');
-            }
-            return;
-        }
+    // New function to handle the piston movement logic
+    const handlePistonMove = (targetCell: HexCell) => {
+        if (!pistonSourceCell || !selectedHandTile) return;
 
-        if (!isShuffleAnimating) {
-            setIsShuffleAnimating(true);
-            // Reset animation state after animation completes
-            setTimeout(() => setIsShuffleAnimating(false), 500);
-            // Call the actual burn function
-            handleBurnTile();
+        // Check if the target cell already has a letter (replacement)
+        const isReplacing = targetCell.isPlaced && targetCell.letter !== '';
+        const replacedLetter = targetCell.letter;
+
+        // Create updated grid with the tile moved to the new position
+        const updatedGrid = grid.map(cell => {
+            // Clear the source cell
+            if (cell.id === pistonSourceCell.id) {
+                return {
+                    ...cell,
+                    letter: '',
+                    isPlaced: false,
+                    isPrePlaced: false,
+                    isPistonTarget: false,
+                    isSelected: false
+                };
+            }
+
+            // Update the target cell with the source cell's letter
+            if (cell.id === targetCell.id) {
+                return {
+                    ...cell,
+                    letter: pistonSourceCell.letter,
+                    isPlaced: true,
+                    isPrePlaced: false,
+                    isAdjacentToPistonSource: false,
+                    placedThisTurn: true
+                };
+            }
+
+            // Reset all other cells
+            return {
+                ...cell,
+                isPistonTarget: false,
+                isAdjacentToPistonSource: false
+            };
+        });
+
+        // Remove the used piston tile from player's hand
+        const updatedHand = playerHand.filter(tile => tile.id !== selectedHandTile.id);
+
+        // Update the game state
+        setGameState({
+            grid: updatedGrid,
+            playerHand: updatedHand,
+            selectedHandTile: null,
+            isPistonActive: false,
+            pistonSourceCell: null,
+            placedTilesThisTurn: [...placedTilesThisTurn, { ...targetCell, letter: pistonSourceCell.letter }]
+        });
+
+        // Show a different message if we replaced a tile
+        if (isReplacing) {
+            toast.success(`Moved '${pistonSourceCell.letter}' and replaced '${replacedLetter}'!`);
+        } else {
+            toast.success("Tile moved successfully!");
         }
     };
 
@@ -602,12 +759,14 @@ export function useGameActions(): GameActionsResult {
         isWordAlreadyScored,
         potentialScore,
         isShuffleAnimating,
+        isDictionaryLoading,
         handleTileSelect,
         handleCellClick,
         handleEndPlacementPhase,
         handleResetWord,
         handleScoreWord,
         handleBurnWithAnimation,
+        handlePistonMove,
         drawTiles,
         showVictoryScreen
     };

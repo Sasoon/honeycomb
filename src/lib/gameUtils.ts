@@ -22,7 +22,17 @@ export const generateLetterTile = (letter: string): LetterTile => ({
     id: nanoid(),
     letter,
     frequency: LETTER_FREQUENCY[letter] || 'common',
-    isSelected: false
+    isSelected: false,
+    tileType: 'regular'
+});
+
+// Generate a piston tile
+export const generatePistonTile = (): LetterTile => ({
+    id: nanoid(),
+    letter: '⟷', // Using a clearer bidirectional arrow symbol 
+    frequency: 'rare',
+    isSelected: false,
+    tileType: 'piston'
 });
 
 // Generate the letter bag based on frequency
@@ -42,7 +52,8 @@ export const generateLetterBag = (): LetterTile[] => {
                 id: nanoid(),
                 letter,
                 frequency,
-                isSelected: false
+                isSelected: false,
+                tileType: 'regular'
             });
         }
     });

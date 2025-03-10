@@ -3,6 +3,7 @@ export type LetterTile = {
   letter: string;
   frequency: 'common' | 'medium' | 'uncommon' | 'rare';
   isSelected: boolean;
+  tileType?: 'regular' | 'piston';
 };
 
 type PlayerHandProps = {
@@ -17,7 +18,13 @@ const PlayerHand = ({
   tiles, 
   onTileSelect, 
 }: PlayerHandProps) => {
-  const getFrequencyClass = (frequency: LetterTile['frequency']) => {
+  const getFrequencyClass = (frequency: LetterTile['frequency'], tileType?: LetterTile['tileType']) => {
+    // Special style for piston tile
+    if (tileType === 'piston') {
+      return 'bg-purple-200 border-purple-500';
+    }
+    
+    // Styles for regular tiles
     switch (frequency) {
       case 'common': return 'bg-gray-100 border-gray-300';
       case 'medium': return 'bg-blue-100 border-blue-300';
@@ -39,8 +46,9 @@ const PlayerHand = ({
           <div
             key={tile.id}
             className={`
-              ${getFrequencyClass(tile.frequency)}
+              ${getFrequencyClass(tile.frequency, tile.tileType)}
               ${tile.isSelected ? 'ring-2 ring-blue-500 scale-90' : ''}
+              ${tile.tileType === 'piston' ? 'piston-tile' : ''}
             `}
             onClick={() => onTileSelect(tile)}
             style={{

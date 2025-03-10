@@ -145,19 +145,31 @@ body {
 }
 
 .hex-grid__item.hex-border-red {
-  box-shadow: 0 0 0 2px #EF4444;
+  border: 2px solid #EF4444;
 }
 
 .hex-grid__item.hex-border-honeycomb {
-  box-shadow: 0 0 0 2px #FFC107;
+  border: 2px solid #F59E0B;
 }
 
 .hex-grid__item.hex-border-gray {
-  box-shadow: 0 0 0 2px #D1D5DB;
+  border: 2px solid #9CA3AF;
+}
+
+.hex-grid__item.hex-border-purple {
+  border: 2px solid #8B5CF6;
+}
+
+.hex-grid__item.hex-border-amber {
+  border: 2px solid #F59E0B;
+}
+
+.hex-grid__item.hex-border-orange {
+  border: 2px solid #F97316;
 }
 
 .hex-grid__item.hex-double-score {
-  box-shadow: 0 0 0 2px #EC4899;
+  position: relative;
 }
 
 .letter-tile {
@@ -194,27 +206,6 @@ body {
   100% { transform: scale(1); }
 }
 
-.pulse-subtle {
-  animation: subtlePulse 1.5s ease-in-out infinite;
-  position: relative;
-}
-
-.pulse-subtle::after {
-  content: 'UNDO';
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.5rem;
-  font-weight: bold;
-  color: #3B82F6;
-  background-color: white;
-  padding: 1px 3px;
-  border-radius: 2px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  opacity: 0.9;
-}
-
 /* Row adjustments for honeycomb pattern */
 /* .row {
   margin-top: -25px;
@@ -235,4 +226,33 @@ body {
 
 .game-button:hover {
   background-color: #FF9800;
+}
+
+/* Add a pulsing glow effect for piston adjacent cells */
+.pulse-glow {
+  animation: pulse-animation 1.5s infinite;
+}
+
+@keyframes pulse-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(147, 51, 234, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+  }
+}
+
+/* Special style for piston tile */
+.piston-tile {
+  background: linear-gradient(135deg, #9333ea, #6366f1);
+  color: white;
+  transform: rotate(0deg);
+  transition: transform 0.3s ease;
+}
+
+.piston-tile:hover {
+  transform: rotate(90deg);
 }
