@@ -1,4 +1,4 @@
-import { memo, useMemo, useCallback } from 'react';
+// Remove React import
 
 // Define types for our grid
 export type CellPosition = {
@@ -25,22 +25,14 @@ type HexGridProps = {
   isWordAlreadyScored?: boolean;
 };
 
-// Memoized single cell component
-const HexCell = memo(({ 
-  cell, 
+const HexGrid = ({ 
+  cells, 
   onCellClick, 
   isWordValid, 
-  isPlacementPhase, 
-  isWordAlreadyScored 
-}: { 
-  cell: HexCell; 
-  onCellClick: (cell: HexCell) => void;
-  isWordValid?: boolean;
-  isPlacementPhase: boolean;
-  isWordAlreadyScored?: boolean;
-}) => {
-  // Memoize cell styles to prevent recalculation
-  const cellStyle = useMemo(() => {
+  isPlacementPhase,
+  isWordAlreadyScored
+}: HexGridProps) => {
+  const cellStyles = (cell: HexCell) => {
     let bgColor = 'bg-white';
     let textColor = 'text-gray-800';
     let border = '';
@@ -83,48 +75,10 @@ const HexCell = memo(({
     }
     
     return `${bgColor} ${textColor} ${border} ${extraClasses}`;
-  }, [cell, isWordValid, isPlacementPhase, isWordAlreadyScored]);
+  };
 
-  // Memoize click handler
-  const handleClick = useCallback(() => {
-    onCellClick(cell);
-  }, [cell, onCellClick]);
-
-  return (
-    <div
-      className={`hex cursor-pointer ${cellStyle}`}
-      onClick={handleClick}
-    >
-      <div className="hex-content flex items-center justify-center font-bold text-xl md:text-2xl select-none">
-        {cell.letter}
-      </div>
-    </div>
-  );
-}, (prevProps, nextProps) => {
-  // Custom comparison for memoization
-  // Only re-render if these specific props change
-  return (
-    prevProps.cell.id === nextProps.cell.id &&
-    prevProps.cell.letter === nextProps.cell.letter &&
-    prevProps.cell.isSelected === nextProps.cell.isSelected &&
-    prevProps.cell.isPlaced === nextProps.cell.isPlaced &&
-    prevProps.cell.isPrePlaced === nextProps.cell.isPrePlaced &&
-    prevProps.isWordValid === nextProps.isWordValid &&
-    prevProps.isPlacementPhase === nextProps.isPlacementPhase &&
-    prevProps.isWordAlreadyScored === nextProps.isWordAlreadyScored
-  );
-});
-
-const HexGrid = memo(({ 
-  cells, 
-  onCellClick, 
-  isWordValid, 
-  isPlacementPhase,
-  isWordAlreadyScored
-}: HexGridProps) => {
-  
-  // Group cells by row for the honeycomb layout - memoize to prevent recalculation
-  const renderedRows = useMemo(() => {
+  // Group cells by row for the honeycomb layout
+  const renderHoneycombRows = () => {
     // Find max rows
     const maxRow = cells.reduce((max, cell) => Math.max(max, cell.position.row), 0);
     
@@ -146,14 +100,23 @@ const HexGrid = memo(({
             style={{ marginBottom: '10px', marginTop: '-25px' }} // Tighten vertical spacing
           >
             {rowCells.map(cell => (
-              <HexCell
-                key={cell.id}
-                cell={cell}
-                onCellClick={onCellClick}
-                isWordValid={isWordValid}
-                isPlacementPhase={isPlacementPhase}
-                isWordAlreadyScored={isWordAlreadyScored}
-              />
+              <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
+                <div
+                  className={`hex-grid__item ${cellStyles(cell)}`}
+                  onClick={() => onCellClick(cell)}
+                  data-row={cell.position.row}
+                  data-col={cell.position.col}
+                >
+                  <div className="hex-grid__content">
+                    <span className="letter-tile">{cell.letter || ''}</span>
+                    {cell.isDoubleScore && (
+                      <div className="double-score-badge">
+                        <span>2×</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         );
@@ -161,41 +124,15 @@ const HexGrid = memo(({
     }
     
     return rows;
-  }, [cells, onCellClick, isWordValid, isPlacementPhase, isWordAlreadyScored]);
+  };
 
   return (
-    <div className="hex-grid p-3 md:p-0">
-      {renderedRows}
+    <div className="hex-grid">
+      <div className="flex flex-col items-center">
+        {renderHoneycombRows()}
+      </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  // Custom comparison for memoization of the entire grid
-  if (prevProps.cells.length !== nextProps.cells.length) return false;
-  
-  // If isWordValid, isPlacementPhase, or isWordAlreadyScored changed, re-render
-  if (
-    prevProps.isWordValid !== nextProps.isWordValid ||
-    prevProps.isPlacementPhase !== nextProps.isPlacementPhase ||
-    prevProps.isWordAlreadyScored !== nextProps.isWordAlreadyScored
-  ) {
-    return false;
-  }
-  
-  // Check if any cell has changed
-  for (let i = 0; i < prevProps.cells.length; i++) {
-    const prevCell = prevProps.cells[i];
-    const nextCell = nextProps.cells[i];
-    if (
-      prevCell.id !== nextCell.id ||
-      prevCell.letter !== nextCell.letter ||
-      prevCell.isSelected !== nextCell.isSelected ||
-      prevCell.isPlaced !== nextCell.isPlaced
-    ) {
-      return false;
-    }
-  }
-  
-  return true;
-});
+};
 
 export default HexGrid; 

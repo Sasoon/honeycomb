@@ -38,30 +38,6 @@ interface ActiveGameState {
     resetGame: () => void;
 }
 
-// Add batching mechanism to prevent infinite update loops
-let updateScheduled = false;
-const batchedUpdates = (updateFn: () => void) => {
-    if (!updateScheduled) {
-        updateScheduled = true;
-        requestAnimationFrame(() => {
-            updateFn();
-            updateScheduled = false;
-        });
-    }
-};
-
-// Helper to create a serializable version of game state for storage
-const createStorageState = (state: Partial<ActiveGameState>): Partial<ActiveGameState> => {
-    // Create a shallow copy to avoid circular references
-    const storageState = { ...state };
-
-    // Remove functions (which can't be serialized)
-    delete storageState.setGameState;
-    delete storageState.resetGame;
-
-    return storageState;
-};
-
 // Create the active game store with persistence
 export const useActiveGameStore = create<ActiveGameState>()(
     persist(
@@ -86,14 +62,14 @@ export const useActiveGameStore = create<ActiveGameState>()(
             cursedWord: 'HONEY',
             cursedWordHint: 'H _ _ _ _',
 
-            // Actions with batching
-            setGameState: (state) => batchedUpdates(() => set((currentState) => ({
+            // Actions
+            setGameState: (state) => set((currentState) => ({
                 ...currentState,
                 ...state,
                 isGameActive: true
-            }))),
+            })),
 
-            resetGame: () => batchedUpdates(() => set({
+            resetGame: () => set({
                 gameInitialized: false,
                 isGameActive: false,
                 grid: [],
@@ -110,15 +86,47 @@ export const useActiveGameStore = create<ActiveGameState>()(
                 wordHistory: [],
                 reshuffleCost: 2,
                 cursedWord: 'HONEY',
-                cursedWordHint: 'H _ _ _ _'
-            }))
+                cursedWordHint: 'H _ _ _ _',
+            })
         }),
         {
-            name: 'honeycomb-game',
-            // Optimize storage by removing circular references
-            partialize: (state) => createStorageState(state),
-            // Add version to handle schema changes
-            version: 1
+            name: 'honeycomb-active-game', // unique name for localStorage
+            partialize: (state) => {
+                // Only persist these fields
+                const {
+                    gameInitialized,
+                    isGameActive,
+                    grid,
+                    gridSize,
+                    letterBag,
+                    playerHand,
+                    score,
+                    turns,
+                    isPlacementPhase,
+                    scoredWords,
+                    wordHistory,
+                    reshuffleCost,
+                    cursedWord,
+                    cursedWordHint
+                } = state;
+
+                return {
+                    gameInitialized,
+                    isGameActive,
+                    grid,
+                    gridSize,
+                    letterBag,
+                    playerHand,
+                    score,
+                    turns,
+                    isPlacementPhase,
+                    scoredWords,
+                    wordHistory,
+                    reshuffleCost,
+                    cursedWord,
+                    cursedWordHint
+                };
+            }
         }
     )
 ); 
