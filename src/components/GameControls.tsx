@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 type GameControlsProps = {
   currentScore: number;
   targetScore: number;
@@ -16,10 +14,7 @@ type GameControlsProps = {
 };
 
 const GameControls = ({
-  currentScore,
-  targetScore,
   currentWord,
-  turns,
   onScoreWord,
   onEndTurn,
   onResetWord,

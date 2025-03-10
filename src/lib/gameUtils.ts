@@ -171,7 +171,7 @@ export const isAdjacent = (cell1: HexCell, cell2: HexCell): boolean => {
 };
 
 // Calculate the score for a word
-export const calculateWordScore = (word: string, path: HexCell[], grid: HexCell[]): number => {
+export const calculateWordScore = (path: HexCell[], grid: HexCell[]): number => {
     // Basic score: 1 point per letter
     let wordScore = path.length;
 
@@ -204,18 +204,11 @@ export const calculateWordScore = (word: string, path: HexCell[], grid: HexCell[
     return wordScore;
 };
 
-// Check if the game is over (board full or deck empty)
-export const checkGameOver = (grid: HexCell[], letterBag: LetterTile[]): boolean => {
+// Check if the game is over (board full or player out of cards)
+export const checkGameOver = (grid: HexCell[], letterBag: LetterTile[], playerHand: LetterTile[] = []): boolean => {
     // Count empty cells on the grid
     const emptyCellCount = grid.filter(cell => !cell.letter).length;
 
-    // Game is over if no more empty cells OR no more tiles in the bag
-    return emptyCellCount === 0 || letterBag.length === 0;
-};
-
-// Track path connections for visual representation
-export interface PathConnection {
-    from: string; // Cell ID
-    to: string;   // Cell ID
-    dotted: boolean; // Whether the connection should be drawn with dotted line
-} 
+    // Game is over if no more empty cells OR if player is out of cards (empty hand and bag)
+    return emptyCellCount === 0 || (letterBag.length === 0 && playerHand.length === 0);
+}; 

@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { TARGET_SCORE } from '../lib/gameUtils';
 import GameControls from './GameControls';
@@ -7,7 +7,6 @@ import { WordHistoryEntry } from '../store/activeGameStore';
 
 interface GameSidebarProps {
   isSidebarOpen: boolean;
-  closeMenu: () => void;
   score: number;
   turns: number;
   letterBagCount: number;
@@ -25,7 +24,6 @@ interface GameSidebarProps {
 
 const GameSidebar = forwardRef<HTMLDivElement, GameSidebarProps>(({
   isSidebarOpen,
-  closeMenu,
   score,
   turns,
   letterBagCount,

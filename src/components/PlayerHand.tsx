@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 export type LetterTile = {
   id: string;
   letter: string;
@@ -18,9 +16,6 @@ type PlayerHandProps = {
 const PlayerHand = ({ 
   tiles, 
   onTileSelect, 
-  onReshuffle, 
-  reshuffleCost,
-  tilesRemaining 
 }: PlayerHandProps) => {
   const getFrequencyClass = (frequency: LetterTile['frequency']) => {
     switch (frequency) {
@@ -30,20 +25,6 @@ const PlayerHand = ({
       case 'rare': return 'bg-amber-100 border-amber-500';
       default: return 'bg-gray-100 border-gray-300';
     }
-  };
-
-  // Define styles directly
-  const titleStyle = {
-    fontSize: '1.125rem',
-    lineHeight: '1.75rem',
-    fontWeight: 600,
-    marginBottom: '0.5rem'
-  };
-
-  const tilesRemainingStyle = {
-    fontSize: '0.875rem',
-    lineHeight: '1.25rem',
-    color: '#4b5563'
   };
 
   return (

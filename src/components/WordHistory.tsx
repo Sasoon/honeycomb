@@ -48,7 +48,7 @@ const WordHistory: React.FC<WordHistoryProps> = ({
             </div>
             
             <div className="max-h-32 overflow-y-auto">
-              {displayWords.map((entry, index) => (
+              {displayWords.map((entry) => (
                 <div 
                   key={`${entry.turn}-${entry.word}`} 
                   className="flex items-center text-sm hover:bg-amber-100 rounded px-1 py-0.5"

@@ -28,7 +28,6 @@ function App() {
             <Route path="/" element={
               <Game 
                 isSidebarOpen={isSidebarOpen} 
-                setIsSidebarOpen={setIsSidebarOpen}
                 openMenu={openMenu}
                 closeMenu={closeMenu}
               />

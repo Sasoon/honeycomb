@@ -1,8 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { nanoid } from 'nanoid';
 import { HexCell } from '../components/HexGrid';
-import wordValidator from '../lib/wordValidator';
 
 interface GameStats {
     gamesPlayed: number;

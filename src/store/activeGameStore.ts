@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { LetterTile } from '../components/PlayerHand';
-import wordValidator from '../lib/wordValidator';
 
 // Define a word history entry for tracking scored words
 export interface WordHistoryEntry {

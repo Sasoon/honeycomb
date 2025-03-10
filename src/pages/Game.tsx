@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useActiveGameStore } from '../store/activeGameStore';
 import { useGameActions } from '../hooks/useGameActions';
@@ -9,12 +9,11 @@ import { MAX_PLACEMENT_TILES } from '../lib/gameUtils';
 // Game component props
 type GameProps = {
   isSidebarOpen: boolean;
-  setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   openMenu: () => void;
   closeMenu: () => void;
 };
 
-const Game = ({ isSidebarOpen, setIsSidebarOpen, openMenu, closeMenu }: GameProps) => {
+const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
   // Get game state from store
   const {
     grid,
@@ -36,7 +35,6 @@ const Game = ({ isSidebarOpen, setIsSidebarOpen, openMenu, closeMenu }: GameProp
     isWordAlreadyScored,
     potentialScore,
     isShuffleAnimating,
-    pathConnections,
     handleTileSelect,
     handleCellClick,
     handleEndPlacementPhase,
@@ -124,7 +122,6 @@ const Game = ({ isSidebarOpen, setIsSidebarOpen, openMenu, closeMenu }: GameProp
         {/* Sidebar component */}
         <GameSidebar
           isSidebarOpen={isSidebarOpen}
-          closeMenu={closeMenu}
           score={score}
           turns={turns}
           letterBagCount={letterBag.length}
@@ -162,7 +159,6 @@ const Game = ({ isSidebarOpen, setIsSidebarOpen, openMenu, closeMenu }: GameProp
           onBurnTile={handleBurnWithAnimation}
           onEndPlacementPhase={handleEndPlacementPhase}
           onScoreWord={handleScoreWord}
-          pathConnections={pathConnections}
           ref={mainContentRef}
         />
       </div>

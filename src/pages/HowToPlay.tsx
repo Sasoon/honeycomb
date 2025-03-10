@@ -1,5 +1,3 @@
-import React from 'react';
-
 const HowToPlay = () => {
   return (
     <div className="max-w-3xl mx-auto px-3 sm:px-4">

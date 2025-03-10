@@ -10,17 +10,14 @@ import {
     isAdjacentToCell,
     calculateWordScore,
     checkGameOver,
-    MAX_PLACEMENT_TILES,
-    PathConnection
+    MAX_PLACEMENT_TILES
 } from '../lib/gameUtils';
-import VictoryScreen from '../components/VictoryScreen';
 
 export interface GameActionsResult {
     isWordValid: boolean;
     isWordAlreadyScored: boolean;
     potentialScore: number;
     isShuffleAnimating: boolean;
-    pathConnections: PathConnection[];
     handleTileSelect: (tile: LetterTile) => void;
     handleCellClick: (cell: HexCell) => void;
     handleEndPlacementPhase: () => void;
@@ -36,7 +33,6 @@ export function useGameActions(): GameActionsResult {
     const [isWordAlreadyScored, setIsWordAlreadyScored] = useState(false);
     const [potentialScore, setPotentialScore] = useState(0);
     const [isShuffleAnimating, setIsShuffleAnimating] = useState(false);
-    const [pathConnections, setPathConnections] = useState<PathConnection[]>([]);
 
     const {
         gameInitialized,
@@ -53,9 +49,7 @@ export function useGameActions(): GameActionsResult {
         placedTilesThisTurn,
         scoredWords: scoredWordsArray,
         cursedWord,
-        cursedWordHint,
         setGameState,
-        resetGame,
         wordHistory
     } = useActiveGameStore();
 
@@ -67,7 +61,6 @@ export function useGameActions(): GameActionsResult {
         if (!gameInitialized) {
             const initialGrid = generateInitialGrid(gridSize);
             const initialLetterBag = generateLetterBag();
-            const initialHand: LetterTile[] = [];
 
             // Draw initial hand
             const drawnTiles = initialLetterBag.slice(0, 5);
@@ -103,7 +96,7 @@ export function useGameActions(): GameActionsResult {
 
             // Calculate potential score if word is valid
             if (valid && !isAlreadyScored) {
-                const score = calculateWordScore(wordFromPath, wordPath, grid);
+                const score = calculateWordScore(wordPath, grid);
                 setPotentialScore(score);
             } else {
                 setPotentialScore(0);
@@ -206,10 +199,8 @@ export function useGameActions(): GameActionsResult {
                 }]
             });
         } else {
-            // Word formation phase - Updated to support double usage
-
-            // Skip empty cells
-            if (!cell.letter) return;
+            // In word formation phase, we select letters to form words
+            if (!cell.letter) return; // Skip empty cells
 
             // Find if this cell is already in the word path
             const pathIndex = wordPath.findIndex(pathCell => pathCell.id === cell.id);
@@ -222,13 +213,6 @@ export function useGameActions(): GameActionsResult {
                     // Remove this letter from the word path
                     const newPath = wordPath.slice(0, wordPath.length - 1);
 
-                    // Update connections
-                    let newConnections = [...pathConnections];
-                    if (newConnections.length > 0) {
-                        // Remove the last connection
-                        newConnections = newConnections.slice(0, newConnections.length - 1);
-                    }
-
                     // Update grid to reflect selection
                     const updatedGrid = grid.map(c => ({
                         ...c,
@@ -241,56 +225,10 @@ export function useGameActions(): GameActionsResult {
                         grid: updatedGrid,
                         currentWord: newPath.map(c => c.letter).join('')
                     });
-                    setPathConnections(newConnections);
                 }
                 // If it's the first letter, reset the entire word
                 else if (pathIndex === 0) {
                     handleResetWord();
-                }
-                // Don't allow adding a cell that was just used (preventing immediate backtracking)
-                else if (pathIndex === wordPath.length - 2) {
-                    // Can't backtrack to the previous cell
-                    toast.error("Can't backtrack to the previous cell");
-                    return;
-                }
-                else {
-                    // For any other existing cell - allow reusing if not at maximum
-                    const occurrences = wordPath.filter(p => p.id === cell.id).length;
-                    if (occurrences >= 2) {
-                        toast.error("Cell already used twice");
-                        return;
-                    }
-
-                    // Check adjacency with last cell
-                    const lastCell = wordPath[wordPath.length - 1];
-                    if (!isAdjacentToCell(cell, lastCell)) {
-                        toast.error("Cell must be adjacent to the last selected cell");
-                        return;
-                    }
-
-                    // Add this letter to the word path again
-                    const newPath = [...wordPath, cell];
-
-                    // Create connection with dotted line
-                    const newConnections = [...pathConnections, {
-                        from: lastCell.id,
-                        to: cell.id,
-                        dotted: true
-                    }];
-
-                    // Update grid to reflect selection
-                    const updatedGrid = grid.map(c => ({
-                        ...c,
-                        isSelected: newPath.some(p => p.id === c.id)
-                    }));
-
-                    // Update state
-                    setGameState({
-                        wordPath: newPath,
-                        grid: updatedGrid,
-                        currentWord: newPath.map(c => c.letter).join('')
-                    });
-                    setPathConnections(newConnections);
                 }
             } else {
                 // Cell is not in path, attempt to add it
@@ -304,18 +242,6 @@ export function useGameActions(): GameActionsResult {
                     // Add this letter to the word path
                     const newPath = [...wordPath, cell];
 
-                    // Create new connection
-                    let newConnections = [...pathConnections];
-                    if (wordPath.length > 0) {
-                        const lastCell = wordPath[wordPath.length - 1];
-                        // For first use of a cell, use solid line
-                        newConnections.push({
-                            from: lastCell.id,
-                            to: cell.id,
-                            dotted: false
-                        });
-                    }
-
                     // Update grid to reflect selection
                     const updatedGrid = grid.map(c => ({
                         ...c,
@@ -328,9 +254,6 @@ export function useGameActions(): GameActionsResult {
                         grid: updatedGrid,
                         currentWord: newPath.map(c => c.letter).join('')
                     });
-                    setPathConnections(newConnections);
-                } else {
-                    toast.error("You can only add adjacent cells to your word.");
                 }
             }
         }
@@ -353,7 +276,7 @@ export function useGameActions(): GameActionsResult {
 
         // After ending placement phase, check if the game is over
         setTimeout(() => {
-            if (checkGameOver(grid, letterBag)) {
+            if (checkGameOver(grid, letterBag, playerHand)) {
                 showVictoryScreen();
             }
         }, 500);
@@ -370,9 +293,6 @@ export function useGameActions(): GameActionsResult {
             grid: updatedGrid,
             currentWord: ''
         });
-
-        // Clear path connections
-        setPathConnections([]);
     };
 
     const updateCursedWordHint = () => {
@@ -450,7 +370,7 @@ export function useGameActions(): GameActionsResult {
         }
 
         // Calculate score
-        const wordScore = calculateWordScore(currentWord, wordPath, grid);
+        const wordScore = calculateWordScore(wordPath, grid);
 
         // Update cursed word hint if the word is related
         updateCursedWordHint();
@@ -488,9 +408,6 @@ export function useGameActions(): GameActionsResult {
             grid: updatedGrid
         });
 
-        // Clear path connections
-        setPathConnections([]);
-
         toast.success(`+${wordScore} points for "${currentWord}"!`);
 
         // End the turn after scoring
@@ -498,7 +415,7 @@ export function useGameActions(): GameActionsResult {
 
         // After updating the state with the scored word, check if game is over
         setTimeout(() => {
-            if (checkGameOver(grid, letterBag)) {
+            if (checkGameOver(grid, letterBag, playerHand)) {
                 showVictoryScreen();
             }
         }, 500);
@@ -540,7 +457,7 @@ export function useGameActions(): GameActionsResult {
 
         // After burning, check if game is over due to empty deck
         setTimeout(() => {
-            if (checkGameOver(grid, letterBag)) {
+            if (checkGameOver(grid, letterBag, playerHand)) {
                 showVictoryScreen();
             }
         }, 500);
@@ -582,11 +499,37 @@ export function useGameActions(): GameActionsResult {
             localStorage.setItem('highScore', score.toString());
         }
 
-        // Simplified victory screen without using JSX or DOM manipulation
-        const message = `Game Over! Score: ${score} points | Board filled: ${completionPercentage}%`;
+        // Determine if the game ended due to empty letter bag and empty hand
+        const isOutOfCards = letterBag.length === 0 && playerHand.length === 0;
+
+        // Create more descriptive victory message
+        const winReason = isOutOfCards ?
+            "🎮 You've used all available tiles!" :
+            "🎮 You've filled the entire board!";
+
+        const scoreInfo = `🏆 Final Score: ${score} points`;
+        const boardInfo = `📊 Board Filled: ${completionPercentage}%`;
+        const wordInfo = `📝 Words Formed: ${wordHistory.length}`;
+        const highScoreInfo = isHighScore ? "🌟 NEW HIGH SCORE! 🌟" : "";
+
+        // Create multiline toast message
+        const message = `${winReason}\n${scoreInfo}\n${boardInfo}\n${wordInfo}${highScoreInfo ? '\n' + highScoreInfo : ''}`;
+
+        // Show victory toast
         toast.success(message, {
-            duration: 5000,
-            position: 'top-center'
+            duration: 10000,
+            position: 'top-center',
+            style: {
+                padding: '16px',
+                color: '#713200',
+                backgroundColor: '#fff8e6',
+                borderLeft: '6px solid #f59e0b',
+                fontWeight: 'bold',
+            },
+            iconTheme: {
+                primary: '#f59e0b',
+                secondary: '#FFFAEE',
+            },
         });
     };
 
@@ -595,7 +538,6 @@ export function useGameActions(): GameActionsResult {
         isWordAlreadyScored,
         potentialScore,
         isShuffleAnimating,
-        pathConnections,
         handleTileSelect,
         handleCellClick,
         handleEndPlacementPhase,
