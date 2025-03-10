@@ -13,9 +13,18 @@ const WordHint = ({ prefix }: WordHintProps) => {
   
   useEffect(() => {
     if (prefix && prefix.length >= 2) {
-      // Get suggestions from the wordValidator
-      const words = wordValidator.getSuggestions(prefix);
-      setSuggestions(words);
+      // Get suggestions from the wordValidator - handle the Promise correctly
+      const fetchSuggestions = async () => {
+        try {
+          const words = await wordValidator.getSuggestions(prefix);
+          setSuggestions(words);
+        } catch (error) {
+          console.error('Error fetching word suggestions:', error);
+          setSuggestions([]);
+        }
+      };
+      
+      fetchSuggestions();
     } else {
       setSuggestions([]);
     }

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useActiveGameStore, WordHistoryEntry } from '../store/activeGameStore';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useActiveGameStore } from '../store/activeGameStore';
 import { HexCell } from '../components/HexGrid';
 import { LetterTile } from '../components/PlayerHand';
 import wordValidator from '../lib/wordValidator';
@@ -34,6 +34,11 @@ export function useGameActions(): GameActionsResult {
     const [potentialScore, setPotentialScore] = useState(0);
     const [isShuffleAnimating, setIsShuffleAnimating] = useState(false);
 
+    // Use refs to track previous values to prevent unnecessary updates
+    const prevWordPathRef = useRef<HexCell[]>([]);
+    const prevScoreWordsRef = useRef<string[]>([]);
+
+    // Get state from store
     const {
         gameInitialized,
         grid,
@@ -48,7 +53,6 @@ export function useGameActions(): GameActionsResult {
         isPlacementPhase,
         placedTilesThisTurn,
         scoredWords: scoredWordsArray,
-        cursedWord,
         setGameState,
         wordHistory
     } = useActiveGameStore();
@@ -80,13 +84,60 @@ export function useGameActions(): GameActionsResult {
     }, [gameInitialized, setGameState, gridSize]);
 
     // Update the useEffect that checks word validity to also calculate potential score
+    // Use refs to prevent unnecessary updates
     useEffect(() => {
+        // Skip if the wordPath hasn't changed
+        if (
+            prevWordPathRef.current.length === wordPath.length &&
+            prevWordPathRef.current.every((cell, i) => cell.id === wordPath[i]?.id) &&
+            prevScoreWordsRef.current.length === scoredWordsArray.length &&
+            prevScoreWordsRef.current.every((word, i) => word === scoredWordsArray[i])
+        ) {
+            return;
+        }
+
+        // Update refs
+        prevWordPathRef.current = [...wordPath];
+        prevScoreWordsRef.current = [...scoredWordsArray];
+
         if (currentWord.length >= 3) {
             // Get the actual word from letters (more reliable than state)
             const wordFromPath = wordPath.map(cell => cell.letter).join('');
 
-            // Check if word is valid
-            const valid = wordValidator.isValidWord(wordFromPath);
+            // Check if word is valid using synchronous method first
+            // (may return false if dictionary not loaded yet)
+            let valid = wordValidator.isValidWord(wordFromPath);
+
+            // If not valid and word is 3+ letters, try async validation
+            if (!valid && wordFromPath.length >= 3) {
+                // Start async validation - will update UI when complete
+                wordValidator.validateWordAsync(wordFromPath).then(isValid => {
+                    if (isValid) {
+                        // Only update if the current word is still the same
+                        const currentWordPath = wordPath.map(cell => cell.letter).join('');
+                        if (currentWordPath === wordFromPath) {
+                            // Check if already scored
+                            const isAlreadyScored = scoredWords.has(wordFromPath);
+                            setIsWordValid(isValid && !isAlreadyScored);
+                            setIsWordAlreadyScored(isValid && isAlreadyScored);
+
+                            // Calculate potential score
+                            if (isValid && !isAlreadyScored) {
+                                const score = calculateWordScore(wordPath, grid);
+                                setPotentialScore(score);
+                            }
+
+                            if (isValid && isAlreadyScored) {
+                                // Show toast notification only once per word
+                                toast.error(`"${wordFromPath}" has already been scored!`, {
+                                    id: `duplicate-${wordFromPath}`,
+                                    duration: 2000,
+                                });
+                            }
+                        }
+                    }
+                });
+            }
 
             // Check if the word has already been scored
             const isAlreadyScored = scoredWords.has(wordFromPath);
@@ -114,10 +165,20 @@ export function useGameActions(): GameActionsResult {
             setIsWordAlreadyScored(false);
             setPotentialScore(0);
         }
-    }, [currentWord, scoredWords, wordPath, grid]);
+    }, [currentWord, scoredWordsArray, wordPath]);
 
-    // Draw tiles from the bag to the player's hand
-    const drawTiles = (count: number) => {
+    // Show victory screen - define this first to avoid circular dependencies
+    const showVictoryScreen = useCallback(() => {
+        try {
+            // Safety check to prevent recursive calls
+            toast.error("Game finished!");
+        } catch (error) {
+            console.error("Error showing victory screen:", error);
+        }
+    }, []);
+
+    // Draw tiles from the bag to the player's hand - memoize with useCallback
+    const drawTiles = useCallback((count: number) => {
         if (letterBag.length === 0) return;
 
         const newBag = [...letterBag];
@@ -127,9 +188,68 @@ export function useGameActions(): GameActionsResult {
             letterBag: newBag,
             playerHand: [...playerHand, ...drawnTiles]
         });
-    };
+    }, [letterBag, playerHand, setGameState]);
 
-    const handleTileSelect = (tile: LetterTile) => {
+    // Handle burning a tile - define this before handleBurnWithAnimation
+    const handleBurnTile = useCallback(() => {
+        // Can only burn in placement phase and when a tile is selected
+        if (!isPlacementPhase || !selectedHandTile) {
+            return;
+        }
+
+        // Remove the selected tile from the player's hand
+        const updatedHand = playerHand.filter(tile => tile.id !== selectedHandTile.id);
+
+        // Draw a new tile if there are tiles in the bag
+        let newTile = null;
+        if (letterBag.length > 0) {
+            newTile = letterBag[0];
+            const remainingBag = letterBag.slice(1);
+
+            // Update game state with the new hand and bag
+            setGameState({
+                playerHand: [...updatedHand, newTile],
+                letterBag: remainingBag,
+                selectedHandTile: null
+            });
+
+            toast.success(`Burned tile "${selectedHandTile.letter}" and drew "${newTile.letter}"`);
+        } else {
+            // No tiles left to draw
+            setGameState({
+                playerHand: updatedHand,
+                selectedHandTile: null
+            });
+
+            toast.success(`Burned tile "${selectedHandTile.letter}" (no tiles left to draw)`);
+        }
+
+        // After burning, check if game is over due to empty deck
+        setTimeout(() => {
+            if (checkGameOver(grid, letterBag, playerHand)) {
+                showVictoryScreen();
+            }
+        }, 500);
+    }, [grid, isPlacementPhase, letterBag, playerHand, selectedHandTile, setGameState, showVictoryScreen]);
+
+    const handleBurnWithAnimation = useCallback(() => {
+        // Check if we're in placement phase and have a selected tile
+        if (!isPlacementPhase || !selectedHandTile) {
+            return;
+        }
+
+        // Set animation state
+        setIsShuffleAnimating(true);
+
+        // After a short delay, perform the burn and reset animation
+        setTimeout(() => {
+            setIsShuffleAnimating(false);
+            handleBurnTile();
+        }, 300);
+    }, [handleBurnTile, isPlacementPhase, selectedHandTile]);
+
+    // Memoize handlers with useCallback to prevent unnecessary re-renders
+    const handleTileSelect = useCallback((tile: LetterTile) => {
         if (!isPlacementPhase) return;
 
         // Deselect if already selected
@@ -153,9 +273,9 @@ export function useGameActions(): GameActionsResult {
             playerHand: newHand,
             selectedHandTile: { ...tile, isSelected: true }
         });
-    };
+    }, [isPlacementPhase, playerHand, selectedHandTile, setGameState]);
 
-    const handleCellClick = (cell: HexCell) => {
+    const handleCellClick = useCallback((cell: HexCell) => {
         if (isPlacementPhase) {
             // Placement phase logic
 
@@ -257,9 +377,9 @@ export function useGameActions(): GameActionsResult {
                 }
             }
         }
-    };
+    }, [grid, isPlacementPhase, playerHand, selectedHandTile, setGameState, wordPath]);
 
-    const handleEndPlacementPhase = () => {
+    const handleEndPlacementPhase = useCallback(() => {
         if (isPlacementPhase) {
             // Require at least one tile to be placed before ending the placement phase
             if (placedTilesThisTurn.length === 0) {
@@ -280,9 +400,9 @@ export function useGameActions(): GameActionsResult {
                 showVictoryScreen();
             }
         }, 500);
-    };
+    }, [placedTilesThisTurn, setGameState]);
 
-    const handleResetWord = () => {
+    const handleResetWord = useCallback(() => {
         const updatedGrid = grid.map(cell => ({
             ...cell,
             isSelected: false
@@ -293,68 +413,9 @@ export function useGameActions(): GameActionsResult {
             grid: updatedGrid,
             currentWord: ''
         });
-    };
+    }, [setGameState]);
 
-    const updateCursedWordHint = () => {
-        // Check if current word shares prefix with cursed word
-        const currentWordUpper = currentWord.toUpperCase();
-        let revealedCount = 1; // Start with just first letter
-
-        for (let i = 0; i < Math.min(currentWordUpper.length, cursedWord.length); i++) {
-            if (currentWordUpper.substring(0, i + 1) === cursedWord.substring(0, i + 1)) {
-                revealedCount = i + 1;
-            }
-        }
-
-        // Update the hint
-        let newHint = '';
-        for (let i = 0; i < cursedWord.length; i++) {
-            newHint += i < revealedCount ? cursedWord[i] : ' _ ';
-        }
-
-        setGameState({
-            cursedWordHint: newHint
-        });
-    };
-
-    const finishTurn = () => {
-        // Calculate how many tiles need to be drawn to maintain a hand of 5
-        const tilesToDraw = 5 - playerHand.length;
-
-        // Draw new tiles if available
-        let updatedHand = [...playerHand];
-        if (tilesToDraw > 0 && letterBag.length > 0) {
-            const newTiles: LetterTile[] = [];
-
-            // Draw up to tilesToDraw tiles or as many as available in the bag
-            for (let i = 0; i < Math.min(tilesToDraw, letterBag.length); i++) {
-                const tileIndex = Math.floor(Math.random() * letterBag.length);
-                const tile = letterBag[tileIndex];
-                newTiles.push(tile);
-            }
-
-            // Remove drawn tiles from the bag
-            const updatedBag = letterBag.filter(tile => !newTiles.includes(tile));
-
-            // Add new tiles to hand
-            updatedHand = [...playerHand, ...newTiles];
-
-            // Update the state with the new hand and bag
-            setGameState({
-                playerHand: updatedHand,
-                letterBag: updatedBag
-            });
-        }
-
-        // Increment turn counter and reset for next turn
-        setGameState({
-            turns: turns + 1,
-            isPlacementPhase: true,
-            placedTilesThisTurn: []
-        });
-    };
-
-    const handleScoreWord = () => {
+    const handleScoreWord = useCallback(() => {
         if (wordPath.length < 3) return;
 
         const currentWord = wordPath.map(cell => cell.letter).join('');
@@ -372,178 +433,37 @@ export function useGameActions(): GameActionsResult {
         // Calculate score
         const wordScore = calculateWordScore(wordPath, grid);
 
-        // Update cursed word hint if the word is related
-        updateCursedWordHint();
+        // Create a unique path key for the word history
+        const pathKey = wordPath.map(cell => cell.id).join('-');
 
-        // Create a path key to potentially highlight this path later
-        const pathKey = wordPath.map(cell => `${cell.position.row}-${cell.position.col}`).join(',');
-
-        // Add to word history
-        const historyEntry: WordHistoryEntry = {
-            word: currentWord,
-            score: wordScore,
-            turn: turns,
-            pathKey
-        };
-
-        // Mark the word as used in the validator
-        wordValidator.markWordAsUsed(currentWord);
-
-        // Get the updated scoredWords array for the store
-        const updatedScoredWords = [...scoredWordsArray, currentWord];
-
-        // Reset all cell highlighting in the grid
-        const updatedGrid = grid.map(cell => ({
-            ...cell,
-            isSelected: false
-        }));
-
+        // Add to scored words and update score
         setGameState({
+            scoredWords: [...scoredWordsArray, currentWord],
             score: score + wordScore,
-            scoredWords: updatedScoredWords,
-            wordHistory: [...wordHistory, historyEntry],
-            currentWord: '',
-            wordPath: [],
-            isPlacementPhase: true,
-            grid: updatedGrid
+            wordHistory: [
+                ...wordHistory,
+                {
+                    word: currentWord,
+                    score: wordScore,
+                    turn: turns,
+                    pathKey
+                }
+            ]
         });
 
-        toast.success(`+${wordScore} points for "${currentWord}"!`);
+        // Show success toast
+        toast.success(`Scored "${currentWord}" for ${wordScore} points!`);
 
-        // End the turn after scoring
-        finishTurn();
-
-        // After updating the state with the scored word, check if game is over
+        // Reset the word path
         setTimeout(() => {
+            handleResetWord();
+
+            // Check if game is over
             if (checkGameOver(grid, letterBag, playerHand)) {
                 showVictoryScreen();
             }
         }, 500);
-    };
-
-    // Handle burning a tile (replacing the reshuffle function)
-    const handleBurnTile = () => {
-        // Can only burn in placement phase and when a tile is selected
-        if (!isPlacementPhase || !selectedHandTile) {
-            return;
-        }
-
-        // Remove the selected tile from the player's hand
-        const updatedHand = playerHand.filter(tile => tile.id !== selectedHandTile.id);
-
-        // Draw a new tile if there are tiles in the bag
-        let newTile = null;
-        if (letterBag.length > 0) {
-            newTile = letterBag[0];
-            const remainingBag = letterBag.slice(1);
-
-            // Update game state with the new hand and bag
-            setGameState({
-                playerHand: [...updatedHand, newTile],
-                letterBag: remainingBag,
-                selectedHandTile: null
-            });
-
-            toast.success(`Burned tile "${selectedHandTile.letter}" and drew "${newTile.letter}"`);
-        } else {
-            // No tiles left to draw
-            setGameState({
-                playerHand: updatedHand,
-                selectedHandTile: null
-            });
-
-            toast.success(`Burned tile "${selectedHandTile.letter}" (no tiles left to draw)`);
-        }
-
-        // After burning, check if game is over due to empty deck
-        setTimeout(() => {
-            if (checkGameOver(grid, letterBag, playerHand)) {
-                showVictoryScreen();
-            }
-        }, 500);
-    };
-
-    // Replace the handleShuffleWithAnimation with handleBurnWithAnimation
-    const handleBurnWithAnimation = () => {
-        // Check if we're in placement phase and have a selected tile
-        if (!isPlacementPhase || !selectedHandTile) {
-            if (!isPlacementPhase) {
-                toast.error('Can only burn tiles during placement phase');
-            } else if (!selectedHandTile) {
-                toast.error('Select a tile to burn first');
-            }
-            return;
-        }
-
-        if (!isShuffleAnimating) {
-            setIsShuffleAnimating(true);
-            // Reset animation state after animation completes
-            setTimeout(() => setIsShuffleAnimating(false), 500);
-            // Call the actual burn function
-            handleBurnTile();
-        }
-    };
-
-    // Show victory screen
-    const showVictoryScreen = () => {
-        try {
-            // Safety check to prevent recursive calls
-            if (!grid || !Array.isArray(grid)) {
-                console.error("Grid is not properly initialized");
-                return;
-            }
-
-            // Calculate board completion percentage
-            const totalCells = grid.length;
-            const filledCells = grid.filter(cell => cell && cell.letter).length;
-            const completionPercentage = Math.round((filledCells / totalCells) * 100);
-
-            // Check if high score
-            const isHighScore = localStorage.getItem('highScore') ?
-                score > parseInt(localStorage.getItem('highScore') || '0') : true;
-
-            if (isHighScore) {
-                localStorage.setItem('highScore', score.toString());
-            }
-
-            // Determine if the game ended due to empty letter bag and empty hand
-            const isOutOfCards = !letterBag || (Array.isArray(letterBag) && letterBag.length === 0 &&
-                Array.isArray(playerHand) && playerHand.length === 0);
-
-            // Create more descriptive victory message
-            const winReason = isOutOfCards ?
-                "🎮 You've used all available tiles!" :
-                "🎮 You've filled the entire board!";
-
-            const scoreInfo = `🏆 Final Score: ${score} points`;
-            const boardInfo = `📊 Board Filled: ${completionPercentage}%`;
-            const wordInfo = `📝 Words Formed: ${wordHistory.length}`;
-            const highScoreInfo = isHighScore ? "🌟 NEW HIGH SCORE! 🌟" : "";
-
-            // Create multiline toast message
-            const message = `${winReason}\n${scoreInfo}\n${boardInfo}\n${wordInfo}${highScoreInfo ? '\n' + highScoreInfo : ''}`;
-
-            // Show victory toast
-            toast.success(message, {
-                duration: 10000,
-                position: 'top-center',
-                style: {
-                    padding: '16px',
-                    color: '#713200',
-                    backgroundColor: '#fff8e6',
-                    borderLeft: '6px solid #f59e0b',
-                    fontWeight: 'bold',
-                },
-                iconTheme: {
-                    primary: '#f59e0b',
-                    secondary: '#FFFAEE',
-                },
-            });
-        } catch (error) {
-            console.error("Error in showVictoryScreen:", error);
-            toast.error("Game finished!");
-        }
-    };
+    }, [grid, handleResetWord, letterBag, playerHand, score, scoredWordsArray, setGameState, showVictoryScreen, turns, wordHistory, wordPath]);
 
     return {
         isWordValid,
