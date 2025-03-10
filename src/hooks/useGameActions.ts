@@ -486,51 +486,63 @@ export function useGameActions(): GameActionsResult {
 
     // Show victory screen
     const showVictoryScreen = () => {
-        // Calculate board completion percentage
-        const totalCells = grid.length;
-        const filledCells = grid.filter(cell => cell.letter).length;
-        const completionPercentage = Math.round((filledCells / totalCells) * 100);
+        try {
+            // Safety check to prevent recursive calls
+            if (!grid || !Array.isArray(grid)) {
+                console.error("Grid is not properly initialized");
+                return;
+            }
 
-        // Check if high score
-        const isHighScore = localStorage.getItem('highScore') ?
-            score > parseInt(localStorage.getItem('highScore') || '0') : true;
+            // Calculate board completion percentage
+            const totalCells = grid.length;
+            const filledCells = grid.filter(cell => cell && cell.letter).length;
+            const completionPercentage = Math.round((filledCells / totalCells) * 100);
 
-        if (isHighScore) {
-            localStorage.setItem('highScore', score.toString());
+            // Check if high score
+            const isHighScore = localStorage.getItem('highScore') ?
+                score > parseInt(localStorage.getItem('highScore') || '0') : true;
+
+            if (isHighScore) {
+                localStorage.setItem('highScore', score.toString());
+            }
+
+            // Determine if the game ended due to empty letter bag and empty hand
+            const isOutOfCards = !letterBag || (Array.isArray(letterBag) && letterBag.length === 0 &&
+                Array.isArray(playerHand) && playerHand.length === 0);
+
+            // Create more descriptive victory message
+            const winReason = isOutOfCards ?
+                "🎮 You've used all available tiles!" :
+                "🎮 You've filled the entire board!";
+
+            const scoreInfo = `🏆 Final Score: ${score} points`;
+            const boardInfo = `📊 Board Filled: ${completionPercentage}%`;
+            const wordInfo = `📝 Words Formed: ${wordHistory.length}`;
+            const highScoreInfo = isHighScore ? "🌟 NEW HIGH SCORE! 🌟" : "";
+
+            // Create multiline toast message
+            const message = `${winReason}\n${scoreInfo}\n${boardInfo}\n${wordInfo}${highScoreInfo ? '\n' + highScoreInfo : ''}`;
+
+            // Show victory toast
+            toast.success(message, {
+                duration: 10000,
+                position: 'top-center',
+                style: {
+                    padding: '16px',
+                    color: '#713200',
+                    backgroundColor: '#fff8e6',
+                    borderLeft: '6px solid #f59e0b',
+                    fontWeight: 'bold',
+                },
+                iconTheme: {
+                    primary: '#f59e0b',
+                    secondary: '#FFFAEE',
+                },
+            });
+        } catch (error) {
+            console.error("Error in showVictoryScreen:", error);
+            toast.error("Game finished!");
         }
-
-        // Determine if the game ended due to empty letter bag and empty hand
-        const isOutOfCards = letterBag.length === 0 && playerHand.length === 0;
-
-        // Create more descriptive victory message
-        const winReason = isOutOfCards ?
-            "🎮 You've used all available tiles!" :
-            "🎮 You've filled the entire board!";
-
-        const scoreInfo = `🏆 Final Score: ${score} points`;
-        const boardInfo = `📊 Board Filled: ${completionPercentage}%`;
-        const wordInfo = `📝 Words Formed: ${wordHistory.length}`;
-        const highScoreInfo = isHighScore ? "🌟 NEW HIGH SCORE! 🌟" : "";
-
-        // Create multiline toast message
-        const message = `${winReason}\n${scoreInfo}\n${boardInfo}\n${wordInfo}${highScoreInfo ? '\n' + highScoreInfo : ''}`;
-
-        // Show victory toast
-        toast.success(message, {
-            duration: 10000,
-            position: 'top-center',
-            style: {
-                padding: '16px',
-                color: '#713200',
-                backgroundColor: '#fff8e6',
-                borderLeft: '6px solid #f59e0b',
-                fontWeight: 'bold',
-            },
-            iconTheme: {
-                primary: '#f59e0b',
-                secondary: '#FFFAEE',
-            },
-        });
     };
 
     return {

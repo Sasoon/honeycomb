@@ -207,8 +207,15 @@ export const calculateWordScore = (path: HexCell[], grid: HexCell[]): number => 
 // Check if the game is over (board full or player out of cards)
 export const checkGameOver = (grid: HexCell[], letterBag: LetterTile[], playerHand: LetterTile[] = []): boolean => {
     // Count empty cells on the grid
-    const emptyCellCount = grid.filter(cell => !cell.letter).length;
+    if (!grid || !letterBag) return false; // Safety check
+
+    // Ensure we're working with arrays
+    const safeGrid = Array.isArray(grid) ? grid : [];
+    const safeLetterBag = Array.isArray(letterBag) ? letterBag : [];
+    const safePlayerHand = Array.isArray(playerHand) ? playerHand : [];
+
+    const emptyCellCount = safeGrid.filter(cell => cell && !cell.letter).length;
 
     // Game is over if no more empty cells OR if player is out of cards (empty hand and bag)
-    return emptyCellCount === 0 || (letterBag.length === 0 && playerHand.length === 0);
+    return emptyCellCount === 0 || (safeLetterBag.length === 0 && safePlayerHand.length === 0);
 }; 
