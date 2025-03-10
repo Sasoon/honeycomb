@@ -85,6 +85,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
           isWordValid={currentWord.length >= 3 ? isWordValid : undefined}
           isPlacementPhase={isPlacementPhase}
           isWordAlreadyScored={isWordAlreadyScored}
+          placedTilesThisTurn={placedTilesThisTurn}
         />
       </div>
       

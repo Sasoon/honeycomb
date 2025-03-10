@@ -159,7 +159,59 @@ export function useGameActions(): GameActionsResult {
         if (isPlacementPhase) {
             // Placement phase logic
 
-            // If the cell already has a letter, do nothing
+            // Check if this is a cell that was placed this turn
+            const wasPlacedThisTurn = placedTilesThisTurn.some(
+                placedCell => placedCell.id === cell.id
+            );
+
+            // If the cell has a letter and was placed this turn, undo the placement
+            if (cell.letter && wasPlacedThisTurn) {
+                // Find the placed tile to restore to hand
+                const placedTile = placedTilesThisTurn.find(t => t.id === cell.id);
+
+                if (!placedTile) return; // Safety check
+
+                // Create a new tile to add back to the hand
+                const tileToRestore: LetterTile = {
+                    id: `restored-${placedTile.id}`,
+                    letter: placedTile.letter,
+                    isSelected: false,
+                    frequency: 'common'
+                };
+
+                // Remove the letter from the cell
+                const updatedGrid = grid.map(c => {
+                    if (c.id === cell.id) {
+                        return {
+                            ...c,
+                            letter: '',
+                            isPlaced: c.isPrePlaced // Only keep isPlaced true if it was pre-placed
+                        };
+                    }
+                    return c;
+                });
+
+                // Add the tile back to the hand
+                const updatedHand = [...playerHand, tileToRestore];
+
+                // Remove this cell from placedTilesThisTurn
+                const updatedPlacedTiles = placedTilesThisTurn.filter(
+                    t => t.id !== cell.id
+                );
+
+                // Update the state
+                setGameState({
+                    grid: updatedGrid,
+                    playerHand: updatedHand,
+                    placedTilesThisTurn: updatedPlacedTiles
+                });
+
+                // Show feedback to the user
+                toast.success('Tile placement undone');
+                return;
+            }
+
+            // If the cell already has a letter (and wasn't placed this turn), do nothing
             if (cell.letter) return;
 
             // If we already placed the maximum number of tiles, show a message and return

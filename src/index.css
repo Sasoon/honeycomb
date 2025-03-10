@@ -182,9 +182,37 @@ body {
 }
 
 .double-score-badge span {
+  font-size: 0.8rem;
+  font-weight: 700;
   color: white;
-  font-size: 0.75rem;
+}
+
+/* Subtle pulse animation for tiles that can be undone */
+@keyframes subtlePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.pulse-subtle {
+  animation: subtlePulse 1.5s ease-in-out infinite;
+  position: relative;
+}
+
+.pulse-subtle::after {
+  content: 'UNDO';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
   font-weight: bold;
+  color: #3B82F6;
+  background-color: white;
+  padding: 1px 3px;
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  opacity: 0.9;
 }
 
 /* Row adjustments for honeycomb pattern */

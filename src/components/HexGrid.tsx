@@ -14,6 +14,7 @@ export type HexCell = {
   isSelected: boolean;
   isPlaced: boolean;
   isDoubleScore: boolean;
+  placedThisTurn?: boolean;
 };
 
 type HexGridProps = {
@@ -23,6 +24,7 @@ type HexGridProps = {
   isWordValid?: boolean;
   isPlacementPhase: boolean;
   isWordAlreadyScored?: boolean;
+  placedTilesThisTurn?: HexCell[];
 };
 
 const HexGrid = ({ 
@@ -30,13 +32,18 @@ const HexGrid = ({
   onCellClick, 
   isWordValid, 
   isPlacementPhase,
-  isWordAlreadyScored
+  isWordAlreadyScored,
+  placedTilesThisTurn = []
 }: HexGridProps) => {
   const cellStyles = (cell: HexCell) => {
     let bgColor = 'bg-white';
     let textColor = 'text-gray-800';
     let border = '';
     let extraClasses = '';
+    
+    const isPlacedThisTurn = placedTilesThisTurn.some(
+      placedCell => placedCell.id === cell.id
+    );
     
     if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
@@ -60,6 +67,10 @@ const HexGrid = ({
         border = 'hex-border-blue';
       }
       textColor = 'text-white';
+    } else if (isPlacedThisTurn && isPlacementPhase) {
+      bgColor = 'bg-blue-100';
+      border = 'hex-border-blue';
+      extraClasses = 'pulse-subtle';
     } else if (cell.isPlaced) {
       bgColor = 'bg-green-100';
       border = 'hex-border-green';
