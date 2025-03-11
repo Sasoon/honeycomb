@@ -23,6 +23,7 @@ export interface GameActionsResult {
     handleTileSelect: (tile: LetterTile) => void;
     handleCellClick: (cell: HexCell) => void;
     handleEndPlacementPhase: () => void;
+    handleEndTurn: () => void;
     handleResetWord: () => void;
     handleScoreWord: () => void;
     handleBurnWithAnimation: () => void;
@@ -781,6 +782,29 @@ export function useGameActions(): GameActionsResult {
         }
     };
 
+    // Add the new handleEndTurn function
+    const handleEndTurn = () => {
+        if (isPlacementPhase) {
+            handleEndPlacementPhase();
+        } else {
+            // Show skip notification
+            toast.success('Turn skipped', {
+                icon: '⏭️',
+                duration: 2000,
+                style: {
+                    border: '1px solid #d1d5db',
+                    padding: '12px',
+                    color: '#6b7280',
+                },
+            });
+
+            // Reset any selected word
+            handleResetWord();
+            // End the turn
+            finishTurn();
+        }
+    };
+
     return {
         isWordValid,
         isWordAlreadyScored,
@@ -789,6 +813,7 @@ export function useGameActions(): GameActionsResult {
         handleTileSelect,
         handleCellClick,
         handleEndPlacementPhase,
+        handleEndTurn,
         handleResetWord,
         handleScoreWord,
         handleBurnWithAnimation,

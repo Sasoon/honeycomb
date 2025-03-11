@@ -37,6 +37,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     handleTileSelect,
     handleCellClick,
     handleEndPlacementPhase,
+    handleEndTurn,
     handleResetWord,
     handleScoreWord,
     handleBurnWithAnimation
@@ -128,7 +129,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
           isPlacementPhase={isPlacementPhase}
           wordHistory={wordHistory}
           onScoreWord={handleScoreWord}
-          onEndTurn={handleEndPlacementPhase}
+          onEndTurn={handleEndTurn}
           onResetWord={handleResetWord}
           isWordValid={isWordValid}
           placedTilesCount={placedTilesThisTurn.length}
