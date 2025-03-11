@@ -36,7 +36,6 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     isDictionaryLoading,
     handleTileSelect,
     handleCellClick,
-    handleEndPlacementPhase,
     handleEndTurn,
     handleResetWord,
     handleScoreWord,
@@ -154,11 +153,12 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
             placedTilesThisTurn={placedTilesThisTurn}
             score={score}
             turns={turns}
+            wordHistory={wordHistory}
             onCellClick={handleCellClick}
             onTileSelect={handleTileSelect}
             onBurnTile={handleBurnWithAnimation}
-            onEndPlacementPhase={handleEndPlacementPhase}
             onScoreWord={handleScoreWord}
+            maxPlacementTiles={MAX_PLACEMENT_TILES}
           />
         </div>
       </div>

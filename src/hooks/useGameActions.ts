@@ -190,7 +190,7 @@ export function useGameActions(): GameActionsResult {
                 pistonSourceCell: null
             });
 
-            toast.success("Select a tile to move with the piston");
+            toast.success("Select an existing letter on the board to move with the piston");
         } else {
             // For regular tiles, turn off piston mode
             setGameState({
@@ -203,35 +203,39 @@ export function useGameActions(): GameActionsResult {
     const handleCellClick = (cell: HexCell) => {
         // For piston tiles, we need to check if the cell is valid
         if (selectedHandTile?.tileType === 'piston' && isPistonActive) {
-            // If no source cell is selected yet and this cell has a letter, select it as the source
-            if (!pistonSourceCell && cell.isPlaced) {
-                // Mark this cell as the piston target
-                const updatedGrid = grid.map(c => {
-                    // The clicked cell becomes the piston source
-                    if (c.id === cell.id) {
-                        return { ...c, isPistonTarget: true };
-                    }
+            // First click: If no source cell is selected yet, this must be a cell with a letter
+            if (!pistonSourceCell) {
+                // Check if this cell has a letter
+                if (cell.isPlaced && cell.letter) {
+                    // Mark this cell as the piston target
+                    const updatedGrid = grid.map(c => {
+                        // The clicked cell becomes the piston source
+                        if (c.id === cell.id) {
+                            return { ...c, isPistonTarget: true };
+                        }
 
-                    // Find and mark all adjacent cells
-                    const isAdjacent = isAdjacentToCell(c, cell);
-                    // Allow adjacent cells whether they're empty or occupied
-                    return {
-                        ...c,
-                        isAdjacentToPistonSource: isAdjacent
-                    };
-                });
+                        // Find and mark all adjacent cells
+                        const isAdjacent = isAdjacentToCell(c, cell);
+                        return {
+                            ...c,
+                            isAdjacentToPistonSource: isAdjacent
+                        };
+                    });
 
-                setGameState({
-                    grid: updatedGrid,
-                    pistonSourceCell: cell
-                });
+                    setGameState({
+                        grid: updatedGrid,
+                        pistonSourceCell: cell
+                    });
 
-                toast.success("Now select any adjacent space to move this tile");
+                    toast.success("Now select any adjacent space to move this tile");
+                } else {
+                    // Error: Tried to use piston on an empty cell
+                    toast.error("You can only use a piston on an existing letter");
+                }
                 return;
             }
 
-            // If source is selected and this is an adjacent cell, move the tile
-            // We've removed the check for empty cells
+            // Second click: If source is selected and this is an adjacent cell, move the tile
             if (pistonSourceCell && cell.isAdjacentToPistonSource) {
                 handlePistonMove(cell);
                 return;
@@ -270,8 +274,10 @@ export function useGameActions(): GameActionsResult {
                 }
 
                 // Create a new tile to add back to the hand
+                // Using Date.now() to ensure unique IDs and prevent React key duplication errors
+                // This fixes a bug where clicking the same cell multiple times would create tiles with duplicate IDs
                 const tileToRestore: LetterTile = {
-                    id: `restored-${placedTile.id}`,
+                    id: `restored-${placedTile.id}-${Date.now()}`,
                     letter: placedTile.letter,
                     isSelected: false,
                     frequency: 'common',
@@ -387,7 +393,52 @@ export function useGameActions(): GameActionsResult {
                 canUndo: true
             });
 
-            toast.success(`Placed tile: ${selectedHandTile.letter}`);
+            // Auto-transition to scoring phase when max tiles are placed
+            // We need to check if this placement will reach the max tiles limit
+            if (placedTilesThisTurn.length + 1 === MAX_PLACEMENT_TILES) {
+                // Use setTimeout to ensure state is updated before transitioning
+                setTimeout(() => {
+                    // Create a flash effect
+                    const flashElement = document.createElement('div');
+                    flashElement.style.position = 'fixed';
+                    flashElement.style.top = '0';
+                    flashElement.style.left = '0';
+                    flashElement.style.width = '100%';
+                    flashElement.style.height = '100%';
+                    flashElement.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                    flashElement.style.zIndex = '9999';
+                    flashElement.style.opacity = '0';
+                    flashElement.style.pointerEvents = 'none';
+                    flashElement.style.transition = 'opacity 0.5s ease';
+                    document.body.appendChild(flashElement);
+
+                    // Trigger the flash animation
+                    setTimeout(() => {
+                        flashElement.style.opacity = '0.7';
+                        setTimeout(() => {
+                            flashElement.style.opacity = '0';
+                            setTimeout(() => {
+                                document.body.removeChild(flashElement);
+                            }, 500);
+                        }, 150);
+                    }, 10);
+
+                    // Transition to scoring phase
+                    handleEndPlacementPhase();
+
+                    // Show a notification that we're entering scoring phase
+                    toast.success('Entering scoring phase!', {
+                        duration: 2000,
+                        icon: '✨',
+                    });
+                }, 300);
+            } else {
+                // Show regular tile placement notification
+                toast.success(`Placed tile: ${selectedHandTile.letter}`, {
+                    duration: 1500,
+                    icon: '🔤',
+                });
+            }
         } else {
             // In word formation phase, we select letters to form words
             if (!cell.letter) return; // Skip empty cells
