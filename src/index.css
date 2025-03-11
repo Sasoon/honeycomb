@@ -125,6 +125,7 @@ body {
 
 .hex-grid__item.bg-green-100 {
   background: linear-gradient(135deg, #D1FAE5, #A7F3D0);
+  animation: squashStretch 0.3s ease-in-out forwards;
 }
 
 .hex-grid__item.bg-honeycomb-light {
@@ -255,4 +256,45 @@ body {
 
 .piston-tile:hover {
   transform: rotate(90deg);
+}
+
+/* Squash and stretch animation for placement */
+@keyframes squashStretch {
+  0% { 
+    transform: translateY(-20px) scale(1.1, 0.9); 
+    opacity: 0.7;
+  }
+  40% { 
+    transform: translateY(0) scale(0.9, 1.1); 
+    opacity: 1;
+  }
+  60% { 
+    transform: translateY(0) scale(1.05, 0.95); 
+    opacity: 1;
+  }
+  80% { 
+    transform: translateY(0) scale(0.98, 1.02); 
+    opacity: 1;
+  }
+  100% { 
+    transform: translateY(0) scale(1, 1); 
+    opacity: 1;
+  }
+}
+
+/* Subtle floating animation for selected tiles */
+@keyframes floatEffect {
+  0% { transform: translateY(0) scale(1.1); }
+  50% { transform: translateY(-3px) scale(1.1); }
+  100% { transform: translateY(0) scale(1.1); }
+}
+
+.tile-placed-animation {
+  animation: squashStretch 0.3s ease-in-out forwards;
+}
+
+/* Glow effect for selected tiles */
+.selected-tile-glow {
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.7);
+  animation: floatEffect 2s ease-in-out infinite;
 }

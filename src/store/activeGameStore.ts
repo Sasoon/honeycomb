@@ -135,7 +135,7 @@ export const useActiveGameStore = create<ActiveGameState>()(
         }),
         {
             name: 'honeycomb-game-state',
-            skipHydration: true, // We'll handle hydration manually
+            skipHydration: false, // Changed from true to enable automatic hydration
         }
     )
 ); 

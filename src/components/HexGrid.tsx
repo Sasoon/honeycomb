@@ -94,6 +94,7 @@ const HexGrid = ({
       if (isPlacedThisTurn) {
         bgColor = 'bg-green-100';
         border = 'border-green-500';
+        extraClasses += ' tile-placed-animation';
       }
     } else if (cell.isPrePlaced) {
       bgColor = 'bg-honeycomb-light';
@@ -102,7 +103,7 @@ const HexGrid = ({
     
     // If double score, add that class
     if (cell.isDoubleScore) {
-      extraClasses = 'hex-double-score';
+      extraClasses += ' hex-double-score';
     }
     
     return `${bgColor} ${textColor} ${border} ${extraClasses}`;

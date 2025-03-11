@@ -15,12 +15,13 @@ const LetterTile: React.FC<LetterTileProps> = ({
 }) => {
   return (
     <div 
-      className={`letter-tile ${isSelected ? 'ring-2 ring-blue-500 scale-110' : ''} ${className}`}
+      className={`letter-tile ${isSelected ? 'ring-2 ring-blue-500 scale-110 selected-tile-glow' : 'hover:scale-105'} ${className}`}
       onClick={onClick}
       style={{
         fontSize: '1.5rem',
         lineHeight: '2rem',
-        fontWeight: 700
+        fontWeight: 700,
+        transition: 'all 0.2s ease'
       }}
     >
       {letter}
