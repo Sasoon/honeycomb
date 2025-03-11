@@ -145,7 +145,7 @@ body {
 }
 
 .hex-grid__item.hex-border-red {
-  border: 2px solid #EF4444;
+  /* border: 2px solid #EF4444; */
 }
 
 .hex-grid__item.hex-border-honeycomb {

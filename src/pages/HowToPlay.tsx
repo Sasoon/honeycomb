@@ -63,14 +63,6 @@ const HowToPlay = () => {
         <h3 className="font-semibold text-lg mb-2">Special Mechanics</h3>
         <div className="space-y-3 mb-6">
           <div>
-            <div className="font-medium">Cursed Word</div>
-            <p className="text-sm text-gray-700">
-              A hidden word gradually revealed as you form related words. The first letter is shown at 
-              the start. As you form words with matching prefixes, more letters are revealed. Forming 
-              the complete Cursed Word deducts points!
-            </p>
-          </div>
-          <div>
             <div className="font-medium">Reshuffle System</div>
             <p className="text-sm text-gray-700">
               Discard your hand for 5 new tiles at an escalating cost: 2 → 4 → 8 points.

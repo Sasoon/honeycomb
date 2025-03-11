@@ -12,7 +12,6 @@ interface GameSidebarProps {
   letterBagCount: number;
   currentWord: string;
   isPlacementPhase: boolean;
-  cursedWordHint: string;
   wordHistory: WordHistoryEntry[];
   onScoreWord: () => void;
   onEndTurn: () => void;
@@ -29,7 +28,6 @@ const GameSidebar = forwardRef<HTMLDivElement, GameSidebarProps>(({
   letterBagCount,
   currentWord,
   isPlacementPhase,
-  cursedWordHint,
   wordHistory,
   onScoreWord,
   onEndTurn,
@@ -157,7 +155,6 @@ const GameSidebar = forwardRef<HTMLDivElement, GameSidebarProps>(({
                 onResetWord={onResetWord}
                 isWordValid={isWordValid}
                 isPlacementPhase={isPlacementPhase}
-                cursedWordHint={cursedWordHint}
                 placedTilesCount={placedTilesCount}
                 maxPlacementTiles={maxPlacementTiles}
               />

@@ -25,7 +25,6 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     turns,
     isPlacementPhase,
     placedTilesThisTurn,
-    cursedWordHint,
     wordHistory
   } = useActiveGameStore();
   
@@ -127,7 +126,6 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
           letterBagCount={letterBag.length}
           currentWord={currentWord}
           isPlacementPhase={isPlacementPhase}
-          cursedWordHint={cursedWordHint}
           wordHistory={wordHistory}
           onScoreWord={handleScoreWord}
           onEndTurn={handleEndPlacementPhase}

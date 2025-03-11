@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import HexGrid, { HexCell } from './HexGrid';
 import PlayerHand, { LetterTile } from './PlayerHand';
+import UndoButton from './UndoButton';
 
 interface GameContentProps {
   grid: HexCell[];
@@ -80,35 +81,43 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
       </div>
       
       {/* Action buttons - moved above player hand */}
-      {!isPlacementPhase ? (
-        <div className="flex justify-center mb-4">
-          <button
-            className="py-1.5 px-3 bg-red-500 hover:bg-red-600 text-white rounded-md shadow-sm
-                      flex items-center justify-center transition-colors text-sm font-medium mr-2"
-            onClick={() => onScoreWord()}
-            disabled={!isWordValid || isWordAlreadyScored || currentWord.length < 3}
-            aria-label="Score word"
-          >
-            Score Word <span className="ml-1">({potentialScore})</span>
-            {isDictionaryLoading && (
-              <span className="ml-1 animate-pulse">•••</span>
-            )}
-          </button>
-        </div>
-      ) : (
-        <div className="flex justify-center mb-4">
-          {placedTilesThisTurn.length > 0 && (
-            <button 
-              className="py-1.5 px-3 bg-honeycomb hover:bg-honeycomb-dark text-white rounded-md shadow-sm
-                       flex items-center justify-center transition-colors text-sm font-medium"
-              onClick={onEndPlacementPhase}
-              aria-label="End placement phase"
+      <div className="flex justify-center mb-4">
+        {!isPlacementPhase ? (
+          <>
+            <button
+              className="py-1.5 px-3 bg-red-500 hover:bg-red-600 text-white rounded-md shadow-sm
+                        flex items-center justify-center transition-colors text-sm font-medium mr-2"
+              onClick={() => onScoreWord()}
+              disabled={!isWordValid || isWordAlreadyScored || currentWord.length < 3}
+              aria-label="Score word"
             >
-              Begin Word Formation <span className="ml-1">→</span>
+              Score Word <span className="ml-1">({potentialScore})</span>
+              {isDictionaryLoading && (
+                <span className="ml-1 animate-pulse">•••</span>
+              )}
             </button>
-          )}
-        </div>
-      )}
+            
+            {/* Undo button */}
+            <UndoButton />
+          </>
+        ) : (
+          <>
+            {placedTilesThisTurn.length > 0 && (
+              <button 
+                className="py-1.5 px-3 bg-honeycomb hover:bg-honeycomb-dark text-white rounded-md shadow-sm
+                         flex items-center justify-center transition-colors text-sm font-medium mr-2"
+                onClick={onEndPlacementPhase}
+                aria-label="End placement phase"
+              >
+                Begin Word Formation <span className="ml-1">→</span>
+              </button>
+            )}
+            
+            {/* Undo button */}
+            <UndoButton />
+          </>
+        )}
+      </div>
       
       {/* Player hand with positioned action buttons */}
       <div className="mt-4 pb-16 md:pb-0 relative">

@@ -3,7 +3,7 @@ import { useActiveGameStore, WordHistoryEntry } from '../store/activeGameStore';
 import { HexCell } from '../components/HexGrid';
 import { LetterTile } from '../components/PlayerHand';
 import wordValidator from '../lib/wordValidator';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 import {
     generateInitialGrid,
     generateLetterBag,
@@ -13,12 +13,12 @@ import {
     checkGameOver,
     MAX_PLACEMENT_TILES
 } from '../lib/gameUtils';
+import confetti from 'canvas-confetti';
 
 export interface GameActionsResult {
     isWordValid: boolean;
     isWordAlreadyScored: boolean;
     potentialScore: number;
-    isShuffleAnimating: boolean;
     isDictionaryLoading: boolean;
     handleTileSelect: (tile: LetterTile) => void;
     handleCellClick: (cell: HexCell) => void;
@@ -35,8 +35,7 @@ export function useGameActions(): GameActionsResult {
     const [isWordValid, setIsWordValid] = useState(false);
     const [isWordAlreadyScored, setIsWordAlreadyScored] = useState(false);
     const [potentialScore, setPotentialScore] = useState(0);
-    const [isShuffleAnimating] = useState(false);
-    const [isDictionaryLoading, setIsDictionaryLoading] = useState(!wordValidator.isReady);
+    const [isDictionaryLoading, setIsDictionaryLoading] = useState(true);
 
     const {
         gameInitialized,
@@ -47,16 +46,16 @@ export function useGameActions(): GameActionsResult {
         selectedHandTile,
         currentWord,
         wordPath,
+        placedTilesThisTurn,
+        scoredWords: scoredWordsArray,
         score,
         turns,
         isPlacementPhase,
-        placedTilesThisTurn,
-        scoredWords: scoredWordsArray,
-        cursedWord,
         setGameState,
-        wordHistory,
         isPistonActive,
-        pistonSourceCell
+        pistonSourceCell,
+        undoLastAction,
+        wordHistory
     } = useActiveGameStore();
 
     // Convert the scoredWords array to a Set for faster lookups
@@ -260,6 +259,15 @@ export function useGameActions(): GameActionsResult {
 
                 if (!placedTile) return; // Safety check
 
+                // Check if this tile was placed using a piston (by checking lastAction)
+                const { lastAction, canUndo } = useActiveGameStore.getState();
+                if (canUndo && lastAction?.type === 'use_piston' && lastAction.pistonSourceCell) {
+                    // Just use the global undo action as it's more reliable for piston moves
+                    undoLastAction();
+                    toast.success('Piston move undone');
+                    return;
+                }
+
                 // Create a new tile to add back to the hand
                 const tileToRestore: LetterTile = {
                     id: `restored-${placedTile.id}`,
@@ -332,6 +340,11 @@ export function useGameActions(): GameActionsResult {
                 return;
             }
 
+            // Create deep copies of current state BEFORE any changes
+            const gridBeforeChange = grid.map(c => ({ ...c }));
+            const handBeforeChange = playerHand.map(t => ({ ...t }));
+            const placedTilesBeforeChange = [...placedTilesThisTurn];
+
             // Place the letter from the selected hand tile into the cell
             const updatedGrid = grid.map(c => {
                 if (c.id === cell.id) {
@@ -339,13 +352,13 @@ export function useGameActions(): GameActionsResult {
                         ...c,
                         letter: selectedHandTile.letter,
                         isPlaced: true,
-                        isDoubleScore: c.isDoubleScore || false
+                        placedThisTurn: true
                     };
                 }
                 return c;
             });
 
-            // Remove the placed tile from the hand
+            // Remove the tile from the player's hand
             const updatedHand = playerHand.filter(t => t.id !== selectedHandTile.id);
 
             // Update the state
@@ -353,12 +366,27 @@ export function useGameActions(): GameActionsResult {
                 grid: updatedGrid,
                 playerHand: updatedHand,
                 selectedHandTile: null,
-                placedTilesThisTurn: [...placedTilesThisTurn, {
-                    ...cell,
-                    letter: selectedHandTile.letter,
-                    isPlaced: true
-                }]
+                placedTilesThisTurn: [
+                    ...placedTilesThisTurn,
+                    {
+                        ...cell,
+                        letter: selectedHandTile.letter,
+                        isPlaced: true,
+                        placedThisTurn: true
+                    }
+                ],
+                // Track the action for undo functionality
+                lastAction: {
+                    type: 'place_tile',
+                    prevGrid: gridBeforeChange,
+                    prevPlayerHand: handBeforeChange,
+                    prevPlacedTilesThisTurn: placedTilesBeforeChange,
+                    tileUsed: selectedHandTile
+                },
+                canUndo: true
             });
+
+            toast.success(`Placed tile: ${selectedHandTile.letter}`);
         } else {
             // In word formation phase, we select letters to form words
             if (!cell.letter) return; // Skip empty cells
@@ -428,10 +456,12 @@ export function useGameActions(): GameActionsResult {
                 return;
             }
 
-            // End placement phase, begin scoring phase
+            // Clear undo ability when transitioning between phases
             setGameState({
                 isPlacementPhase: false,
-                placedTilesThisTurn: []
+                placedTilesThisTurn: [],
+                canUndo: false,
+                lastAction: null
             });
         }
 
@@ -453,28 +483,6 @@ export function useGameActions(): GameActionsResult {
             wordPath: [],
             grid: updatedGrid,
             currentWord: ''
-        });
-    };
-
-    const updateCursedWordHint = () => {
-        // Check if current word shares prefix with cursed word
-        const currentWordUpper = currentWord.toUpperCase();
-        let revealedCount = 1; // Start with just first letter
-
-        for (let i = 0; i < Math.min(currentWordUpper.length, cursedWord.length); i++) {
-            if (currentWordUpper.substring(0, i + 1) === cursedWord.substring(0, i + 1)) {
-                revealedCount = i + 1;
-            }
-        }
-
-        // Update the hint
-        let newHint = '';
-        for (let i = 0; i < cursedWord.length; i++) {
-            newHint += i < revealedCount ? cursedWord[i] : ' _ ';
-        }
-
-        setGameState({
-            cursedWordHint: newHint
         });
     };
 
@@ -516,25 +524,27 @@ export function useGameActions(): GameActionsResult {
     };
 
     const handleScoreWord = () => {
-        if (wordPath.length < 3) return;
-
-        const currentWord = wordPath.map(cell => cell.letter).join('');
-        if (!wordValidator.isValidWord(currentWord)) {
-            toast.error(`"${currentWord}" is not a valid word.`);
+        // If there's no valid word, don't do anything
+        if (!isWordValid) {
+            toast.error("That's not a valid word");
             return;
         }
 
-        // Check if this word has already been used
-        if (scoredWords.has(currentWord)) {
-            toast.error(`You've already used "${currentWord}" in this game.`);
-            return;
-        }
+        // Clear undo ability when scoring (non-undoable action)
+        setGameState({
+            canUndo: false,
+            lastAction: null
+        });
 
-        // Calculate score
+        // Calculate the final score for this word
         const wordScore = calculateWordScore(wordPath, grid);
 
-        // Update cursed word hint if the word is related
-        updateCursedWordHint();
+        // Display confetti for scoring
+        confetti({
+            particleCount: Math.min(wordScore * 5, 100),
+            spread: 70,
+            origin: { y: 0.6 }
+        });
 
         // Create a path key to potentially highlight this path later
         const pathKey = wordPath.map(cell => `${cell.position.row}-${cell.position.col}`).join(',');
@@ -584,15 +594,17 @@ export function useGameActions(): GameActionsResult {
 
     // Replace the handleShuffleWithAnimation with handleBurnWithAnimation
     const handleBurnWithAnimation = () => {
-        // Check if we're in placement phase and have a selected tile
-        if (!isPlacementPhase || !selectedHandTile) {
-            if (!isPlacementPhase) {
-                toast.error('Can only burn tiles during placement phase');
-            } else if (!selectedHandTile) {
-                toast.error('Select a tile to burn first');
-            }
+        // Require a selected tile to burn
+        if (!selectedHandTile) {
+            toast.error("Select a tile to burn first");
             return;
         }
+
+        // Clear undo ability when burning (non-undoable action)
+        setGameState({
+            canUndo: false,
+            lastAction: null
+        });
 
         // Process the tile burning
         // Remove the selected tile from the player's hand
@@ -638,6 +650,11 @@ export function useGameActions(): GameActionsResult {
         const isReplacing = targetCell.isPlaced && targetCell.letter !== '';
         const replacedLetter = targetCell.letter;
 
+        // Create deep copies of current state for undo functionality
+        const gridBeforeChange = grid.map(c => ({ ...c }));
+        const handBeforeChange = playerHand.map(t => ({ ...t }));
+        const placedTilesBeforeChange = [...placedTilesThisTurn];
+
         // Create updated grid with the tile moved to the new position
         const updatedGrid = grid.map(cell => {
             // Clear the source cell
@@ -682,7 +699,17 @@ export function useGameActions(): GameActionsResult {
             selectedHandTile: null,
             isPistonActive: false,
             pistonSourceCell: null,
-            placedTilesThisTurn: [...placedTilesThisTurn, { ...targetCell, letter: pistonSourceCell.letter }]
+            placedTilesThisTurn: [...placedTilesThisTurn, { ...targetCell, letter: pistonSourceCell.letter }],
+            // Track the action for undo functionality
+            lastAction: {
+                type: 'use_piston',
+                prevGrid: gridBeforeChange,
+                prevPlayerHand: handBeforeChange,
+                prevPlacedTilesThisTurn: placedTilesBeforeChange,
+                tileUsed: selectedHandTile,
+                pistonSourceCell: pistonSourceCell
+            },
+            canUndo: true
         });
 
         // Show a different message if we replaced a tile
@@ -758,7 +785,6 @@ export function useGameActions(): GameActionsResult {
         isWordValid,
         isWordAlreadyScored,
         potentialScore,
-        isShuffleAnimating,
         isDictionaryLoading,
         handleTileSelect,
         handleCellClick,

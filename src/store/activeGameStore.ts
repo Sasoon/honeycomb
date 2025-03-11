@@ -11,6 +11,19 @@ export interface WordHistoryEntry {
     pathKey: string;
 }
 
+// Define action types for tracking purposes
+export type ActionType = 'place_tile' | 'use_piston' | 'none';
+
+// Define the structure for storing the last action
+export interface UndoableAction {
+    type: ActionType;
+    prevGrid: HexCell[];
+    prevPlayerHand: LetterTile[];
+    prevPlacedTilesThisTurn: HexCell[];
+    tileUsed?: LetterTile; // Used for piston or placed tile
+    pistonSourceCell?: HexCell | null; // Used for piston actions
+}
+
 // Define the active game state interface
 interface ActiveGameState {
     // Basic game state
@@ -29,124 +42,100 @@ interface ActiveGameState {
     placedTilesThisTurn: HexCell[];
     scoredWords: string[];
     wordHistory: WordHistoryEntry[];
-    reshuffleCost: number;
-    cursedWord: string;
-    cursedWordHint: string;
 
     // Piston mechanics
     isPistonActive: boolean;
     pistonSourceCell: HexCell | null;
 
+    // Undo functionality
+    lastAction: UndoableAction | null;
+    canUndo: boolean;
+
     // Actions
     setGameState: (state: Partial<ActiveGameState>) => void;
     resetGame: () => void;
+    undoLastAction: () => void;
 }
 
-// Create the active game store with persistence
+// Initialize game with default settings
+const initialState: Omit<ActiveGameState, 'setGameState' | 'resetGame' | 'undoLastAction'> = {
+    gameInitialized: false,
+    isGameActive: false,
+    grid: [],
+    gridSize: 5, // Default to 5 rings
+    letterBag: [],
+    playerHand: [],
+    selectedHandTile: null,
+    currentWord: '',
+    wordPath: [],
+    score: 0,
+    turns: 1,
+    isPlacementPhase: true,
+    placedTilesThisTurn: [],
+    scoredWords: [],
+    wordHistory: [],
+    isPistonActive: false,
+    pistonSourceCell: null,
+    lastAction: null,
+    canUndo: false
+};
+
+// Create a persisted store for the active game
 export const useActiveGameStore = create<ActiveGameState>()(
     persist(
         (set) => ({
-            // Default state
-            gameInitialized: false,
-            isGameActive: false,
-            grid: [],
-            gridSize: 5,
-            letterBag: [],
-            playerHand: [],
-            selectedHandTile: null,
-            currentWord: '',
-            wordPath: [],
-            score: 0,
-            turns: 0,
-            isPlacementPhase: true,
-            placedTilesThisTurn: [],
-            scoredWords: [],
-            wordHistory: [],
-            reshuffleCost: 2,
-            cursedWord: 'HONEY',
-            cursedWordHint: 'H _ _ _ _',
+            ...initialState,
 
-            // Piston mechanics
-            isPistonActive: false,
-            pistonSourceCell: null,
+            // Set partial state
+            setGameState: (state: Partial<ActiveGameState>) => set((prev) => ({ ...prev, ...state })),
 
-            // Actions
-            setGameState: (state) => set((currentState) => ({
-                ...currentState,
-                ...state,
-                isGameActive: true
+            // Reset the game state to initial
+            resetGame: () => set((state) => ({
+                ...initialState,
+                gameInitialized: true,
+                isGameActive: true,
+                grid: state.grid, // Keep the grid structure
+                setGameState: state.setGameState,
+                resetGame: state.resetGame,
+                undoLastAction: state.undoLastAction
             })),
 
-            resetGame: () => set({
-                gameInitialized: false,
-                isGameActive: false,
-                grid: [],
-                letterBag: [],
-                playerHand: [],
-                selectedHandTile: null,
-                currentWord: '',
-                wordPath: [],
-                score: 0,
-                turns: 0,
-                isPlacementPhase: true,
-                placedTilesThisTurn: [],
-                scoredWords: [],
-                wordHistory: [],
-                reshuffleCost: 2,
-                cursedWord: 'HONEY',
-                cursedWordHint: 'H _ _ _ _',
+            // Undo the last action if possible
+            undoLastAction: () => set((state) => {
+                const { lastAction } = state;
 
-                // Piston mechanics
-                isPistonActive: false,
-                pistonSourceCell: null,
+                if (!lastAction || !state.canUndo) {
+                    return state;
+                }
+
+                // Reset isSelected on all tiles in hand
+                const resetPlayerHand = lastAction.prevPlayerHand.map(tile => ({
+                    ...tile,
+                    isSelected: false
+                }));
+
+                // Reset any piston-related visual indicators on the grid
+                const resetGrid = lastAction.prevGrid.map(cell => ({
+                    ...cell,
+                    isPistonTarget: false,
+                    isAdjacentToPistonSource: false
+                }));
+
+                return {
+                    ...state,
+                    grid: resetGrid,
+                    playerHand: resetPlayerHand,
+                    placedTilesThisTurn: lastAction.prevPlacedTilesThisTurn,
+                    lastAction: null,
+                    canUndo: false,
+                    pistonSourceCell: null,
+                    isPistonActive: false
+                };
             })
         }),
         {
-            name: 'honeycomb-active-game', // unique name for localStorage
-            partialize: (state) => {
-                // Only persist these fields
-                const {
-                    gameInitialized,
-                    isGameActive,
-                    grid,
-                    gridSize,
-                    letterBag,
-                    playerHand,
-                    score,
-                    turns,
-                    isPlacementPhase,
-                    scoredWords,
-                    wordHistory,
-                    reshuffleCost,
-                    cursedWord,
-                    cursedWordHint,
-
-                    // Piston mechanics
-                    isPistonActive,
-                    pistonSourceCell
-                } = state;
-
-                return {
-                    gameInitialized,
-                    isGameActive,
-                    grid,
-                    gridSize,
-                    letterBag,
-                    playerHand,
-                    score,
-                    turns,
-                    isPlacementPhase,
-                    scoredWords,
-                    wordHistory,
-                    reshuffleCost,
-                    cursedWord,
-                    cursedWordHint,
-
-                    // Piston mechanics
-                    isPistonActive,
-                    pistonSourceCell
-                };
-            }
+            name: 'honeycomb-game-state',
+            skipHydration: true, // We'll handle hydration manually
         }
     )
 ); 

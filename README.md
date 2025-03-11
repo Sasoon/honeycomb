@@ -80,8 +80,7 @@ yarn dev
 ### Special Mechanics
 - **Jump Tiles**: Earned after using 3 rare letters; allows skipping one tile in a word path during scoring, acting as a bridge.
 - **Wild Tiles**: Earned by completing hexes; can overwrite an existing tile with any letter, keeping the grid dynamic.
-- **Cursed Word**: A hidden word revealed gradually, like hangman. The first letter is shown at the start. As players form words that share prefixes or root similarities with the Cursed Word, more letters are revealed incrementally. Forming the complete Cursed Word deducts points.  For example, if the Cursed Word is "NECRO", the first letter 'N' is shown initially. If the player forms "NECTAR", the revealed Cursed Word becomes "NEC".
-- **Reshuffle System**: Discard your hand for 5 new tiles at an escalating cost with a cap: 2 → 4 → 8 points.
+- **Burn System**: Burn a tile to draw a new one.
 - **Double Score Tiles**: Two special hexes on the grid. When a word's path includes a Double Score tile, its base score (1 point per letter) is doubled for that turn. Each Double Score tile can be used only once per game, deactivating after scoring, encouraging strategic clustering toward these high-value spots.
 
 ### Density Incentives

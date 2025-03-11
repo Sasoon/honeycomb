@@ -46,11 +46,6 @@ export interface GameState {
     isPlacementPhase: boolean;
     placedTilesThisTurn: HexCell[];
     scoredWords: Set<string>;
-    reshuffleCost: number;
-
-    // Game theme
-    cursedWord: string;
-    cursedWordHint: string;
 
     // Getters
     getIsWordValid: () => boolean;

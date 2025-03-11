@@ -8,7 +8,6 @@ type GameControlsProps = {
   onResetWord: () => void;
   isWordValid: boolean;
   isPlacementPhase: boolean;
-  cursedWordHint: string;
   placedTilesCount?: number;
   maxPlacementTiles?: number;
 };
@@ -20,7 +19,6 @@ const GameControls = ({
   onResetWord,
   isWordValid,
   isPlacementPhase,
-  cursedWordHint,
   placedTilesCount = 0,
   maxPlacementTiles = 2
 }: GameControlsProps) => {
@@ -35,14 +33,6 @@ const GameControls = ({
       
       {/* Controls content */}
       <div className="p-3">
-        {/* Cursed word hint */}
-        <div className="mb-4">
-          <div className="text-xs text-gray-600">Cursed Word Hint</div>
-          <div className="text-lg font-bold text-red-600">
-            {cursedWordHint}
-          </div>
-        </div>
-        
         {/* Phase-specific controls */}
         {isPlacementPhase ? (
           <div className="space-y-2">
@@ -110,6 +100,13 @@ const GameControls = ({
                 Reset Selection
               </button>
             )}
+            
+            <button
+              onClick={onEndTurn}
+              className="w-full py-2 px-3 bg-gray-400 hover:bg-gray-500 text-white font-medium rounded-md transition-colors mt-4"
+            >
+              Skip Turn
+            </button>
           </div>
         )}
       </div>
