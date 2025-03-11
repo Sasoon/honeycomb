@@ -170,6 +170,14 @@ export function useGameActions(): GameActionsResult {
             return;
         }
 
+        // Clean up any active piston state when selecting a new tile
+        const clearedGrid = grid.map(cell => ({
+            ...cell,
+            isSelected: false,
+            isPistonTarget: false,
+            isAdjacentToPistonSource: false
+        }));
+
         // Update the selected tile in the player's hand
         const updatedHand = playerHand.map(t => ({
             ...t,
@@ -178,40 +186,25 @@ export function useGameActions(): GameActionsResult {
 
         // Set the selected tile
         setGameState({
+            grid: clearedGrid,
             playerHand: updatedHand,
-            selectedHandTile: tile
+            selectedHandTile: tile,
+            pistonSourceCell: null  // Reset any selected piston source cell
         });
 
         // If this is a piston tile, reset any existing cell selection
         if (tile.tileType === 'piston') {
-            // Reset any existing piston state and enter piston mode
-            const clearedGrid = grid.map(cell => ({
-                ...cell,
-                isSelected: false,
-                isPistonTarget: false,
-                isAdjacentToPistonSource: false
-            }));
-
+            // Enter piston mode
             setGameState({
-                grid: clearedGrid,
-                isPistonActive: true,
-                pistonSourceCell: null
+                isPistonActive: true
             });
 
             toastService.success("Select an existing letter on the board to move with the piston");
         }
         // If this is a wild tile, let the user know how to use it
         else if (tile.tileType === 'wild') {
-            // Reset any existing selections
-            const clearedGrid = grid.map(cell => ({
-                ...cell,
-                isSelected: false
-            }));
-
             setGameState({
-                grid: clearedGrid,
-                isPistonActive: false,
-                pistonSourceCell: null
+                isPistonActive: false
             });
 
             toastService.success("Select any existing letter on the board to change it");
@@ -219,8 +212,7 @@ export function useGameActions(): GameActionsResult {
         else {
             // For regular tiles, turn off piston mode
             setGameState({
-                isPistonActive: false,
-                pistonSourceCell: null
+                isPistonActive: false
             });
         }
     };
@@ -272,7 +264,8 @@ export function useGameActions(): GameActionsResult {
 
                     setGameState({
                         grid: updatedGrid,
-                        pistonSourceCell: cell
+                        pistonSourceCell: cell,
+                        isPistonActive: true
                     });
 
                     toastService.success("Now select any adjacent space to move this tile");
@@ -536,6 +529,22 @@ export function useGameActions(): GameActionsResult {
                 return;
             }
 
+            // Always check hand for piston tiles that might be selected
+            const isPistonTileSelected = selectedHandTile?.tileType === 'piston';
+
+            // Prevent ending placement phase with a piston tile in use
+            if (isPistonActive || pistonSourceCell !== null || isPistonTileSelected) {
+                // Find out which error message to show
+                if (pistonSourceCell !== null) {
+                    toastService.error("Complete or cancel your piston move before scoring.");
+                } else if (isPistonTileSelected) {
+                    toastService.error("Use or deselect your piston tile before scoring.");
+                } else {
+                    toastService.error("Complete your piston move before scoring.");
+                }
+                return;
+            }
+
             // Clear undo ability when transitioning between phases
             setGameState({
                 isPlacementPhase: false,
@@ -677,6 +686,12 @@ export function useGameActions(): GameActionsResult {
         // Require a selected tile to burn
         if (!selectedHandTile) {
             toastService.error("Select a tile to burn first");
+            return;
+        }
+
+        // Don't allow burning during piston operations once a source cell is selected
+        if (pistonSourceCell) {
+            toastService.error("Can't burn a tile while moving a piston tile");
             return;
         }
 

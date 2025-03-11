@@ -22,6 +22,8 @@ interface GameContentProps {
   score: number;
   turns: number;
   wordHistory: WordHistoryEntry[];
+  isPistonActive: boolean;
+  pistonSourceCell: HexCell | null;
   onCellClick: (cell: HexCell) => void;
   onTileSelect: (tile: LetterTile) => void;
   onBurnTile: () => void;
@@ -46,6 +48,8 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   score,
   turns,
   wordHistory,
+  isPistonActive,
+  pistonSourceCell,
   onCellClick,
   onTileSelect,
   onBurnTile,
@@ -94,6 +98,9 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
         wordHistory={wordHistory}
         currentWord={currentWord}
         onEndPlacementPhase={onEndPlacementPhase}
+        isPistonActive={isPistonActive}
+        pistonSourceCell={pistonSourceCell}
+        playerHand={playerHand}
       />
       
       {/* Phase transition animation wrapper */}
@@ -176,10 +183,13 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
                   {/* End Placement Phase button - Only show during placement with at least 1 tile placed */}
                   {isPlacementPhase && placedTilesThisTurn.length > 0 && onEndPlacementPhase && (
                     <button
-                      className="py-1.5 px-3 rounded-md shadow-sm
+                      className={`py-1.5 px-3 rounded-md shadow-sm
                                 flex items-center justify-center transition-colors text-sm font-medium
-                                bg-amber-500 hover:bg-amber-600 text-white"
+                                ${(isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston')) 
+                                  ? 'bg-gray-400 cursor-not-allowed' 
+                                  : 'bg-amber-500 hover:bg-amber-600'} text-white`}
                       onClick={onEndPlacementPhase}
+                      disabled={isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston')}
                       aria-label="End placement phase"
                     >
                       End Phase
@@ -215,12 +225,12 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
             {/* Burn button */}
             <button
               onClick={onBurnTile}
-              disabled={!isPlacementPhase || !playerHand.some(t => t.isSelected)}
+              disabled={!isPlacementPhase || !playerHand.some(t => t.isSelected) || pistonSourceCell !== null}
               className={`h-12 w-12 ml-2 order-2 flex items-center justify-center
                          relative hover:scale-105`}
               aria-label="Burn selected tile"
               style={{ 
-                opacity: !isPlacementPhase || !playerHand.some(t => t.isSelected) ? 0.5 : 1,
+                opacity: !isPlacementPhase || !playerHand.some(t => t.isSelected) || pistonSourceCell !== null ? 0.5 : 1,
                 transition: 'all 0.2s ease'
               }}
             >

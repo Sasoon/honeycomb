@@ -1,6 +1,10 @@
 import { useState } from 'react';
+// import { TARGET_SCORE } from '../lib/gameUtils';
+// import WordHistoryItem from './WordHistoryItem';
 import { WordHistoryEntry } from '../store/activeGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { HexCell } from '../components/HexGrid';
+import { LetterTile } from '../components/PlayerHand';
 
 type MobileGameControlsProps = {
   currentScore: number;
@@ -13,6 +17,9 @@ type MobileGameControlsProps = {
   wordHistory: WordHistoryEntry[];
   currentWord?: string;
   onEndPlacementPhase?: () => void;
+  isPistonActive: boolean;
+  pistonSourceCell: HexCell | null;
+  playerHand: LetterTile[];
 };
 
 const MobileGameControls = ({
@@ -24,7 +31,12 @@ const MobileGameControls = ({
   placedTilesCount,
   maxPlacementTiles,
   wordHistory,
-  onEndPlacementPhase
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  currentWord = '', // Kept for future use
+  onEndPlacementPhase,
+  isPistonActive,
+  pistonSourceCell,
+  playerHand
 }: MobileGameControlsProps) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -143,9 +155,12 @@ const MobileGameControls = ({
                         e.stopPropagation(); // Prevent closing the panel
                         onEndPlacementPhase();
                       }}
-                      className="w-full py-2 mb-3 px-3 rounded-md font-medium 
-                                bg-amber-500 hover:bg-amber-600 text-white
-                                transition-colors"
+                      disabled={isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston')}
+                      className={`w-full py-2 mb-3 px-3 rounded-md font-medium 
+                                ${(isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston'))
+                                  ? 'bg-gray-400 cursor-not-allowed' 
+                                  : 'bg-amber-500 hover:bg-amber-600'} text-white
+                                transition-colors`}
                     >
                       End Placement Phase
                     </button>

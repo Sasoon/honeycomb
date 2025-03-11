@@ -26,7 +26,9 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     turns,
     isPlacementPhase,
     placedTilesThisTurn,
-    wordHistory
+    wordHistory,
+    isPistonActive,
+    pistonSourceCell
   } = useActiveGameStore();
   
   // Get game actions from hook
@@ -193,6 +195,8 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
             score={score}
             turns={turns}
             wordHistory={wordHistory}
+            isPistonActive={isPistonActive}
+            pistonSourceCell={pistonSourceCell}
             onCellClick={handleCellClick}
             onTileSelect={handleTileSelect}
             onBurnTile={handleBurnWithAnimation}
