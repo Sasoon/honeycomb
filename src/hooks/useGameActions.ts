@@ -3,7 +3,7 @@ import { useActiveGameStore, WordHistoryEntry } from '../store/activeGameStore';
 import { HexCell } from '../components/HexGrid';
 import { LetterTile } from '../components/PlayerHand';
 import wordValidator from '../lib/wordValidator';
-import { toast } from 'react-hot-toast';
+import toastService from '../lib/toastService';
 import {
     generateInitialGrid,
     generateLetterBag,
@@ -130,8 +130,8 @@ export function useGameActions(): GameActionsResult {
 
                     if (valid && isAlreadyScored) {
                         // Show toast notification only once per word
-                        toast.error(`"${wordFromPath}" has already been scored!`, {
-                            id: `duplicate-${wordFromPath}`,
+                        toastService.error(`"${wordFromPath}" has already been scored!`, {
+                            id: 'already-scored',
                             duration: 2000,
                         });
                     }
@@ -166,7 +166,7 @@ export function useGameActions(): GameActionsResult {
     const handleTileSelect = (tile: LetterTile) => {
         // If we're not in placement phase, ignore
         if (!isPlacementPhase) {
-            toast.error("Complete or reset your current word first");
+            toastService.error("Complete or reset your current word first");
             return;
         }
 
@@ -198,7 +198,7 @@ export function useGameActions(): GameActionsResult {
                 pistonSourceCell: null
             });
 
-            toast.success("Select an existing letter on the board to move with the piston");
+            toastService.success("Select an existing letter on the board to move with the piston");
         }
         // If this is a wild tile, let the user know how to use it
         else if (tile.tileType === 'wild') {
@@ -214,7 +214,7 @@ export function useGameActions(): GameActionsResult {
                 pistonSourceCell: null
             });
 
-            toast.success("Select any existing letter on the board to change it");
+            toastService.success("Select any existing letter on the board to change it");
         }
         else {
             // For regular tiles, turn off piston mode
@@ -275,10 +275,10 @@ export function useGameActions(): GameActionsResult {
                         pistonSourceCell: cell
                     });
 
-                    toast.success("Now select any adjacent space to move this tile");
+                    toastService.success("Now select any adjacent space to move this tile");
                 } else {
                     // Error: Tried to use piston on an empty cell
-                    toast.error("You can only use a piston on an existing letter");
+                    toastService.error("You can only use a piston on an existing letter");
                 }
                 return;
             }
@@ -291,7 +291,7 @@ export function useGameActions(): GameActionsResult {
 
             // If clicking on a non-adjacent cell, show error
             if (pistonSourceCell) {
-                toast.error("Select an adjacent space");
+                toastService.error("Select an adjacent space");
                 return;
             }
         }
@@ -305,7 +305,7 @@ export function useGameActions(): GameActionsResult {
                 setIsLetterSelectionModalOpen(true);
             } else {
                 // Not a valid target for wild tile
-                toast.error('Wild tiles can only be used on existing letters.', {
+                toastService.error('Wild tiles can only be used on existing letters.', {
                     duration: 2000,
                 });
             }
@@ -333,7 +333,7 @@ export function useGameActions(): GameActionsResult {
                 if (canUndo && lastAction?.type === 'use_piston' && lastAction.pistonSourceCell) {
                     // Just use the global undo action as it's more reliable for piston moves
                     undoLastAction();
-                    toast.success('Piston move undone');
+                    toastService.success('Piston move undone');
                     return;
                 }
 
@@ -376,7 +376,7 @@ export function useGameActions(): GameActionsResult {
                 });
 
                 // Show feedback to the user
-                toast.success('Tile placement undone');
+                toastService.success('Tile placement undone');
                 return;
             }
 
@@ -388,14 +388,14 @@ export function useGameActions(): GameActionsResult {
 
                 // Show hint when user has a tile selected
                 if (isPrePlacedOrPreviousTurn && selectedHandTile) {
-                    toast.success("Tap an empty cell to place your selected tile", {
+                    toastService.success("Tap an empty cell to place your selected tile", {
                         duration: 2000,
                         icon: '👆',
                     });
                 }
                 // Show hint when user doesn't have a tile selected
                 else if (isPrePlacedOrPreviousTurn && !selectedHandTile) {
-                    toast.success("First select a tile from your hand", {
+                    toastService.success("First select a tile from your hand", {
                         duration: 2000,
                         icon: '👇',
                     });
@@ -405,13 +405,13 @@ export function useGameActions(): GameActionsResult {
 
             // If we already placed the maximum number of tiles, show a message and return
             if (placedTilesThisTurn.length >= MAX_PLACEMENT_TILES) {
-                toast.error(`You can only place ${MAX_PLACEMENT_TILES} tiles per turn.`);
+                toastService.error(`You can only place ${MAX_PLACEMENT_TILES} tiles per turn.`);
                 return;
             }
 
             // If no tile is selected from the hand, show a helpful hint
             if (!selectedHandTile) {
-                toast.success("Select a tile from your hand first", {
+                toastService.success("Select a tile from your hand first", {
                     duration: 2000,
                     icon: '👇',
                 });
@@ -460,7 +460,7 @@ export function useGameActions(): GameActionsResult {
             });
 
             // Display a toast notification
-            toast.success(`Placed ${selectedHandTile.letter} on the grid!`, {
+            toastService.success(`Placed ${selectedHandTile.letter} on the grid!`, {
                 duration: 1500,
                 icon: '🎯',
             });
@@ -532,7 +532,7 @@ export function useGameActions(): GameActionsResult {
         if (isPlacementPhase) {
             // Require at least one tile to be placed before ending the placement phase
             if (placedTilesThisTurn.length === 0) {
-                toast.error("You must place at least one tile before scoring.");
+                toastService.error("You must place at least one tile before scoring.");
                 return;
             }
 
@@ -606,7 +606,7 @@ export function useGameActions(): GameActionsResult {
     const handleScoreWord = () => {
         // If there's no valid word, don't do anything
         if (!isWordValid) {
-            toast.error("That's not a valid word");
+            toastService.error("That's not a valid word");
             return;
         }
 
@@ -659,7 +659,7 @@ export function useGameActions(): GameActionsResult {
             grid: updatedGrid
         });
 
-        toast.success(`+${wordScore} points for "${currentWord}"!`);
+        toastService.success(`+${wordScore} points for "${currentWord}"!`);
 
         // End the turn after scoring
         finishTurn();
@@ -676,7 +676,7 @@ export function useGameActions(): GameActionsResult {
     const handleBurnWithAnimation = () => {
         // Require a selected tile to burn
         if (!selectedHandTile) {
-            toast.error("Select a tile to burn first");
+            toastService.error("Select a tile to burn first");
             return;
         }
 
@@ -703,7 +703,7 @@ export function useGameActions(): GameActionsResult {
                 selectedHandTile: null
             });
 
-            toast.success(`Burned tile "${selectedHandTile.letter}" and drew "${newTile.letter}"`);
+            toastService.success(`Burned tile "${selectedHandTile.letter}" and drew "${newTile.letter}"`);
         } else {
             // No tiles left to draw
             setGameState({
@@ -711,7 +711,7 @@ export function useGameActions(): GameActionsResult {
                 selectedHandTile: null
             });
 
-            toast.success(`Burned tile "${selectedHandTile.letter}" (no tiles left to draw)`);
+            toastService.success(`Burned tile "${selectedHandTile.letter}" (no tiles left to draw)`);
         }
 
         // After burning, check if game is over due to empty deck
@@ -794,9 +794,9 @@ export function useGameActions(): GameActionsResult {
 
         // Show a different message if we replaced a tile
         if (isReplacing) {
-            toast.success(`Moved '${pistonSourceCell.letter}' and replaced '${replacedLetter}'!`);
+            toastService.success(`Moved '${pistonSourceCell.letter}' and replaced '${replacedLetter}'!`);
         } else {
-            toast.success("Tile moved successfully!");
+            toastService.success("Tile moved successfully!");
         }
     };
 
@@ -840,7 +840,7 @@ export function useGameActions(): GameActionsResult {
             const message = `${winReason}\n${scoreInfo}\n${boardInfo}\n${wordInfo}${highScoreInfo ? '\n' + highScoreInfo : ''}`;
 
             // Show victory toast
-            toast.success(message, {
+            toastService.success(message, {
                 duration: 10000,
                 position: 'top-center',
                 style: {
@@ -857,7 +857,7 @@ export function useGameActions(): GameActionsResult {
             });
         } catch (error) {
             console.error("Error in showVictoryScreen:", error);
-            toast.error("Game finished!");
+            toastService.error("Game finished!");
         }
     };
 
@@ -913,7 +913,7 @@ export function useGameActions(): GameActionsResult {
         });
 
         // Show success message
-        toast.success(`Changed ${selectedCellForWild.letter} to ${formattedLetter}!`, {
+        toastService.success(`Changed ${selectedCellForWild.letter} to ${formattedLetter}!`, {
             duration: 1500,
             icon: '✨',
         });

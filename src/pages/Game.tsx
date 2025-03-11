@@ -212,7 +212,15 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
         currentLetter={selectedCellForWild?.letter || ''}
       />
       
-      <Toaster position="bottom-center" />
+      <Toaster 
+        position="bottom-center" 
+        toastOptions={{
+          // Reduce duration to show toasts faster
+          duration: 1000,
+          // Only allow one toast at a time by using this ID
+          id: 'single-toast'
+        }} 
+      />
     </div>
   );
 };

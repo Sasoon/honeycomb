@@ -1,6 +1,6 @@
 import React from 'react';
 import { useActiveGameStore } from '../store/activeGameStore';
-import { toast } from 'react-hot-toast';
+import toastService from '../lib/toastService';
 
 const UndoButton: React.FC = () => {
   const { canUndo, undoLastAction, lastAction } = useActiveGameStore();
@@ -8,7 +8,7 @@ const UndoButton: React.FC = () => {
   const handleUndo = () => {
     if (canUndo && lastAction) {
       undoLastAction();
-      toast.success('Action undone!');
+      toastService.success('Action undone!');
     }
   };
   
