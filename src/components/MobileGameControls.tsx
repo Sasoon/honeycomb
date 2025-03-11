@@ -22,8 +22,7 @@ const MobileGameControls = ({
   isPlacementPhase,
   placedTilesCount,
   maxPlacementTiles,
-  wordHistory,
-  currentWord,
+  wordHistory
 }: MobileGameControlsProps) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
   const [isExpanded, setIsExpanded] = useState(false);
