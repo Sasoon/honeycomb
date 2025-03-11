@@ -4,6 +4,7 @@ import { useActiveGameStore } from '../store/activeGameStore';
 import { useGameActions } from '../hooks/useGameActions';
 import GameSidebar from '../components/GameSidebar';
 import GameContent from '../components/GameContent';
+import LetterSelectionModal from '../components/LetterSelectionModal';
 import { MAX_PLACEMENT_TILES } from '../lib/gameUtils';
 
 // Game component props
@@ -40,12 +41,18 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     handleEndTurn,
     handleResetWord,
     handleScoreWord,
-    handleBurnWithAnimation
+    handleBurnWithAnimation,
+    isLetterSelectionModalOpen,
+    selectedCellForWild,
+    closeLetterSelectionModal,
+    handleWildLetterSelection,
+    handleDeselectTile
   } = useGameActions();
 
   // Refs for sidebar and content
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
+  const playerHandRef = useRef<HTMLDivElement>(null);
 
   // Add useEffect to handle clicking outside the sidebar
   useEffect(() => {
@@ -77,6 +84,37 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isSidebarOpen, closeMenu]);
+
+  // Add useEffect to handle clicking outside the player hand
+  useEffect(() => {
+    function handleClickOutsideHand(event: MouseEvent) {
+      // Only deselect during placement phase
+      if (!isPlacementPhase) return;
+      
+      // Skip if clicking within the player hand or if the modal is open
+      if (
+        (playerHandRef.current && playerHandRef.current.contains(event.target as Node)) ||
+        isLetterSelectionModalOpen
+      ) {
+        return;
+      }
+      
+      // Skip if clicking on the grid (we handle these separately)
+      const gridElement = document.querySelector('.grid-container');
+      if (gridElement && gridElement.contains(event.target as Node)) {
+        return;
+      }
+      
+      // Deselect the tile if clicking elsewhere
+      handleDeselectTile();
+    }
+    
+    // Attach the event listener
+    document.addEventListener('mousedown', handleClickOutsideHand);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideHand);
+    };
+  }, [isPlacementPhase, isLetterSelectionModalOpen, handleDeselectTile]);
 
   // Implement swipe detection for mobile
   useEffect(() => {
@@ -161,9 +199,19 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
             onScoreWord={handleScoreWord}
             maxPlacementTiles={MAX_PLACEMENT_TILES}
             onEndPlacementPhase={handleEndPlacementPhase}
+            playerHandRef={playerHandRef}
           />
         </div>
       </div>
+      
+      {/* Letter Selection Modal */}
+      <LetterSelectionModal
+        isOpen={isLetterSelectionModalOpen}
+        onClose={closeLetterSelectionModal}
+        onSelectLetter={handleWildLetterSelection}
+        currentLetter={selectedCellForWild?.letter || ''}
+      />
+      
       <Toaster position="bottom-center" />
     </div>
   );

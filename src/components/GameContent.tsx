@@ -28,6 +28,7 @@ interface GameContentProps {
   onScoreWord: () => void;
   maxPlacementTiles: number;
   onEndPlacementPhase?: () => void;
+  playerHandRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
@@ -51,6 +52,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   onScoreWord,
   maxPlacementTiles,
   onEndPlacementPhase,
+  playerHandRef,
 }, ref) => {
   // Phase transition animation variants
   const phaseTransitionVariants = {
@@ -202,6 +204,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
             className="flex items-center justify-center"
+            ref={playerHandRef}
           >
             <PlayerHand 
               tiles={playerHand} 

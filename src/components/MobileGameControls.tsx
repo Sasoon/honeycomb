@@ -24,7 +24,6 @@ const MobileGameControls = ({
   placedTilesCount,
   maxPlacementTiles,
   wordHistory,
-  currentWord,
   onEndPlacementPhase
 }: MobileGameControlsProps) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');

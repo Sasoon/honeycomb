@@ -247,7 +247,7 @@ body {
 }
 
 /* Special style for piston tile */
-.piston-tile {
+.piston-tile, .wild-tile {
   background: linear-gradient(135deg, #9333ea, #6366f1);
   color: white;
   transform: rotate(0deg);

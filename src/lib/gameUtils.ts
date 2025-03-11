@@ -35,6 +35,15 @@ export const generatePistonTile = (): LetterTile => ({
     tileType: 'piston'
 });
 
+// Generate a wild tile
+export const generateWildTile = (): LetterTile => ({
+    id: nanoid(),
+    letter: 'WILD',
+    frequency: 'rare',
+    isSelected: false,
+    tileType: 'wild'
+});
+
 // Generate the letter bag based on frequency
 export const generateLetterBag = (): LetterTile[] => {
     const tiles: LetterTile[] = [];
@@ -48,13 +57,18 @@ export const generateLetterBag = (): LetterTile[] => {
                     frequency === 'uncommon' ? 1 : 1; // Keep same
 
         for (let i = 0; i < count; i++) {
-            tiles.push({
-                id: nanoid(),
-                letter,
-                frequency,
-                isSelected: false,
-                tileType: 'regular'
-            });
+            // 10% chance of being a wild tile
+            if (Math.random() < 0.1) {
+                tiles.push(generateWildTile());
+            } else {
+                tiles.push({
+                    id: nanoid(),
+                    letter,
+                    frequency,
+                    isSelected: false,
+                    tileType: 'regular'
+                });
+            }
         }
     });
 
@@ -101,22 +115,56 @@ export const generateInitialGrid = (size: number): HexCell[] => {
         }
     });
 
-    // Pre-place 3-5 tiles in the center
+    // Pre-place 3 random tiles in a cluster in the center
     const centerTiles = grid.filter(cell =>
         Math.abs(cell.position.row - mid) <= 1 &&
         Math.abs(cell.position.col - mid) <= 1
     );
 
-    // Shuffle and take 4 random center tiles
-    const shuffledCenterTiles = centerTiles.sort(() => Math.random() - 0.5).slice(0, 4);
+    // First, get the exact center tile as our anchor point
+    const centerTile = grid.find(cell =>
+        cell.position.row === mid &&
+        cell.position.col === mid
+    );
 
-    // Get some letters to pre-place
-    const initialLetters = ['B', 'E', 'A', 'R'];
+    if (!centerTile) return grid; // Safety check
 
-    shuffledCenterTiles.forEach((cell, index) => {
-        cell.letter = initialLetters[index];
-        cell.isPrePlaced = true;
-        cell.isPlaced = true;
+    // Find tiles adjacent to the center
+    const adjacentTiles = centerTiles.filter(cell =>
+        isAdjacentToCell(cell, centerTile) &&
+        cell.id !== centerTile.id
+    );
+
+    // Shuffle the adjacent tiles and take 2
+    const shuffledAdjacentTiles = adjacentTiles
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 2);
+
+    // Our cluster is the center tile + 2 adjacent tiles
+    const clusterTiles = [centerTile, ...shuffledAdjacentTiles];
+
+    // Generate 3 random letters (biased toward vowels for playability)
+    const vowels = ['A', 'E', 'I', 'O', 'U'];
+    const consonants = ['B', 'C', 'D', 'F', 'G', 'H', 'L', 'M', 'N', 'P', 'R', 'S', 'T'];
+
+    const getRandomLetter = () => {
+        // 40% chance of vowel, 60% chance of consonant
+        if (Math.random() < 0.4) {
+            return vowels[Math.floor(Math.random() * vowels.length)];
+        } else {
+            return consonants[Math.floor(Math.random() * consonants.length)];
+        }
+    };
+
+    const randomLetters = Array(3).fill(0).map(() => getRandomLetter());
+
+    // Place the random letters in our cluster
+    clusterTiles.forEach((cell, index) => {
+        if (index < randomLetters.length) {
+            cell.letter = randomLetters[index];
+            cell.isPrePlaced = true;
+            cell.isPlaced = true;
+        }
     });
 
     return grid;

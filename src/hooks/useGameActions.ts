@@ -8,6 +8,7 @@ import {
     generateInitialGrid,
     generateLetterBag,
     generatePistonTile,
+    generateWildTile,
     isAdjacentToCell,
     calculateWordScore,
     checkGameOver,
@@ -30,6 +31,11 @@ export interface GameActionsResult {
     handlePistonMove: (targetCell: HexCell) => void;
     drawTiles: (count: number) => void;
     showVictoryScreen: () => void;
+    isLetterSelectionModalOpen: boolean;
+    selectedCellForWild: HexCell | null;
+    closeLetterSelectionModal: () => void;
+    handleWildLetterSelection: (letter: string) => void;
+    handleDeselectTile: () => void;
 }
 
 export function useGameActions(): GameActionsResult {
@@ -37,6 +43,8 @@ export function useGameActions(): GameActionsResult {
     const [isWordAlreadyScored, setIsWordAlreadyScored] = useState(false);
     const [potentialScore, setPotentialScore] = useState(0);
     const [isDictionaryLoading, setIsDictionaryLoading] = useState(true);
+    const [isLetterSelectionModalOpen, setIsLetterSelectionModalOpen] = useState(false);
+    const [selectedCellForWild, setSelectedCellForWild] = useState<HexCell | null>(null);
 
     const {
         gameInitialized,
@@ -68,18 +76,19 @@ export function useGameActions(): GameActionsResult {
             const initialGrid = generateInitialGrid(gridSize);
             const initialLetterBag = generateLetterBag();
 
-            // Draw initial hand (4 tiles instead of 5, to leave room for piston)
-            const drawnTiles = initialLetterBag.slice(0, 4);
-            const remainingBag = initialLetterBag.slice(4);
+            // Draw initial hand (3 tiles instead of 5, to leave room for special tiles)
+            const drawnTiles = initialLetterBag.slice(0, 3);
+            const remainingBag = initialLetterBag.slice(3);
 
-            // Create a piston tile and add it to the hand
+            // Create a piston tile and a wild tile and add them to the hand
             const pistonTile = generatePistonTile();
+            const wildTile = generateWildTile();
 
             setGameState({
                 gameInitialized: true,
                 grid: initialGrid,
                 letterBag: remainingBag,
-                playerHand: [...drawnTiles, pistonTile], // Add piston tile to starting hand
+                playerHand: [...drawnTiles, pistonTile, wildTile], // Add special tiles to starting hand
                 score: 0,
                 turns: 0,
                 isPlacementPhase: true,
@@ -174,7 +183,6 @@ export function useGameActions(): GameActionsResult {
         });
 
         // If this is a piston tile, reset any existing cell selection
-        // We will require the player to click on a placed tile first
         if (tile.tileType === 'piston') {
             // Reset any existing piston state and enter piston mode
             const clearedGrid = grid.map(cell => ({
@@ -191,9 +199,49 @@ export function useGameActions(): GameActionsResult {
             });
 
             toast.success("Select an existing letter on the board to move with the piston");
-        } else {
+        }
+        // If this is a wild tile, let the user know how to use it
+        else if (tile.tileType === 'wild') {
+            // Reset any existing selections
+            const clearedGrid = grid.map(cell => ({
+                ...cell,
+                isSelected: false
+            }));
+
+            setGameState({
+                grid: clearedGrid,
+                isPistonActive: false,
+                pistonSourceCell: null
+            });
+
+            toast.success("Select any existing letter on the board to change it");
+        }
+        else {
             // For regular tiles, turn off piston mode
             setGameState({
+                isPistonActive: false,
+                pistonSourceCell: null
+            });
+        }
+    };
+
+    // Function to deselect any selected tile in the player's hand
+    const handleDeselectTile = () => {
+        // Only do this during placement phase
+        if (!isPlacementPhase) return;
+
+        // Check if there's a selected tile
+        if (selectedHandTile) {
+            // Update the player's hand to deselect all tiles
+            const updatedHand = playerHand.map(t => ({
+                ...t,
+                isSelected: false
+            }));
+
+            // Update state
+            setGameState({
+                playerHand: updatedHand,
+                selectedHandTile: null,
                 isPistonActive: false,
                 pistonSourceCell: null
             });
@@ -246,6 +294,22 @@ export function useGameActions(): GameActionsResult {
                 toast.error("Select an adjacent space");
                 return;
             }
+        }
+
+        // For wild tiles, check if we're targeting an existing letter
+        else if (selectedHandTile?.tileType === 'wild') {
+            // Wild tile can only be used on cells with existing letters
+            if (cell.letter && cell.isPlaced) {
+                // Open letter selection modal
+                setSelectedCellForWild(cell);
+                setIsLetterSelectionModalOpen(true);
+            } else {
+                // Not a valid target for wild tile
+                toast.error('Wild tiles can only be used on existing letters.', {
+                    duration: 2000,
+                });
+            }
+            return;
         }
 
         // Regular tile placement logic (existing code)
@@ -809,6 +873,60 @@ export function useGameActions(): GameActionsResult {
         }
     };
 
+    // For wild tiles, check if we're targeting an existing letter
+    const handleWildLetterSelection = (letter: string) => {
+        if (!selectedCellForWild || !selectedHandTile) return;
+
+        const formattedLetter = letter.toUpperCase();
+
+        // Save current state before changing
+        const gridBeforeChange = [...grid];
+        const handBeforeChange = [...playerHand];
+
+        // Update the letter on the grid
+        const updatedGrid = grid.map(c => {
+            if (c.id === selectedCellForWild.id) {
+                return {
+                    ...c,
+                    letter: formattedLetter
+                };
+            }
+            return c;
+        });
+
+        // Remove the wild tile from the player's hand
+        const updatedHand = playerHand.filter(t => t.id !== selectedHandTile.id);
+
+        // Update state
+        setGameState({
+            grid: updatedGrid,
+            playerHand: updatedHand,
+            selectedHandTile: null,
+            canUndo: true,
+            lastAction: {
+                type: 'place_tile', // Reuse existing action type
+                prevGrid: gridBeforeChange,
+                prevPlayerHand: handBeforeChange,
+                prevPlacedTilesThisTurn: placedTilesThisTurn,
+                tileUsed: selectedHandTile
+            }
+        });
+
+        // Show success message
+        toast.success(`Changed ${selectedCellForWild.letter} to ${formattedLetter}!`, {
+            duration: 1500,
+            icon: '✨',
+        });
+
+        // Close modal and reset selected cell
+        closeLetterSelectionModal();
+    };
+
+    const closeLetterSelectionModal = () => {
+        setIsLetterSelectionModalOpen(false);
+        setSelectedCellForWild(null);
+    };
+
     return {
         isWordValid,
         isWordAlreadyScored,
@@ -823,6 +941,11 @@ export function useGameActions(): GameActionsResult {
         handleBurnWithAnimation,
         handlePistonMove,
         drawTiles,
-        showVictoryScreen
+        showVictoryScreen,
+        isLetterSelectionModalOpen,
+        selectedCellForWild,
+        closeLetterSelectionModal,
+        handleWildLetterSelection,
+        handleDeselectTile
     };
 } 
