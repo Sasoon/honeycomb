@@ -29,7 +29,7 @@ export const generateLetterTile = (letter: string): LetterTile => ({
 // Generate a piston tile
 export const generatePistonTile = (): LetterTile => ({
     id: nanoid(),
-    letter: '⟷', // Using a clearer bidirectional arrow symbol 
+    letter: 'MOVE', // Changed from bidirectional arrow to a text label since we use SVG for display
     frequency: 'rare',
     isSelected: false,
     tileType: 'piston'

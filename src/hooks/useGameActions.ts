@@ -347,25 +347,29 @@ export function useGameActions(): GameActionsResult {
                 return;
             }
 
-            // Create deep copies of current state BEFORE any changes
-            const gridBeforeChange = grid.map(c => ({ ...c }));
-            const handBeforeChange = playerHand.map(t => ({ ...t }));
+            // Save current state before changing
+            const gridBeforeChange = [...grid];
+            const handBeforeChange = [...playerHand];
             const placedTilesBeforeChange = [...placedTilesThisTurn];
 
-            // Place the letter from the selected hand tile into the cell
+            // Place the letter on the grid
             const updatedGrid = grid.map(c => {
                 if (c.id === cell.id) {
                     return {
                         ...c,
                         letter: selectedHandTile.letter,
                         isPlaced: true,
-                        placedThisTurn: true
+                        tilePlacedThisTurn: true,
+                        placer: 'player'
                     };
                 }
                 return c;
             });
 
-            // Remove the tile from the player's hand
+            // Add this placement to the tiles placed this turn
+            const updatedPlacedTiles = [...placedTilesThisTurn, cell];
+
+            // Remove the selected tile from the player's hand
             const updatedHand = playerHand.filter(t => t.id !== selectedHandTile.id);
 
             // Update the state
@@ -373,72 +377,25 @@ export function useGameActions(): GameActionsResult {
                 grid: updatedGrid,
                 playerHand: updatedHand,
                 selectedHandTile: null,
-                placedTilesThisTurn: [
-                    ...placedTilesThisTurn,
-                    {
-                        ...cell,
-                        letter: selectedHandTile.letter,
-                        isPlaced: true,
-                        placedThisTurn: true
-                    }
-                ],
-                // Track the action for undo functionality
+                placedTilesThisTurn: updatedPlacedTiles,
+                canUndo: true,
                 lastAction: {
                     type: 'place_tile',
                     prevGrid: gridBeforeChange,
                     prevPlayerHand: handBeforeChange,
                     prevPlacedTilesThisTurn: placedTilesBeforeChange,
                     tileUsed: selectedHandTile
-                },
-                canUndo: true
+                }
             });
 
-            // Auto-transition to scoring phase when max tiles are placed
-            // We need to check if this placement will reach the max tiles limit
-            if (placedTilesThisTurn.length + 1 === MAX_PLACEMENT_TILES) {
-                // Use setTimeout to ensure state is updated before transitioning
-                setTimeout(() => {
-                    // Create a flash effect
-                    const flashElement = document.createElement('div');
-                    flashElement.style.position = 'fixed';
-                    flashElement.style.top = '0';
-                    flashElement.style.left = '0';
-                    flashElement.style.width = '100%';
-                    flashElement.style.height = '100%';
-                    flashElement.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-                    flashElement.style.zIndex = '9999';
-                    flashElement.style.opacity = '0';
-                    flashElement.style.pointerEvents = 'none';
-                    flashElement.style.transition = 'opacity 0.5s ease';
-                    document.body.appendChild(flashElement);
+            // Display a toast notification
+            toast.success(`Placed ${selectedHandTile.letter} on the grid!`, {
+                duration: 1500,
+                icon: '🎯',
+            });
 
-                    // Trigger the flash animation
-                    setTimeout(() => {
-                        flashElement.style.opacity = '0.7';
-                        setTimeout(() => {
-                            flashElement.style.opacity = '0';
-                            setTimeout(() => {
-                                document.body.removeChild(flashElement);
-                            }, 500);
-                        }, 150);
-                    }, 10);
-
-                    // Transition to scoring phase
-                    handleEndPlacementPhase();
-
-                    // Show a notification that we're entering scoring phase
-                    toast.success('Entering scoring phase!', {
-                        duration: 2000,
-                        icon: '✨',
-                    });
-                }, 300);
-            } else {
-                // Show regular tile placement notification
-                toast.success(`Placed tile: ${selectedHandTile.letter}`, {
-                    duration: 1500,
-                    icon: '🔤',
-                });
-            }
+            // We no longer auto-transition to scoring phase
+            // This is now done manually by the user via the End Phase button
         } else {
             // In word formation phase, we select letters to form words
             if (!cell.letter) return; // Skip empty cells
@@ -838,17 +795,6 @@ export function useGameActions(): GameActionsResult {
         if (isPlacementPhase) {
             handleEndPlacementPhase();
         } else {
-            // Show skip notification
-            toast.success('Turn skipped', {
-                icon: '⏭️',
-                duration: 2000,
-                style: {
-                    border: '1px solid #d1d5db',
-                    padding: '12px',
-                    color: '#6b7280',
-                },
-            });
-
             // Reset any selected word
             handleResetWord();
             // End the turn

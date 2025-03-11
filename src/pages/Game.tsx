@@ -36,6 +36,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     isDictionaryLoading,
     handleTileSelect,
     handleCellClick,
+    handleEndPlacementPhase,
     handleEndTurn,
     handleResetWord,
     handleScoreWord,
@@ -159,6 +160,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
             onBurnTile={handleBurnWithAnimation}
             onScoreWord={handleScoreWord}
             maxPlacementTiles={MAX_PLACEMENT_TILES}
+            onEndPlacementPhase={handleEndPlacementPhase}
           />
         </div>
       </div>

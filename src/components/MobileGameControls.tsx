@@ -11,7 +11,8 @@ type MobileGameControlsProps = {
   placedTilesCount: number;
   maxPlacementTiles: number;
   wordHistory: WordHistoryEntry[];
-  currentWord: string;
+  currentWord?: string;
+  onEndPlacementPhase?: () => void;
 };
 
 const MobileGameControls = ({
@@ -22,7 +23,9 @@ const MobileGameControls = ({
   isPlacementPhase,
   placedTilesCount,
   maxPlacementTiles,
-  wordHistory
+  wordHistory,
+  currentWord,
+  onEndPlacementPhase
 }: MobileGameControlsProps) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -129,10 +132,25 @@ const MobileGameControls = ({
                     </h3>
                     <p className="text-xs text-gray-600">
                       {isPlacementPhase 
-                        ? `Place ${maxPlacementTiles} letter tiles on the grid to automatically begin scoring. You've placed ${placedTilesCount} so far.` 
+                        ? `Place up to ${maxPlacementTiles} letter tiles on the grid or press End Phase. You've placed ${placedTilesCount} so far.` 
                         : 'Trace a path to form a word (3+ letters). Create unique words for points.'}
                     </p>
                   </div>
+                  
+                  {/* End Phase Button (Only in placement phase with at least 1 tile) */}
+                  {isPlacementPhase && placedTilesCount > 0 && onEndPlacementPhase && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent closing the panel
+                        onEndPlacementPhase();
+                      }}
+                      className="w-full py-2 mb-3 px-3 rounded-md font-medium 
+                                bg-amber-500 hover:bg-amber-600 text-white
+                                transition-colors"
+                    >
+                      End Placement Phase
+                    </button>
+                  )}
                   
                   {/* Game Progress */}
                   <div className="space-y-2">

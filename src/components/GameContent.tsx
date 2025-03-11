@@ -27,6 +27,7 @@ interface GameContentProps {
   onBurnTile: () => void;
   onScoreWord: () => void;
   maxPlacementTiles: number;
+  onEndPlacementPhase?: () => void;
 }
 
 const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
@@ -49,6 +50,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   onBurnTile,
   onScoreWord,
   maxPlacementTiles,
+  onEndPlacementPhase,
 }, ref) => {
   // Phase transition animation variants
   const phaseTransitionVariants = {
@@ -89,6 +91,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
         maxPlacementTiles={maxPlacementTiles}
         wordHistory={wordHistory}
         currentWord={currentWord}
+        onEndPlacementPhase={onEndPlacementPhase}
       />
       
       {/* Phase transition animation wrapper */}
@@ -166,6 +169,19 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
                     <div className="py-1.5 px-3 bg-blue-100 text-blue-800 rounded-md font-medium">
                       Tiles: {placedTilesThisTurn.length}/{maxPlacementTiles}
                     </div>
+                  )}
+                  
+                  {/* End Placement Phase button - Only show during placement with at least 1 tile placed */}
+                  {isPlacementPhase && placedTilesThisTurn.length > 0 && onEndPlacementPhase && (
+                    <button
+                      className="py-1.5 px-3 rounded-md shadow-sm
+                                flex items-center justify-center transition-colors text-sm font-medium
+                                bg-amber-500 hover:bg-amber-600 text-white"
+                      onClick={onEndPlacementPhase}
+                      aria-label="End placement phase"
+                    >
+                      End Phase
+                    </button>
                   )}
                   
                   {/* Undo button */}

@@ -100,13 +100,6 @@ const GameControls = ({
                 Reset Selection
               </button>
             )}
-            
-            <button
-              onClick={onEndTurn}
-              className="w-full py-2 px-3 bg-gray-400 hover:bg-gray-500 text-white font-medium rounded-md transition-colors mt-4"
-            >
-              Skip Turn
-            </button>
           </div>
         )}
       </div>

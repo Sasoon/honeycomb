@@ -34,6 +34,18 @@ const PlayerHand = ({
     }
   };
 
+  // Render the piston icon with the universal 'move' icon (four-directional arrow)
+  const renderPistonContent = (tile: LetterTile) => {
+    if (tile.tileType === 'piston') {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-purple-800">
+          <path d="M 12 1 L 7 6 L 11 6 L 11 11 L 6 11 L 6 7 L 1 12 L 6 17 L 6 13 L 11 13 L 11 18 L 7 18 L 12 23 L 17 18 L 13 18 L 13 13 L 18 13 L 18 17 L 23 12 L 18 7 L 18 11 L 13 11 L 13 6 L 17 6 Z" />
+        </svg>
+      );
+    }
+    return tile.letter;
+  };
+
   return (
     <div className="">
      
@@ -66,7 +78,7 @@ const PlayerHand = ({
               transition: 'all 0.2s ease',
             }}
           >
-            {tile.letter}
+            {renderPistonContent(tile)}
           </div>
         ))}
       </div>
