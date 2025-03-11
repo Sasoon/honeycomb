@@ -33,10 +33,10 @@ const MobileGameControls = ({
   const displayWords = sortedWords.slice(0, 5); // Show only last 5 words
 
   return (
-    <div className="md:hidden w-full">
+    <div className="md:hidden w-full cursor-pointer">
       {/* Compact Header - Always visible */}
       <div 
-        className="bg-amber-50 shadow-md rounded-lg p-4 mb-2 transition-all"
+        className="bg-white shadow-md border-b border-amber-100 p-4 transition-all"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex flex-wrap justify-between items-center gap-y-2">
@@ -58,18 +58,6 @@ const MobileGameControls = ({
                 {isPlacementPhase ? 'Placement' : 'Scoring'}
               </motion.div>
             </AnimatePresence>
-            
-            {/* Current word preview (only during word phase) */}
-            {!isPlacementPhase && currentWord && (
-              <motion.div 
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1, duration: 0.2 }}
-                className="text-md font-medium bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full max-w-[150px] truncate"
-              >
-                {currentWord}
-              </motion.div>
-            )}
           </div>
           
           {/* Game Stats */}
@@ -110,7 +98,7 @@ const MobileGameControls = ({
             {/* Tabs */}
             <div className="flex border-b border-amber-100">
               <button
-                className={`flex-1 py-2 text-sm font-medium ${
+                className={`flex-1 py-4 text-sm font-medium ${
                   activeTab === 'info' 
                     ? 'text-amber-800 border-b-2 border-amber-500' 
                     : 'text-gray-500'
@@ -120,7 +108,7 @@ const MobileGameControls = ({
                 Game Info
               </button>
               <button
-                className={`flex-1 py-2 text-sm font-medium ${
+                className={`flex-1 py-4 text-sm font-medium ${
                   activeTab === 'history' 
                     ? 'text-amber-800 border-b-2 border-amber-500' 
                     : 'text-gray-500'

@@ -290,7 +290,7 @@ body {
 }
 
 .tile-placed-animation {
-  animation: squashStretch 0.3s ease-in-out forwards;
+  animation: squashStretch 0.3s ease-out forwards;
 }
 
 /* Glow effect for selected tiles */
