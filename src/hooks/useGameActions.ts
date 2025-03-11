@@ -322,11 +322,18 @@ export function useGameActions(): GameActionsResult {
                 const isPrePlacedOrPreviousTurn = cell.isPrePlaced ||
                     (cell.isPlaced && !placedTilesThisTurn.some(t => t.id === cell.id));
 
-                // Only show the hint if the user has a tile selected
+                // Show hint when user has a tile selected
                 if (isPrePlacedOrPreviousTurn && selectedHandTile) {
                     toast.success("Tap an empty cell to place your selected tile", {
                         duration: 2000,
                         icon: '👆',
+                    });
+                }
+                // Show hint when user doesn't have a tile selected
+                else if (isPrePlacedOrPreviousTurn && !selectedHandTile) {
+                    toast.success("First select a tile from your hand", {
+                        duration: 2000,
+                        icon: '👇',
                     });
                 }
                 return;
