@@ -342,7 +342,7 @@ export function useGameActions(): GameActionsResult {
                 // This fixes a bug where clicking the same cell multiple times would create tiles with duplicate IDs
                 const tileToRestore: LetterTile = {
                     id: `restored-${placedTile.id}-${Date.now()}`,
-                    letter: placedTile.letter,
+                    letter: cell.letter,
                     isSelected: false,
                     frequency: 'common',
                     tileType: 'regular'
