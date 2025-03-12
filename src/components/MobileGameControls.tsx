@@ -31,8 +31,6 @@ const MobileGameControls = ({
   placedTilesCount,
   maxPlacementTiles,
   wordHistory,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  currentWord = '', // Kept for future use
   onEndPlacementPhase,
   isPistonActive,
   pistonSourceCell,
