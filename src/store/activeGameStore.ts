@@ -24,6 +24,17 @@ export interface UndoableAction {
     pistonSourceCell?: HexCell | null; // Used for piston actions
 }
 
+// State for tile placement animation
+interface TilePlacementAnimation {
+    letter: string;
+    sourcePosition: { x: number; y: number };
+    targetPosition: { x: number; y: number };
+    isAnimating: boolean;
+    dimensions?: { width: number; height: number };
+    frequency: string;
+    tileType?: string;
+}
+
 // Define the active game state interface
 interface ActiveGameState {
     // Basic game state
@@ -51,6 +62,9 @@ interface ActiveGameState {
     lastAction: UndoableAction | null;
     canUndo: boolean;
 
+    // Animation states
+    tilePlacementAnimation: TilePlacementAnimation | null;
+
     // Actions
     setGameState: (state: Partial<ActiveGameState>) => void;
     resetGame: () => void;
@@ -60,7 +74,7 @@ interface ActiveGameState {
 // Initialize game with default settings
 const initialState: Omit<ActiveGameState, 'setGameState' | 'resetGame' | 'undoLastAction'> = {
     gameInitialized: false,
-    isGameActive: false,
+    isGameActive: true,
     grid: [],
     gridSize: 5, // Default to 5 rings
     letterBag: [],
@@ -77,7 +91,8 @@ const initialState: Omit<ActiveGameState, 'setGameState' | 'resetGame' | 'undoLa
     isPistonActive: false,
     pistonSourceCell: null,
     lastAction: null,
-    canUndo: false
+    canUndo: false,
+    tilePlacementAnimation: null
 };
 
 // Create a persisted store for the active game

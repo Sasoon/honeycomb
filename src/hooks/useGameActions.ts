@@ -12,7 +12,8 @@ import {
     isAdjacentToCell,
     calculateWordScore,
     checkGameOver,
-    MAX_PLACEMENT_TILES
+    MAX_PLACEMENT_TILES,
+    TARGET_SCORE
 } from '../lib/gameUtils';
 import confetti from 'canvas-confetti';
 
@@ -38,7 +39,7 @@ export interface GameActionsResult {
     handleDeselectTile: () => void;
 }
 
-export function useGameActions(): GameActionsResult {
+export function useGameActions(playerHandRef?: React.RefObject<HTMLDivElement | null>): GameActionsResult {
     const [isWordValid, setIsWordValid] = useState(false);
     const [isWordAlreadyScored, setIsWordAlreadyScored] = useState(false);
     const [potentialScore, setPotentialScore] = useState(0);
@@ -86,6 +87,7 @@ export function useGameActions(): GameActionsResult {
 
             setGameState({
                 gameInitialized: true,
+                isGameActive: true,
                 grid: initialGrid,
                 letterBag: remainingBag,
                 playerHand: [...drawnTiles, pistonTile, wildTile], // Add special tiles to starting hand
@@ -417,13 +419,123 @@ export function useGameActions(): GameActionsResult {
             const placedTilesBeforeChange = [...placedTilesThisTurn];
 
             // Place the letter on the grid
+            // First create animation if possible
+            if (selectedHandTile && playerHandRef?.current) {
+                // Find the selected tile element in the player's hand
+                const tileElements = playerHandRef.current.querySelectorAll('.letter-tile-container');
+                const selectedTileElement = Array.from(tileElements || []).find(el =>
+                    (el as HTMLElement).getAttribute('data-tile-id') === selectedHandTile.id
+                ) as HTMLElement | undefined;
+
+                // Find the target cell element
+                const cellElement = document.querySelector(`[data-cell-id="${cell.id}"]`) as HTMLElement;
+
+                // If we found both elements, set up the tile placement animation
+                if (selectedTileElement && cellElement) {
+                    const tileRect = selectedTileElement.getBoundingClientRect();
+                    const cellRect = cellElement.getBoundingClientRect();
+
+                    // Get dimensions from the source element
+                    const dimensions = {
+                        width: tileRect.width,
+                        height: tileRect.height
+                    };
+
+                    // Calculate exact centers for more accurate positioning
+                    const sourceX = tileRect.left + (tileRect.width / 2);
+                    const sourceY = tileRect.top + (tileRect.height / 2);
+                    const targetX = cellRect.left + (cellRect.width / 2);
+                    const targetY = cellRect.top + (cellRect.height / 2);
+
+                    // Hide the original tile during animation
+                    selectedTileElement.style.opacity = '0';
+
+                    // Set up the animation
+                    setGameState({
+                        tilePlacementAnimation: {
+                            letter: selectedHandTile.letter,
+                            sourcePosition: {
+                                x: sourceX,
+                                y: sourceY
+                            },
+                            targetPosition: {
+                                x: targetX,
+                                y: targetY
+                            },
+                            isAnimating: true,
+                            dimensions: dimensions,
+                            frequency: selectedHandTile.frequency,
+                            tileType: selectedHandTile.tileType
+                        }
+                    });
+
+                    // Update player hand immediately (asynchronously with animation)
+                    const updatedHand = playerHand.filter(t => t.id !== selectedHandTile.id);
+                    setGameState({
+                        playerHand: updatedHand,
+                        selectedHandTile: null,
+                    });
+
+                    // Add impact class to the target cell when the tile reaches it
+                    setTimeout(() => {
+                        cellElement.classList.add('hex-placement-impact');
+
+                        // Remove the class after the animation completes
+                        setTimeout(() => {
+                            cellElement.classList.remove('hex-placement-impact');
+                        }, 500);
+                    }, 400);
+
+                    // Delay only the grid update logic to allow animation to complete
+                    setTimeout(() => {
+                        const updatedGrid = grid.map(c => {
+                            if (c.id === cell.id) {
+                                return {
+                                    ...c,
+                                    letter: selectedHandTile.letter,
+                                    isPlaced: true,
+                                    placedThisTurn: true,
+                                    placer: 'player'
+                                };
+                            }
+                            return c;
+                        });
+
+                        // Add this placement to the tiles placed this turn
+                        const updatedPlacedTiles = [...placedTilesThisTurn, {
+                            ...cell,
+                            letter: selectedHandTile.letter,
+                            isPlaced: true
+                        }];
+
+                        // Update the grid state
+                        setGameState({
+                            grid: updatedGrid,
+                            placedTilesThisTurn: updatedPlacedTiles,
+                            canUndo: true,
+                            tilePlacementAnimation: null,
+                            lastAction: {
+                                type: 'place_tile',
+                                prevGrid: gridBeforeChange,
+                                prevPlayerHand: handBeforeChange,
+                                prevPlacedTilesThisTurn: placedTilesBeforeChange,
+                                tileUsed: selectedHandTile
+                            }
+                        });
+                    }, 500); // Standardized to 0.5s
+
+                    return; // Exit early as we're handling this with animation
+                }
+            }
+
+            // Fallback to original placement logic if animation setup failed
             const updatedGrid = grid.map(c => {
                 if (c.id === cell.id) {
                     return {
                         ...c,
                         letter: selectedHandTile.letter,
                         isPlaced: true,
-                        tilePlacedThisTurn: true,
+                        placedThisTurn: true,
                         placer: 'player'
                     };
                 }
@@ -431,7 +543,11 @@ export function useGameActions(): GameActionsResult {
             });
 
             // Add this placement to the tiles placed this turn
-            const updatedPlacedTiles = [...placedTilesThisTurn, cell];
+            const updatedPlacedTiles = [...placedTilesThisTurn, {
+                ...cell,
+                letter: selectedHandTile.letter,
+                isPlaced: true
+            }];
 
             // Remove the selected tile from the player's hand
             const updatedHand = playerHand.filter(t => t.id !== selectedHandTile.id);
@@ -658,8 +774,11 @@ export function useGameActions(): GameActionsResult {
             isSelected: false
         }));
 
+        // Calculate new score
+        const newScore = score + wordScore;
+
         setGameState({
-            score: score + wordScore,
+            score: newScore,
             scoredWords: updatedScoredWords,
             wordHistory: [...wordHistory, historyEntry],
             currentWord: '',
@@ -673,10 +792,19 @@ export function useGameActions(): GameActionsResult {
         // End the turn after scoring
         finishTurn();
 
-        // After updating the state with the scored word, check if game is over
+        // Check if player has reached the target score
+        if (newScore >= TARGET_SCORE) {
+            // Game is won by reaching target score
+            setTimeout(() => {
+                showVictoryScreen(true);
+            }, 500);
+            return;
+        }
+
+        // After updating the state with the scored word, check if game is over for other reasons
         setTimeout(() => {
             if (checkGameOver(grid, letterBag, playerHand)) {
-                showVictoryScreen();
+                showVictoryScreen(false);
             }
         }, 500);
     };
@@ -787,7 +915,7 @@ export function useGameActions(): GameActionsResult {
         // Remove the used piston tile from player's hand
         const updatedHand = playerHand.filter(tile => tile.id !== selectedHandTile.id);
 
-        // Update the game state
+        // Update the game state immediately to trigger animation
         setGameState({
             grid: updatedGrid,
             playerHand: updatedHand,
@@ -816,13 +944,18 @@ export function useGameActions(): GameActionsResult {
     };
 
     // Show victory screen
-    const showVictoryScreen = () => {
+    const showVictoryScreen = (wonByTargetScore = false) => {
         try {
             // Safety check to prevent recursive calls
             if (!grid || !Array.isArray(grid)) {
                 console.error("Grid is not properly initialized");
                 return;
             }
+
+            // Set game as inactive to prevent further interaction
+            setGameState({
+                isGameActive: false
+            });
 
             // Calculate board completion percentage
             const totalCells = grid.length;
@@ -841,35 +974,68 @@ export function useGameActions(): GameActionsResult {
             const isOutOfCards = !letterBag || (Array.isArray(letterBag) && letterBag.length === 0 &&
                 Array.isArray(playerHand) && playerHand.length === 0);
 
-            // Create more descriptive victory message
-            const winReason = isOutOfCards ?
-                "🎮 You've used all available tiles!" :
-                "🎮 You've filled the entire board!";
+            // Calculate additional stats
+            const pointsPerTurn = turns > 0 ? Math.round((score / turns) * 10) / 10 : 0;
+            const avgWordScore = wordHistory.length > 0
+                ? Math.round((score / wordHistory.length) * 10) / 10
+                : 0;
+            const longestWord = wordHistory.length > 0
+                ? wordHistory.reduce((longest, current) =>
+                    current.word.length > longest.length ? current.word : longest, "")
+                : "None";
+            const highestScoringWord = wordHistory.length > 0
+                ? wordHistory.reduce((highest, current) =>
+                    current.score > highest.score ? current : highest, { word: "", score: 0 })
+                : { word: "None", score: 0 };
 
-            const scoreInfo = `🏆 Final Score: ${score} points`;
-            const boardInfo = `📊 Board Filled: ${completionPercentage}%`;
-            const wordInfo = `📝 Words Formed: ${wordHistory.length}`;
-            const highScoreInfo = isHighScore ? "🌟 NEW HIGH SCORE! 🌟" : "";
+            // Create more descriptive victory message based on win condition
+            let winReason;
+            if (wonByTargetScore) {
+                winReason = `🏆 Victory! You've reached ${TARGET_SCORE} points! 🏆`;
+            } else if (isOutOfCards) {
+                winReason = "🏆 Game Complete! You've used all available tiles! 🏆";
+            } else {
+                winReason = "🏆 Game Complete! You've filled the entire board! 🏆";
+            }
 
-            // Create multiline toast message
-            const message = `${winReason}\n${scoreInfo}\n${boardInfo}\n${wordInfo}${highScoreInfo ? '\n' + highScoreInfo : ''}`;
+            // Format end game stats
+            const statsMessage = [
+                `📊 Final Score: ${score} points`,
+                `🔄 Turns: ${turns}`,
+                `📝 Words Formed: ${wordHistory.length}`,
+                `📈 Points per Turn: ${pointsPerTurn}`,
+                `📊 Average Word Score: ${avgWordScore}`,
+                `📏 Longest Word: ${longestWord}`,
+                `🌟 Highest Scoring Word: ${highestScoringWord.word} (${highestScoringWord.score} pts)`,
+                `🧩 Board Filled: ${completionPercentage}%`,
+                isHighScore ? "✨ NEW HIGH SCORE! ✨" : ""
+            ].filter(Boolean).join('\n');
 
-            // Show victory toast
-            toastService.success(message, {
-                duration: 10000,
-                position: 'top-center',
-                style: {
-                    padding: '16px',
-                    color: '#713200',
-                    backgroundColor: '#fff8e6',
-                    borderLeft: '6px solid #f59e0b',
-                    fontWeight: 'bold',
-                },
-                iconTheme: {
-                    primary: '#f59e0b',
-                    secondary: '#FFFAEE',
-                },
-            });
+            // Show victory toast with much more prominence
+            toastService.success(
+                `${winReason}\n\n${statsMessage}`,
+                {
+                    duration: 0, // Stay until dismissed
+                    position: 'top-center',
+                    style: {
+                        padding: '20px',
+                        color: '#713200',
+                        backgroundColor: '#fff8e6',
+                        border: '3px solid #f59e0b',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                        maxWidth: '400px',
+                        whiteSpace: 'pre-line',
+                        boxShadow: '0 10px 25px rgba(245, 158, 11, 0.3)',
+                        fontSize: '1.1rem',
+                        lineHeight: '1.5'
+                    },
+                    iconTheme: {
+                        primary: '#f59e0b',
+                        secondary: '#FFFAEE',
+                    },
+                }
+            );
         } catch (error) {
             console.error("Error in showVictoryScreen:", error);
             toastService.error("Game finished!");

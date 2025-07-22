@@ -125,7 +125,7 @@ body {
 
 .hex-grid__item.bg-green-100 {
   background: linear-gradient(135deg, #D1FAE5, #A7F3D0);
-  animation: squashStretch 0.3s ease-in-out forwards;
+  position: relative;
 }
 
 .hex-grid__item.bg-honeycomb-light {
@@ -258,27 +258,124 @@ body {
   transform: rotate(90deg);
 }
 
-/* Squash and stretch animation for placement */
-@keyframes squashStretch {
-  0% { 
-    transform: translateY(-20px) scale(1.1, 0.9); 
+/* Styles for piston animation */
+.piston-animated-tile {
+  position: fixed;
+  pointer-events: none;
+  z-index: 100;
+  will-change: transform, opacity;
+}
+
+.piston-animated-tile::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(147, 51, 234, 0.2);
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  animation: piston-pulse 0.5s ease-out;
+  animation-delay: 0s; /* Start immediately */
+}
+
+.piston-animated-tile::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 20px;
+  background: linear-gradient(90deg, rgba(147, 51, 234, 0), rgba(147, 51, 234, 0.3), rgba(147, 51, 234, 0));
+  transform: translate(-50%, -50%) rotate(var(--trail-angle, 0deg));
+  z-index: -1;
+  opacity: 0.7;
+  filter: blur(4px);
+  animation: piston-trail 0.5s ease-out;
+  animation-delay: 0s; /* Start immediately */
+}
+
+@keyframes piston-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
     opacity: 0.7;
   }
-  40% { 
-    transform: translateY(0) scale(0.9, 1.1); 
-    opacity: 1;
+  100% {
+    transform: translate(-50%, -50%) scale(2);
+    opacity: 0;
   }
-  60% { 
-    transform: translateY(0) scale(1.05, 0.95); 
-    opacity: 1;
+}
+
+@keyframes piston-trail {
+  0% {
+    opacity: 0;
+    width: 0;
   }
-  80% { 
-    transform: translateY(0) scale(0.98, 1.02); 
-    opacity: 1;
+  50% {
+    opacity: 0.7;
+    width: 100%;
   }
-  100% { 
-    transform: translateY(0) scale(1, 1); 
-    opacity: 1;
+  100% {
+    opacity: 0;
+    width: 100%;
+  }
+}
+
+/* Piston target impact animation */
+.piston-target-impact {
+  position: relative;
+}
+
+.piston-target-impact::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 3px solid rgba(147, 51, 234, 0.4);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: piston-impact 0.5s ease-out forwards;
+  animation-delay: 0s; /* Start immediately */
+  z-index: 5;
+}
+
+@keyframes piston-impact {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* Enhance the tile placement animation */
+@keyframes squashStretch {
+  0% {
+    transform: scale(1.2);
+    filter: brightness(1.2);
+  }
+  20% {
+    transform: scale(0.9);
+  }
+  40% {
+    transform: scale(1.1);
+  }
+  60% {
+    transform: scale(0.95);
+  }
+  80% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
   }
 }
 
@@ -289,8 +386,78 @@ body {
   100% { transform: translateY(0) scale(1.1); }
 }
 
-.tile-placed-animation {
-  animation: squashStretch 0.3s ease-out forwards;
+/* Add dust particles animation for tile placement */
+.tile-placed-animation:not(.animation-finished) {
+  animation: squashStretch 0.5s ease-out forwards;
+  position: relative;
+}
+
+.tile-placed-animation:not(.animation-finished)::before,
+.tile-placed-animation:not(.animation-finished)::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(220, 252, 231, 0.8);
+  top: 50%;
+  animation: dustParticle 0.5s ease-out forwards;
+  z-index: 10;
+}
+
+.tile-placed-animation:not(.animation-finished)::before {
+  left: 30%;
+  animation-delay: 0.05s;
+}
+
+.tile-placed-animation:not(.animation-finished)::after {
+  right: 30%;
+  animation-delay: 0.15s;
+}
+
+@keyframes dustParticle {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-5px, -10px) scale(1);
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-10px, -20px) scale(0);
+  }
+}
+
+/* Add impact ring animation */
+.hex-grid__item.bg-green-100:not(.animation-finished)::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 3px solid rgba(52, 211, 153, 0.4);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: impactRing 0.5s ease-out forwards;
+  z-index: 2;
+}
+
+@keyframes impactRing {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
 }
 
 /* Glow effect for selected tiles */
@@ -298,3 +465,559 @@ body {
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.7);
   animation: floatEffect 2s ease-in-out infinite;
 }
+
+/* Burn animation styles */
+.burn-animated-tile {
+  pointer-events: none;
+  will-change: transform;
+  position: fixed;
+  z-index: 100;
+}
+
+.burn-animated-tile-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.25rem;
+  border-radius: 0.5rem;
+  border-width: 1px;
+  box-shadow: 0 0 15px 5px rgba(255, 59, 48, 0.4);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Burn trail effect */
+.burn-animated-tile::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, 
+    rgba(255, 87, 34, 0) 0%, 
+    rgba(255, 87, 34, 0.3) 20%, 
+    rgba(255, 159, 0, 0.7) 40%, 
+    rgba(255, 193, 7, 0.8) 60%, 
+    rgba(255, 235, 59, 0.3) 80%, 
+    rgba(255, 241, 118, 0) 100%
+  );
+  transform: translateY(-50%);
+  filter: blur(3px);
+  opacity: 0.7;
+  z-index: -1;
+  animation: burn-trail 0.5s ease-out;
+}
+
+@keyframes burn-trail {
+  0% {
+    width: 0;
+    opacity: 0;
+    filter: blur(1px);
+  }
+  50% {
+    opacity: 0.9;
+    filter: blur(3px);
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+    filter: blur(5px);
+  }
+}
+
+/* Enhanced burn particles */
+.burn-particle {
+  position: absolute;
+  background-color: #ff5722;
+  border-radius: 50%;
+  opacity: 0.8;
+  animation: burn-particle-animation 0.5s ease-out forwards;
+}
+
+@keyframes burn-particle-animation {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(var(--x), var(--y)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Fire impact effect on burn button */
+.burn-impact {
+  position: relative;
+}
+
+.burn-impact::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,87,34,0.6) 0%, rgba(255,87,34,0) 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  animation: burn-impact 0.5s ease-out forwards;
+}
+
+@keyframes burn-impact {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* Fire particle animations and styles */
+.fire-particle-0 {
+  background: #FF5722;
+  box-shadow: 0 0 8px 2px #FF5722;
+}
+
+.fire-particle-1 {
+  background: #FF9800;
+  box-shadow: 0 0 8px 2px #FF9800;
+}
+
+.fire-particle-2 {
+  background: #FFEB3B;
+  box-shadow: 0 0 8px 2px #FFEB3B;
+}
+
+/* Burn icon glow effect */
+.burn-icon-glow {
+  filter: drop-shadow(0 0 5px rgba(255, 59, 48, 0.8));
+  animation: icon-pulse 1s infinite alternate;
+}
+
+@keyframes icon-pulse {
+  0% { filter: drop-shadow(0 0 3px rgba(255, 59, 48, 0.6)); }
+  100% { filter: drop-shadow(0 0 8px rgba(255, 59, 48, 1)); }
+}
+
+/* Transition for filter property */
+.transition-filter {
+  transition-property: filter, transform;
+  transition-timing-function: ease;
+  transition-duration: 0.3s;
+}
+
+/* Glow effect for active burn button */
+.burn-button-active {
+  position: relative;
+}
+
+.burn-button-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,87,34,0.2) 0%, rgba(255,87,34,0) 70%);
+  border-radius: 50%;
+  z-index: -1;
+  animation: pulseFire 2s infinite;
+}
+
+@keyframes pulseFire {
+  0% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+}
+
+/* Burn animation effects */
+.burn-impact {
+  animation: burn-pulse 0.5s ease-out;
+}
+
+@keyframes burn-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); filter: brightness(1.5); }
+  100% { transform: scale(1); }
+}
+
+.fire-particle-0 {
+  background-color: #ff9800;
+}
+
+.fire-particle-1 {
+  background-color: #ff5722;  
+}
+
+.fire-particle-2 {
+  background-color: #ffeb3b;
+}
+
+/* Tile placement animations */
+.tile-placement-animated {
+  pointer-events: none;
+  will-change: transform;
+  position: fixed;
+  z-index: 100;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.2));
+  transform-origin: center center;
+}
+
+@keyframes placement-bob {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, calc(-50% - 5px)) rotate(-2deg); }
+  50% { transform: translate(-50%, -50%) rotate(0deg); }
+  75% { transform: translate(-50%, calc(-50% - 3px)) rotate(2deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.tile-placement-animated-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid black;
+  filter: drop-shadow(0px 0px 8px rgba(52, 211, 153, 0.6));
+  will-change: transform;
+  position: relative;
+  overflow: hidden;
+}
+
+.tile-placement-animated::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, 
+    rgba(52, 211, 153, 0) 0%, 
+    rgba(52, 211, 153, 0.3) 20%, 
+    rgba(52, 211, 153, 0.7) 40%, 
+    rgba(52, 211, 153, 0.8) 60%, 
+    rgba(52, 211, 153, 0.3) 80%, 
+    rgba(52, 211, 153, 0) 100%
+  );
+  transform: translateY(-50%);
+  filter: blur(3px);
+  opacity: 0.7;
+  z-index: -1;
+  animation: placement-trail 0.5s ease-out;
+}
+
+@keyframes placement-trail {
+  0% {
+    width: 0;
+    opacity: 0;
+    filter: blur(1px);
+  }
+  50% {
+    opacity: 0.9;
+    filter: blur(3px);
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+    filter: blur(5px);
+  }
+}
+
+/* Enhance tile placement impact */
+.hex-placement-impact:not(.animation-finished) {
+  position: relative;
+}
+
+.hex-placement-impact:not(.animation-finished)::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 3px solid rgba(52, 211, 153, 0.6);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: placement-impact 0.5s ease-out forwards;
+  z-index: 5;
+}
+
+@keyframes placement-impact {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* Enhanced dust particle animations */
+.tile-placed-animation:not(.animation-finished)::before, 
+.tile-placed-animation:not(.animation-finished)::after,
+.tile-placed-animation:not(.animation-finished)::before,
+.tile-placed-animation:not(.animation-finished)::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(52, 211, 153, 0.8);
+  top: 50%;
+  animation: enhanced-dust-particle 0.5s ease-out forwards;
+  z-index: 10;
+}
+
+.tile-placed-animation:not(.animation-finished)::before {
+  left: 30%;
+  animation-delay: 0.05s;
+}
+
+.tile-placed-animation:not(.animation-finished)::after {
+  right: 30%;
+  animation-delay: 0.15s;
+}
+
+@keyframes enhanced-dust-particle {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0);
+    filter: blur(0px);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-5px, -10px) scale(1);
+    filter: blur(1px);
+  }
+  80% {
+    opacity: 0.8;
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-15px, -25px) scale(0);
+    filter: blur(3px);
+  }
+}
+
+/* Tetris Game Animations */
+.tiles-dropping .hex-grid__item {
+  animation: tilesDrop 0.5s ease-in-out;
+}
+
+@keyframes tilesDrop {
+  0% {
+    transform: translateY(-30px) scale(0.8);
+    opacity: 0.6;
+  }
+  25% {
+    transform: translateY(-10px) scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(5px) scale(1.05);
+    opacity: 0.9;
+  }
+  75% {
+    transform: translateY(-2px) scale(0.98);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Enhanced tile animation with bouncing effect */
+.hex-grid__item {
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.hex-grid__item.bg-blue-100 {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* Add a cascade effect for multiple falling tiles */
+.tiles-dropping .hex-grid__item:nth-child(odd) {
+  animation-delay: 0.05s;
+}
+
+.tiles-dropping .hex-grid__item:nth-child(even) {
+  animation-delay: 0.1s;
+}
+
+.tiles-dropping .hex-grid__item:nth-child(3n) {
+  animation-delay: 0.15s;
+}
+
+/* Tile impact effect when landing */
+@keyframes tileImpact {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tile-landing {
+  animation: tileImpact 0.2s ease-out;
+}
+
+/* Tetris Mode - Pinball Style Step-by-Step Falling Animation */
+.animated-falling-tile {
+  position: fixed;
+  width: 60px; /* Match hex cell visual size */
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1000;
+  will-change: left, top, transform, opacity; /* Optimize for animations */
+  /* The `transform: translate(-50%, -50%)` will be set by JS to center the tile */
+  /* `left` and `top` will be set by JS to the center of target hex cells */
+  /* Initial state (set by JS before first animation step): */
+  /* opacity: 0; */
+  /* transform: translate(-50%, -50%) scale(0.7); */
+
+  /* CSS transition for smooth movement between steps */
+  transition-property: left, top, transform, opacity;
+  transition-timing-function: ease-out; /* Can be customized */
+  /* transition-duration will be set effectively by JS setTimeout timings */
+}
+
+.animated-falling-tile .letter-tile {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #374151; /* Tailwind gray-700 */
+  background: linear-gradient(145deg, #fde68a, #fcca46); /* Honeycomb yellow/orange */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0,0,0,0.1);
+  border: 1px solid rgba(0,0,0,0.05);
+  transform: rotate(0deg); /* Base rotation */
+  transition: transform 0.1s ease-out; /* For subtle wobble/spin during step */
+}
+
+/* Optional: Add a subtle wobble or spin as it moves */
+.animated-falling-tile.moving .letter-tile {
+   /* Example: transform: rotate(5deg); */
+}
+
+/* Effect for the hex cell when a tile "hits" it (peg effect) */
+.hex-grid__item.tile-hit-peg {
+  animation: hitPegEffect 0.15s ease-out forwards;
+}
+
+@keyframes hitPegEffect {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.07);
+    filter: brightness(1.15);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+/* Effect for the final landing spot on the actual grid cell */
+.hex-grid__item.tile-landed-effect {
+  animation: landBounceEffect 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  /* Ensures the letter inside the final cell also participates if needed */
+  /* position: relative; z-index: 10; */ 
+}
+
+@keyframes landBounceEffect {
+  0% {
+    transform: scale(1) translateY(0);
+    filter: brightness(1);
+  }
+  30% {
+    transform: scale(1.1, 0.85) translateY(0);
+    filter: brightness(1.2);
+  }
+  60% {
+    transform: scale(0.95, 1.1) translateY(-6px);
+    filter: brightness(1.05);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    filter: brightness(1);
+  }
+}
+
+/* Simple falling tile - no fancy effects */
+.simple-falling-tile {
+  /* Basic tile styling only */
+}
+
+.simple-falling-tile .letter-tile {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #374151;
+  background: none;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ensure old/conflicting animation classes are cleared or not used */
+.tile-falling, .tile-dropping {
+  display: none !important; /* Hide elements with old animation classes */
+}
+
+/* Ensure hex grid items show data attributes */
+.hex-grid__item[data-row][data-col] {
+  position: relative;
+}
+
+/* Prevent flicker during animation setup */
+.hex-grid__item {
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Ensure smooth animation on mobile */
+@media (prefers-reduced-motion: reduce) {
+  .tile-falling {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+

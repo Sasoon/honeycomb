@@ -48,29 +48,44 @@ export const generateWildTile = (): LetterTile => ({
 export const generateLetterBag = (): LetterTile[] => {
     const tiles: LetterTile[] = [];
 
-    // Reduced distribution to make game length more reasonable
-    // Approximately 35-40 tiles total instead of 90+
-    Object.entries(LETTER_FREQUENCY).forEach(([letter, frequency]) => {
-        const count =
-            frequency === 'common' ? 3 :     // Was 6, now 3
-                frequency === 'medium' ? 1 :     // Was 2, now 1 
-                    frequency === 'uncommon' ? 1 : 1; // Keep same
+    // Reduced distribution to limit bag to approximately 20 tiles
+    // Old comment: Approximately 35-40 tiles total instead of 90+
 
-        for (let i = 0; i < count; i++) {
-            // 10% chance of being a wild tile
-            if (Math.random() < 0.1) {
-                tiles.push(generateWildTile());
-            } else {
-                tiles.push({
-                    id: nanoid(),
-                    letter,
-                    frequency,
-                    isSelected: false,
-                    tileType: 'regular'
-                });
-            }
-        }
+    // First, collect all possible letters
+    const allLetters = Object.entries(LETTER_FREQUENCY);
+
+    // Shuffle the letters to ensure randomness in selection
+    const shuffledLetters = allLetters.sort(() => Math.random() - 0.5);
+
+    // Select a subset of letters to include in this game's bag
+    // Prioritize including some vowels for playability
+    const vowels = shuffledLetters.filter(([letter]) =>
+        ['A', 'E', 'I', 'O', 'U'].includes(letter));
+
+    const consonants = shuffledLetters.filter(([letter]) =>
+        !['A', 'E', 'I', 'O', 'U'].includes(letter));
+
+    // Take 4-5 vowels and the rest consonants to reach ~18 letters
+    // (we'll add 2 wild tiles to reach 20 total)
+    const selectedVowels = vowels.slice(0, 4);
+    const selectedConsonants = consonants.slice(0, 14);
+
+    const selectedLetters = [...selectedVowels, ...selectedConsonants];
+
+    // Create exactly one tile for each selected letter
+    selectedLetters.forEach(([letter, frequency]) => {
+        tiles.push({
+            id: nanoid(),
+            letter,
+            frequency: frequency as 'common' | 'medium' | 'uncommon' | 'rare',
+            isSelected: false,
+            tileType: 'regular'
+        });
     });
+
+    // Add 2 wild tiles to reach 20 total
+    tiles.push(generateWildTile());
+    tiles.push(generateWildTile());
 
     // Shuffle the tiles
     return tiles.sort(() => Math.random() - 0.5);

@@ -71,6 +71,14 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                 Daily
               </Link>
               <Link 
+                to="/tetris" 
+                className={`px-3 py-2 rounded-lg ${isActive('/tetris') 
+                  ? 'bg-honeycomb-dark text-white' 
+                  : 'text-white hover:bg-honeycomb-dark/70'}`}
+              >
+                Tetris Mode
+              </Link>
+              <Link 
                 to="/stats" 
                 className={`px-3 py-2 rounded-lg ${isActive('/stats') 
                   ? 'bg-honeycomb-dark text-white' 

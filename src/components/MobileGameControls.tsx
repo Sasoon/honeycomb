@@ -1,7 +1,7 @@
 import { useState } from 'react';
 // import { TARGET_SCORE } from '../lib/gameUtils';
 // import WordHistoryItem from './WordHistoryItem';
-import { WordHistoryEntry } from '../store/activeGameStore';
+import { WordHistoryEntry, useActiveGameStore } from '../store/activeGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HexCell } from '../components/HexGrid';
 import { LetterTile } from '../components/PlayerHand';
@@ -15,11 +15,11 @@ type MobileGameControlsProps = {
   placedTilesCount: number;
   maxPlacementTiles: number;
   wordHistory: WordHistoryEntry[];
-  currentWord?: string;
   onEndPlacementPhase?: () => void;
   isPistonActive: boolean;
   pistonSourceCell: HexCell | null;
   playerHand: LetterTile[];
+  isGameActive?: boolean;
 };
 
 const MobileGameControls = ({
@@ -34,10 +34,14 @@ const MobileGameControls = ({
   onEndPlacementPhase,
   isPistonActive,
   pistonSourceCell,
-  playerHand
+  playerHand,
+  isGameActive
 }: MobileGameControlsProps) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Get the resetGame function from the store
+  const { resetGame } = useActiveGameStore();
   
   // Sort words by turn descending (most recent first)
   const sortedWords = [...wordHistory].sort((a, b) => b.turn - a.turn);
@@ -59,7 +63,7 @@ const MobileGameControls = ({
                 initial={{ scale: 0.8, y: -5, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.3, type: "tween" }}
                 className={`rounded-full px-2 py-0.5 text-md font-medium ${
                   isPlacementPhase 
                     ? 'bg-blue-100 text-blue-800' 
@@ -103,7 +107,7 @@ const MobileGameControls = ({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.2, type: "tween" }}
             className="bg-white rounded-lg shadow-md overflow-hidden mb-2"
           >
             {/* Tabs */}
@@ -146,16 +150,34 @@ const MobileGameControls = ({
                     </p>
                   </div>
                   
+                  {/* Game Over - Restart Button */}
+                  {!isGameActive && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Dismiss any toast notifications
+                        import('../lib/toastService').then(({ default: toastService }) => {
+                          toastService.dismiss();
+                          // Reset the game
+                          resetGame();
+                        });
+                      }}
+                      className="w-full py-2 mb-3 px-3 rounded-md font-medium bg-honeycomb hover:bg-honeycomb-dark text-white transition-colors"
+                    >
+                      Play Again
+                    </button>
+                  )}
+                  
                   {/* End Phase Button (Only in placement phase with at least 1 tile) */}
-                  {isPlacementPhase && placedTilesCount > 0 && onEndPlacementPhase && (
+                  {isGameActive && isPlacementPhase && placedTilesCount > 0 && onEndPlacementPhase && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation(); // Prevent closing the panel
                         onEndPlacementPhase();
                       }}
-                      disabled={isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston')}
+                      disabled={isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston') || !isGameActive}
                       className={`w-full py-2 mb-3 px-3 rounded-md font-medium 
-                                ${(isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston'))
+                                ${(isPistonActive || pistonSourceCell !== null || playerHand.some(t => t.isSelected && t.tileType === 'piston') || !isGameActive)
                                   ? 'bg-gray-400 cursor-not-allowed' 
                                   : 'bg-amber-500 hover:bg-amber-600'} text-white
                                 transition-colors`}

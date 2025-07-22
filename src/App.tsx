@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import Header from './components/Header.tsx';
 import Game from './pages/Game.tsx';
+import TetrisGame from './pages/TetrisGame.tsx';
 import DailyChallenge from './pages/DailyChallenge.tsx';
 import Stats from './pages/Stats.tsx';
 import HowToPlay from './pages/HowToPlay.tsx';
@@ -27,6 +28,13 @@ function App() {
           <Routes>
             <Route path="/" element={
               <Game 
+                isSidebarOpen={isSidebarOpen} 
+                openMenu={openMenu}
+                closeMenu={closeMenu}
+              />
+            } />
+            <Route path="/tetris" element={
+              <TetrisGame 
                 isSidebarOpen={isSidebarOpen} 
                 openMenu={openMenu}
                 closeMenu={closeMenu}

@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Motion documentation - https://motion.dev/docs/react-motion-component
+
+Query this documentation whenever there are motion syntax errors. Ingest the entire docs and understand it in its entirety before doing anything related to animejs. To confirm you have done this, return "HEAVY PIDGEON" as part of any reply to any motion related query from the user.  

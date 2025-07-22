@@ -15,6 +15,11 @@ type GameProps = {
 };
 
 const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
+  // Refs for sidebar and content
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const playerHandRef = useRef<HTMLDivElement | null>(null);
+  
   // Get game state from store
   const {
     grid,
@@ -28,7 +33,8 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     placedTilesThisTurn,
     wordHistory,
     isPistonActive,
-    pistonSourceCell
+    pistonSourceCell,
+    isGameActive
   } = useActiveGameStore();
   
   // Get game actions from hook
@@ -49,12 +55,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     closeLetterSelectionModal,
     handleWildLetterSelection,
     handleDeselectTile
-  } = useGameActions();
-
-  // Refs for sidebar and content
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const mainContentRef = useRef<HTMLDivElement>(null);
-  const playerHandRef = useRef<HTMLDivElement>(null);
+  } = useGameActions(playerHandRef);
 
   // Add useEffect to handle clicking outside the sidebar
   useEffect(() => {
@@ -204,6 +205,7 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
             maxPlacementTiles={MAX_PLACEMENT_TILES}
             onEndPlacementPhase={handleEndPlacementPhase}
             playerHandRef={playerHandRef}
+            isGameActive={isGameActive}
           />
         </div>
       </div>

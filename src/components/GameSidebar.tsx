@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { TARGET_SCORE } from '../lib/gameUtils';
 import GameControls from './GameControls';
 import WordHistory from './WordHistory';
-import { WordHistoryEntry } from '../store/activeGameStore';
+import { WordHistoryEntry, useActiveGameStore } from '../store/activeGameStore';
 
 interface GameSidebarProps {
   isSidebarOpen: boolean;
@@ -37,6 +37,9 @@ const GameSidebar = forwardRef<HTMLDivElement, GameSidebarProps>(({
   maxPlacementTiles
 }, ref) => {
   const location = useLocation();
+  
+  // Get the resetGame function and isGameActive state from the store
+  const { resetGame, isGameActive } = useActiveGameStore();
   
   const isActive = (path: string) => location.pathname === path;
 
@@ -164,6 +167,25 @@ const GameSidebar = forwardRef<HTMLDivElement, GameSidebarProps>(({
             <div className="mb-4 flex-grow overflow-hidden flex flex-col">
               <WordHistory wordHistory={wordHistory} />
             </div>
+            
+            {/* Reset Game button - show only when game is over */}
+            {!isGameActive && (
+              <div className="mb-4">
+                <button
+                  onClick={() => {
+                    // Dismiss any toast notifications
+                    import('../lib/toastService').then(({ default: toastService }) => {
+                      toastService.dismiss();
+                      // Reset the game
+                      resetGame();
+                    });
+                  }}
+                  className="w-full py-2 px-3 bg-honeycomb hover:bg-honeycomb-dark text-white font-medium rounded-md shadow-sm transition-colors"
+                >
+                  Play Again
+                </button>
+              </div>
+            )}
             
             {/* Game instructions - collapsible */}
             <div className="mt-auto">
