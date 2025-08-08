@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { memo } from 'react';
 
 export type LetterTile = {
   id: string;
@@ -175,4 +176,4 @@ const PlayerHand = ({
   );
 };
 
-export default PlayerHand; 
+export default memo(PlayerHand); 

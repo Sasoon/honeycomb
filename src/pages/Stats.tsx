@@ -1,41 +1,7 @@
-import { useState, useEffect } from 'react';
-
-// Mock data for now - in a real implementation, this would be stored in localStorage or a database
-type GameStats = {
-  gamesPlayed: number;
-  wordsFormed: number;
-  bestWord: string;
-  bestWordScore: number;
-  totalScore: number;
-  averageTurns: number;
-  fewestTurns: number;
-};
+import useGameStore from '../store/gameStore';
 
 const Stats = () => {
-  const [stats, setStats] = useState<GameStats>({
-    gamesPlayed: 0,
-    wordsFormed: 0,
-    bestWord: '',
-    bestWordScore: 0,
-    totalScore: 0,
-    averageTurns: 0,
-    fewestTurns: 0
-  });
-  
-  useEffect(() => {
-    // Mock loading stats from localStorage
-    const mockStats: GameStats = {
-      gamesPlayed: 12,
-      wordsFormed: 148,
-      bestWord: 'HONEY',
-      bestWordScore: 16,
-      totalScore: 1245,
-      averageTurns: 14.3,
-      fewestTurns: 9
-    };
-    
-    setStats(mockStats);
-  }, []);
+  const stats = useGameStore(s => s.stats);
   
   return (
     <div className="max-w-2xl mx-auto px-3 sm:px-4">
@@ -45,7 +11,7 @@ const Stats = () => {
         <StatCard label="Games Played" value={stats.gamesPlayed.toString()} />
         <StatCard label="Words Formed" value={stats.wordsFormed.toString()} />
         <StatCard label="Total Score" value={stats.totalScore.toString()} />
-        <StatCard label="Best Word" value={stats.bestWord} subvalue={`${stats.bestWordScore} pts`} />
+        <StatCard label="Best Word" value={stats.bestWord || '—'} subvalue={stats.bestWordScore ? `${stats.bestWordScore} pts` : undefined} />
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
@@ -69,9 +35,9 @@ const Stats = () => {
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold mb-4">Word History</h2>
-        <div className="text-center p-8 text-gray-500">
-          Word history will be implemented in a future update.
+        <h2 className="text-xl font-semibold mb-4">Last Played</h2>
+        <div className="text-center p-4 text-gray-700">
+          {stats.lastPlayed ? stats.lastPlayed : '—'}
         </div>
       </div>
     </div>

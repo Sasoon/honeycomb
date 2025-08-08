@@ -16,6 +16,7 @@ import {
     TARGET_SCORE
 } from '../lib/gameUtils';
 import confetti from 'canvas-confetti';
+import useGameStore from '../store/gameStore';
 
 export interface GameActionsResult {
     isWordValid: boolean;
@@ -46,6 +47,9 @@ export function useGameActions(playerHandRef?: React.RefObject<HTMLDivElement | 
     const [isDictionaryLoading, setIsDictionaryLoading] = useState(true);
     const [isLetterSelectionModalOpen, setIsLetterSelectionModalOpen] = useState(false);
     const [selectedCellForWild, setSelectedCellForWild] = useState<HexCell | null>(null);
+    const addGameRecord = useGameStore(s => s.addGameRecord);
+    const updateStats = useGameStore(s => s.updateStats);
+    const bestWordScore = useGameStore(s => s.stats.bestWordScore);
 
     const {
         gameInitialized,
@@ -792,6 +796,13 @@ export function useGameActions(playerHandRef?: React.RefObject<HTMLDivElement | 
         // End the turn after scoring
         finishTurn();
 
+        // Update persistent stats with best word info when improved
+        if (currentWord.length > 0) {
+            if (wordScore > bestWordScore) {
+                updateStats({ bestWord: currentWord, bestWordScore: wordScore });
+            }
+        }
+
         // Check if player has reached the target score
         if (newScore >= TARGET_SCORE) {
             // Game is won by reaching target score
@@ -1036,6 +1047,14 @@ export function useGameActions(playerHandRef?: React.RefObject<HTMLDivElement | 
                     },
                 }
             );
+
+            // Persist a game record for the Stats page
+            addGameRecord({
+                date: new Date().toISOString(),
+                score,
+                turns,
+                wordCount: wordHistory.length,
+            });
         } catch (error) {
             console.error("Error in showVictoryScreen:", error);
             toastService.error("Game finished!");

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
 
 const DailyChallenge = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +33,12 @@ const DailyChallenge = () => {
     return () => clearInterval(interval);
   }, []);
   
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4">
       <h1 className="text-3xl font-bold text-center mb-6">Daily Challenge</h1>
@@ -47,7 +52,7 @@ const DailyChallenge = () => {
           <div className="text-center mb-6">
             <div className="text-xl font-semibold">Today's Challenge</div>
             <div className="text-2xl font-bold text-honeycomb-dark">
-              {format(new Date(), 'MMMM d, yyyy')}
+              {todayLabel}
             </div>
           </div>
           

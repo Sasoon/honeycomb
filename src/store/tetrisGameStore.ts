@@ -192,7 +192,10 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 // Use the letters from the preview (nextRows[0])
                 const fallingLetters = state.nextRows[0] || generateDropLetters(state.tilesPerDrop, state.round);
 
-                console.log('Starting flood phase with letters:', fallingLetters);
+                if (import.meta.env.DEV) {
+                    // eslint-disable-next-line no-console
+                    console.log('Starting flood phase with letters:', fallingLetters);
+                }
 
                 // Apply the falling tiles to the grid - this includes physics simulation
                 const newGrid = applyFallingTiles(state.grid, fallingLetters, state.gridSize);
@@ -200,7 +203,10 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 // Debug: Check what's in the top row after physics
                 const topRowCells = newGrid.filter(cell => cell.position.row === 0);
                 const tilesInTopRow = topRowCells.filter(cell => cell.letter && cell.isPlaced);
-                console.log('Top row after physics:', tilesInTopRow.length, 'tiles out of', topRowCells.length);
+                if (import.meta.env.DEV) {
+                    // eslint-disable-next-line no-console
+                    console.log('Top row after physics:', tilesInTopRow.length, 'tiles out of', topRowCells.length);
+                }
 
                 // Only check for game over if we couldn't place ANY tiles
                 // This happens when the grid is completely full
@@ -258,7 +264,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     // Deselect this tile and all tiles after it
                     const newSelected = state.selectedTiles.slice(0, existingIndex);
                     const newWord = newSelected.map(t => t.letter).join('');
-                    
+
                     set({
                         selectedTiles: newSelected,
                         currentWord: newWord
@@ -295,7 +301,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 }];
 
                 const newWord = newSelected.map(t => t.letter).join('');
-                
+
                 set({
                     selectedTiles: newSelected,
                     currentWord: newWord
@@ -321,7 +327,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 if (tileIndex === state.selectedTiles.length - 1) {
                     const newSelected = state.selectedTiles.slice(0, -1);
                     const newWord = newSelected.map(t => t.letter).join('');
-                    
+
                     set({
                         selectedTiles: newSelected,
                         currentWord: newWord
@@ -425,6 +431,11 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 set(updates);
                 toastService.success(`+${wordScore} points!`);
+
+                // Automatically end the player's turn and transition to flood phase (defer to next tick to sync UI)
+                setTimeout(() => {
+                    get().endRound();
+                }, 250);
             },
 
             activatePowerCard: (cardId: string) => {

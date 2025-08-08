@@ -20,22 +20,20 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
   const mainContentRef = useRef<HTMLDivElement>(null);
   const playerHandRef = useRef<HTMLDivElement | null>(null);
   
-  // Get game state from store
-  const {
-    grid,
-    gridSize,
-    letterBag,
-    playerHand,
-    currentWord,
-    score,
-    turns,
-    isPlacementPhase,
-    placedTilesThisTurn,
-    wordHistory,
-    isPistonActive,
-    pistonSourceCell,
-    isGameActive
-  } = useActiveGameStore();
+  // Get game state from store via selectors to reduce re-renders
+  const grid = useActiveGameStore(s => s.grid);
+  const gridSize = useActiveGameStore(s => s.gridSize);
+  const letterBag = useActiveGameStore(s => s.letterBag);
+  const playerHand = useActiveGameStore(s => s.playerHand);
+  const currentWord = useActiveGameStore(s => s.currentWord);
+  const score = useActiveGameStore(s => s.score);
+  const turns = useActiveGameStore(s => s.turns);
+  const isPlacementPhase = useActiveGameStore(s => s.isPlacementPhase);
+  const placedTilesThisTurn = useActiveGameStore(s => s.placedTilesThisTurn);
+  const wordHistory = useActiveGameStore(s => s.wordHistory);
+  const isPistonActive = useActiveGameStore(s => s.isPistonActive);
+  const pistonSourceCell = useActiveGameStore(s => s.pistonSourceCell);
+  const isGameActive = useActiveGameStore(s => s.isGameActive);
   
   // Get game actions from hook
   const {
@@ -145,14 +143,14 @@ const Game = ({ isSidebarOpen, openMenu, closeMenu }: GameProps) => {
     
     const contentElement = mainContentRef.current;
     if (contentElement && window.innerWidth < 768) {
-      contentElement.addEventListener('touchstart', handleTouchStart);
-      contentElement.addEventListener('touchmove', handleTouchMove);
-      contentElement.addEventListener('touchend', handleTouchEnd);
+      contentElement.addEventListener('touchstart', handleTouchStart, { passive: true } as AddEventListenerOptions);
+      contentElement.addEventListener('touchmove', handleTouchMove, { passive: true } as AddEventListenerOptions);
+      contentElement.addEventListener('touchend', handleTouchEnd, { passive: true } as AddEventListenerOptions);
       
       return () => {
-        contentElement.removeEventListener('touchstart', handleTouchStart);
-        contentElement.removeEventListener('touchmove', handleTouchMove);
-        contentElement.removeEventListener('touchend', handleTouchEnd);
+        contentElement.removeEventListener('touchstart', handleTouchStart as any);
+        contentElement.removeEventListener('touchmove', handleTouchMove as any);
+        contentElement.removeEventListener('touchend', handleTouchEnd as any);
       };
     }
   }, [isSidebarOpen, openMenu, closeMenu]);

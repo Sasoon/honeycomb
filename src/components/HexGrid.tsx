@@ -1,5 +1,5 @@
 // Remove React import
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Define types for our grid
@@ -31,6 +31,7 @@ export interface HexGridProps {
   placedTilesThisTurn: HexCell[];
   isGameActive?: boolean;
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
+  hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
 }
 
 // Interface for the animated tile (either piston or undo)
@@ -43,13 +44,65 @@ interface AnimatedTile {
   dimensions?: { width: number; height: number }; // Store actual hex dimensions
 }
 
+const CellView = memo(function CellView({
+  cell,
+  onClick,
+  containerClass,
+  setRef,
+  showLetter,
+}: {
+  cell: HexCell;
+  onClick: (cell: HexCell) => void;
+  containerClass: string;
+  setRef: (el: HTMLDivElement | null) => void;
+  showLetter: boolean;
+}) {
+  return (
+    <motion.div
+      key={cell.id}
+      ref={setRef}
+      data-cell-id={cell.id}
+      data-row={cell.position.row}
+      data-col={cell.position.col}
+      className={`hex-grid__item ${containerClass}`}
+      onClick={() => onClick(cell)}
+      layout
+      style={{ position: 'relative' }}
+    >
+      <div className="hex-grid__content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span className="letter-tile" style={{ fontWeight: 700, fontSize: '1.1rem', opacity: showLetter ? 1 : 0 }}>
+          {showLetter ? (cell.letter || '') : ''}
+        </span>
+        {cell.isDoubleScore && (
+          <div className="double-score-badge" style={{ position: 'absolute', top: '-6px', right: '-6px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                background: '#fde68a',
+                color: '#92400e',
+                fontWeight: 700,
+                fontSize: '0.7rem',
+                padding: '2px 4px',
+                borderRadius: '6px',
+              }}
+            >
+              2×
+            </span>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+});
+
 const HexGrid = ({ 
   cells, 
   onCellClick, 
   isWordValid, 
   isPlacementPhase,
   isWordAlreadyScored,
-  placedTilesThisTurn = []
+  placedTilesThisTurn = [],
+  hiddenLetterCellIds = [],
 }: HexGridProps) => {
   // State for the animated tile (piston movement only)
   const [animatedTile, setAnimatedTile] = useState<AnimatedTile | null>(null);
@@ -61,19 +114,19 @@ const HexGrid = ({
   const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   
   // Previous state of cells to detect changes
-  const prevCellsRef = useRef<HexCell[]>([]);
+  const prevCellsRef = useRef<Array<Pick<HexCell, 'id' | 'letter' | 'placedThisTurn'>>>([]);
   
   // Animation states
   const [justPlacedIds, setJustPlacedIds] = useState<Set<string>>(new Set());
   const [animationCompletedIds, setAnimationCompletedIds] = useState<Set<string>>(new Set());
   const prevPlacedTilesRef = useRef<HexCell[]>([]);
-  const animationTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const animationTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   
   // Effect to detect piston movement and trigger animation
   useEffect(() => {
     // Find the source cell (the one that had a letter but now doesn't)
-    let sourceCell = null;
-    let targetCell = null;
+    let sourceCell: Pick<HexCell, 'id' | 'letter'> | null = null;
+    let targetCell: HexCell | null = null;
     
     // Look for a cell that had a letter in the previous state but doesn't now
     for (let i = 0; i < prevCellsRef.current.length; i++) {
@@ -81,7 +134,7 @@ const HexGrid = ({
       const currentCell = cells.find(c => c.id === prevCell.id);
       
       if (prevCell && currentCell && prevCell.letter && !currentCell.letter) {
-        sourceCell = prevCell;
+        sourceCell = { id: prevCell.id, letter: prevCell.letter };
         break;
       }
     }
@@ -91,9 +144,9 @@ const HexGrid = ({
       // Find any cell that was recently placed and has the source's letter
       targetCell = cells.find(cell => 
         cell.placedThisTurn && 
-        cell.letter === sourceCell.letter && 
-        cell.id !== sourceCell.id
-      );
+        cell.letter === sourceCell!.letter && 
+        cell.id !== sourceCell!.id
+      ) || null;
     }
     
     // Start animation immediately if we found both cells
@@ -124,20 +177,20 @@ const HexGrid = ({
         
         // Before starting piston animation, prevent tile-placement animation on the target
         // by marking it as completed already
-        setAnimationCompletedIds(prev => new Set([...prev, targetCell.id]));
+        setAnimationCompletedIds(prev => new Set([...prev, targetCell!.id]));
         
         // Make sure the target is not in the justPlacedIds set
         setJustPlacedIds(prev => {
           const next = new Set(prev);
-          next.delete(targetCell.id);
+          next.delete(targetCell!.id);
           return next;
         });
 
         // Clear any existing timeout for this target cell
-        const existingTimeout = animationTimeoutsRef.current.get(targetCell.id);
+        const existingTimeout = animationTimeoutsRef.current.get(targetCell!.id);
         if (existingTimeout) {
           clearTimeout(existingTimeout);
-          animationTimeoutsRef.current.delete(targetCell.id);
+          animationTimeoutsRef.current.delete(targetCell!.id);
         }
         
         // Set up the animated tile immediately without any delays
@@ -157,7 +210,7 @@ const HexGrid = ({
         });
         
         // Track the target ID to prevent conflicting animations
-        setPistonAnimationTargetId(targetCell.id);
+        setPistonAnimationTargetId(targetCell!.id);
         
         // Add impact class to target element
         targetElement.classList.add('piston-target-impact');
@@ -171,8 +224,8 @@ const HexGrid = ({
       }
     }
     
-    // Update the previous cells reference
-    prevCellsRef.current = JSON.parse(JSON.stringify(cells));
+    // Update the previous cells reference with a minimal snapshot
+    prevCellsRef.current = cells.map(c => ({ id: c.id, letter: c.letter, placedThisTurn: c.placedThisTurn }));
   }, [cells]);
 
   // Effect to detect tile placements - removed removal animations
@@ -318,46 +371,23 @@ const HexGrid = ({
         textColor = 'text-white';
       } else {
         // Placement phase highlighting
-        bgColor = 'bg-amber-200';
-        textColor = 'text-amber-900';
-      }
-    } else if (cell.isPlaced) {
-      // Regular placed tile styling
-      bgColor = cell.isPrePlaced ? 'bg-slate-200' : 'bg-blue-100';
-      
-      // Highlight tiles placed in the current turn
-      if (isPlacedThisTurn) {
-        // Special handling for piston target - keep a neutral color during animation
-        if (isPistonTarget) {
-          // Use a neutral blue background during piston animation
+        if (isPlacedThisTurn) {
           bgColor = 'bg-blue-100';
-          border = 'border-blue-400';
-          // No extra animation classes since piston-target-impact will be added via DOM
+          extraClasses = isAnimatingPlacement ? 'scale-110 shadow-lg' : hasFinishedAnimation ? '' : 'scale-105';
         } else {
-          // Normal green background for non-piston tiles placed this turn
-          bgColor = 'bg-green-100';
-          border = 'border-green-500';
-
-          if (isAnimatingPlacement) {
-            // Add animation classes if currently animating
-            extraClasses += ' tile-placed-animation hex-placement-impact'; 
-          } else if (hasFinishedAnimation) {
-            // Add finished marker class if animation completed this turn
-            extraClasses += ' animation-finished';
-          }
+          bgColor = 'bg-white';
         }
       }
-    } else if (cell.isPrePlaced) {
-      bgColor = 'bg-honeycomb-light';
-      border = 'hex-border-honeycomb';
     }
-    
-    // If double score, add that class
-    if (cell.isDoubleScore) {
-      extraClasses += ' hex-double-score';
+
+    // Apply piston animation highlight if active
+    if (isPistonTarget) {
+      extraClasses += ' piston-target-impact';
     }
-    
-    return `${bgColor} ${textColor} ${border} ${extraClasses}`;
+
+    return {
+      container: `${bgColor} ${textColor} ${border} ${extraClasses}`,
+    };
   };
 
   // Group cells by row for the honeycomb layout
@@ -382,35 +412,20 @@ const HexGrid = ({
             className={`flex justify-center ${r % 2 === 1 ? 'row-odd' : ''}`}
             style={{ marginBottom: '10px', marginTop: '-25px' }} // Tighten vertical spacing
           >
-            {rowCells.map(cell => (
-              <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
-                <div
-                  ref={el => {
-                    if (el) cellRefs.current.set(cell.id, el);
-                  }}
-                  className={`hex-grid__item ${cellStyles(cell)}`}
-                  onClick={() => onCellClick(cell)}
-                  data-row={cell.position.row}
-                  data-col={cell.position.col}
-                  data-cell-id={cell.id}
-                >
-                  <div className="hex-grid__content">
-                    {/* Only show letter if not the active piston target */}
-                    {cell.id !== pistonAnimationTargetId && (
-                      <span className={`letter-tile ${
-                        // Check if it's a special tile (emoji)
-                        ['💣', '⚡', '❄️', '🌟'].includes(cell.letter) ? 'text-2xl' : ''
-                      }`}>{cell.letter || ''}</span>
-                    )}
-                    {cell.isDoubleScore && (
-                      <div className="double-score-badge">
-                        <span>2×</span>
-                      </div>
-                    )}
-                  </div>
+            {rowCells.map(cell => {
+              const showLetter = !hiddenLetterCellIds.includes(cell.id);
+              return (
+                <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
+                  <CellView
+                    cell={cell}
+                    onClick={onCellClick}
+                    containerClass={cellStyles(cell).container}
+                    setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
+                    showLetter={showLetter}
+                  />
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         );
       }
@@ -529,6 +544,11 @@ const HexGrid = ({
             transform: scale(0.8);
             opacity: 0;
           }
+        }
+
+        @keyframes ghost-drop {
+          0% { transform: scale(0.9); opacity: 0.8; }
+          100% { transform: scale(1); opacity: 1; }
         }
       `}</style>
     </div>

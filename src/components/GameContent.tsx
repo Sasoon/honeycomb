@@ -121,7 +121,7 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   }, [isBurnButtonActive]);
   
   // Store timeouts in refs so we can clear them
-  const animationTimeouts = useRef<{[key: string]: NodeJS.Timeout}>({});
+  const animationTimeouts = useRef<{[key: string]: ReturnType<typeof setTimeout>}>({});
   
   // Clear all animation timeouts
   const clearAnimationTimeouts = () => {
@@ -263,15 +263,15 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
                             document.body.removeChild(particle);
                           }
                         } catch (e) {
-                          console.log('Error removing particle:', e);
+                          safeLog('Error removing particle:', e);
                         }
                       }, 500); // Standardized to 500ms
                     } catch (e) {
-                      console.log('Error creating particle:', e);
+                      safeLog('Error creating particle:', e);
                     }
                   }
                 } catch (e) {
-                  console.log('Error in createImpactParticles:', e);
+                  safeLog('Error in createImpactParticles:', e);
                 }
               };
               
@@ -321,12 +321,12 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
               }, 500); // Standardized to 500ms
             }
           } catch (e) {
-            console.log('Error in requestAnimationFrame:', e);
+            safeLog('Error in requestAnimationFrame:', e);
             onBurnTile();
           }
         });
       } catch (e) {
-        console.log('Error in handleBurnWithAnimation:', e);
+        safeLog('Error in handleBurnWithAnimation:', e);
         onBurnTile();
       }
     } else {
@@ -380,6 +380,13 @@ const GameContent = forwardRef<HTMLDivElement, GameContentProps>(({
   const handleTileSelect = (tile: LetterTile) => {
     if (isGameActive) {
       onTileSelect(tile);
+    }
+  };
+
+  const safeLog = (label: string, e: unknown) => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log(label, e);
     }
   };
 

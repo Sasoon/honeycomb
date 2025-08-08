@@ -13,9 +13,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   const handleMenuClick = (e: React.MouseEvent) => {
     // Stop event propagation to prevent click outside from triggering
     e.stopPropagation();
-    
     toggleSidebar();
-    console.log(`Menu button clicked, sidebar should be ${!isSidebarOpen}`);
   };
   
   return (
@@ -56,41 +54,41 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
             <nav className="hidden md:flex flex-wrap justify-center gap-2 ml-6">
               <Link 
                 to="/" 
-                className={`px-3 py-2 rounded-lg ${isActive('/') 
+                className={`${isActive('/') 
                   ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'}`}
+                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
                 Play
               </Link>
               <Link 
                 to="/daily" 
-                className={`px-3 py-2 rounded-lg ${isActive('/daily') 
+                className={`${isActive('/daily') 
                   ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'}`}
+                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
                 Daily
               </Link>
               <Link 
                 to="/tetris" 
-                className={`px-3 py-2 rounded-lg ${isActive('/tetris') 
+                className={`${isActive('/tetris') 
                   ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'}`}
+                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
                 Tetris Mode
               </Link>
               <Link 
                 to="/stats" 
-                className={`px-3 py-2 rounded-lg ${isActive('/stats') 
+                className={`${isActive('/stats') 
                   ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'}`}
+                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
                 Stats
               </Link>
               <Link 
                 to="/how-to-play" 
-                className={`px-3 py-2 rounded-lg ${isActive('/how-to-play') 
+                className={`${isActive('/how-to-play') 
                   ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'}`}
+                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
                 How to Play
               </Link>

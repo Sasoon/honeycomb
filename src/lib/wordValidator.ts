@@ -8,6 +8,15 @@ const MAX_CACHE_SIZE = 1000;
 // Define dictionary type
 type Dictionary = Record<string, number>;
 
+type WorkerResponse =
+    | { id: number; type: 'preload'; ready: boolean }
+    | { id: number; type: 'validate'; isValid: boolean }
+    | { id: number; type: 'suggestions'; suggestions: string[] };
+
+type PreloadRequest = { type: 'preload' };
+type ValidateRequest = { type: 'validate'; word: string };
+type SuggestionsRequest = { type: 'suggestions'; prefix: string; limit?: number };
+
 /**
  * Word validator using comprehensive English dictionary
  * Memory-optimized solution for validating English words
@@ -19,48 +28,74 @@ class WordValidator {
     private isLoading = false;
     private _isReady = false;  // New property to track if dictionary is fully loaded
 
+    // Worker fields
+    private worker: Worker | null = null;
+    private nextRequestId = 1;
+    private pending = new Map<number, (msg: WorkerResponse) => void>();
+
     constructor() {
         this.usedWords = new Set<string>();
-        // Start preloading immediately
-        this.preloadDictionary();
+        this.initWorker();
     }
 
-    /**
-     * Preload the dictionary as soon as possible
-     * This can be called during app initialization
-     */
+    private initWorker() {
+        try {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            this.worker = new Worker(new URL('../workers/dictionaryWorker.ts', import.meta.url), { type: 'module' });
+            this.worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
+                const data = event.data;
+                const resolver = this.pending.get(data.id);
+                if (resolver) {
+                    this.pending.delete(data.id);
+                    resolver(data);
+                }
+            });
+        } catch {
+            this.worker = null;
+        }
+    }
+
+    private postToWorker<TResponse extends WorkerResponse>(payload: PreloadRequest | ValidateRequest | SuggestionsRequest): Promise<TResponse> {
+        if (!this.worker) {
+            return Promise.reject(new Error('Worker not initialized'));
+        }
+        const id = this.nextRequestId++;
+        return new Promise<TResponse>((resolve) => {
+            this.pending.set(id, (msg) => resolve(msg as TResponse));
+            (this.worker as Worker).postMessage({ id, ...(payload as any) });
+        });
+    }
+
     preloadDictionary(): Promise<void> {
+        if (this.worker) {
+            return this.postToWorker<{ id: number; type: 'preload'; ready: boolean }>({ type: 'preload' })
+                .then(() => { this._isReady = true; });
+        }
         return this.loadDictionaryIfNeeded()
             .then(() => {
                 this._isReady = true;
-                console.log('Dictionary preloaded and ready');
+                if (import.meta.env.DEV) {
+                    console.log('Dictionary preloaded and ready');
+                }
             });
     }
 
-    /**
-     * Check if the dictionary is ready for use
-     */
     get isReady(): boolean {
         return this._isReady;
     }
 
-    /**
-     * Lazy load the dictionary only when needed
-     */
     private async loadDictionaryIfNeeded(): Promise<Dictionary> {
-        if (this.dictionary) {
-            return this.dictionary;
-        }
-
-        if (this.dictionaryPromise) {
-            return this.dictionaryPromise;
-        }
+        if (this.dictionary) return this.dictionary;
+        if (this.dictionaryPromise) return this.dictionaryPromise;
 
         this.isLoading = true;
         this.dictionaryPromise = import('./words_dictionary.json')
             .then(module => {
                 this.dictionary = module.default as Dictionary;
-                console.log(`Dictionary loaded with ${Object.keys(this.dictionary).length} words`);
+                if (import.meta.env.DEV) {
+                    console.log(`Dictionary loaded with ${Object.keys(this.dictionary).length} words`);
+                }
                 this.isLoading = false;
                 this._isReady = true;
                 return this.dictionary;
@@ -74,11 +109,7 @@ class WordValidator {
         return this.dictionaryPromise;
     }
 
-    /**
-     * Add word to cache, managing the cache size
-     */
     private addToCache(word: string, isValid: boolean): void {
-        // If cache is full, remove oldest entries (20% of max size)
         if (validWordCache.size >= MAX_CACHE_SIZE) {
             const keysToDelete = Array.from(validWordCache.keys()).slice(0, MAX_CACHE_SIZE / 5);
             keysToDelete.forEach(key => validWordCache.delete(key));
@@ -86,54 +117,40 @@ class WordValidator {
         validWordCache.set(word, isValid);
     }
 
-    /**
-     * Check if a word is valid synchronously (using cache) or asynchronously (using dictionary)
-     */
     isValidWord(word: string): boolean {
         if (!word || word.length < 3) return false;
 
         const normalized = word.toLowerCase();
+        if (validWordCache.has(normalized)) return validWordCache.get(normalized)!;
+        if (this.worker) return false;
 
-        // Check cache first for performance
-        if (validWordCache.has(normalized)) {
-            return validWordCache.get(normalized)!;
-        }
-
-        // If dictionary is loaded, check it
         if (this.dictionary) {
             const isValid = normalized in this.dictionary;
             this.addToCache(normalized, isValid);
             return isValid;
         }
 
-        // If dictionary isn't loaded yet, start loading if not already doing so
         if (!this.isLoading) {
             this.loadDictionaryIfNeeded().then(() => {
-                // Dictionary is now loaded, but we already returned false below
-                // Client code should re-check later or use validateWordAsync instead
-                console.log(`Dictionary loaded, "${normalized}" can now be validated`);
+                if (import.meta.env.DEV) {
+                    console.log(`Dictionary loaded, "${normalized}" can now be validated`);
+                }
             });
         }
-
-        // Default to false until dictionary is loaded
-        // For better UX, it's recommended to use validateWordAsync instead
         return false;
     }
 
-    /**
-     * Validate a word asynchronously, ensuring dictionary is loaded
-     */
     async validateWordAsync(word: string): Promise<boolean> {
         if (!word || word.length < 3) return false;
-
         const normalized = word.toLowerCase();
+        if (validWordCache.has(normalized)) return validWordCache.get(normalized)!;
 
-        // Check cache first
-        if (validWordCache.has(normalized)) {
-            return validWordCache.get(normalized)!;
+        if (this.worker) {
+            const res = await this.postToWorker<{ id: number; type: 'validate'; isValid: boolean }>({ type: 'validate', word: normalized });
+            this.addToCache(normalized, res.isValid);
+            return res.isValid;
         }
 
-        // Ensure dictionary is loaded
         const dictionary = await this.loadDictionaryIfNeeded();
         const isValid = normalized in dictionary;
         this.addToCache(normalized, isValid);
@@ -152,12 +169,14 @@ class WordValidator {
 
     async getSuggestions(prefix: string, limit: number = 5): Promise<string[]> {
         if (!prefix || prefix.length < 2) return [];
-
-        // Ensure dictionary is loaded
-        const dictionary = await this.loadDictionaryIfNeeded();
-
-        // Find words starting with the given prefix
         const normalizedPrefix = prefix.toLowerCase();
+
+        if (this.worker) {
+            const res = await this.postToWorker<{ id: number; type: 'suggestions'; suggestions: string[] }>({ type: 'suggestions', prefix: normalizedPrefix, limit });
+            return res.suggestions.filter(w => !this.isWordUsed(w)).slice(0, limit);
+        }
+
+        const dictionary = await this.loadDictionaryIfNeeded();
         const suggestions = Object.keys(dictionary)
             .filter(word =>
                 word.startsWith(normalizedPrefix) &&
@@ -165,7 +184,6 @@ class WordValidator {
                 !this.isWordUsed(word)
             )
             .slice(0, limit);
-
         return suggestions;
     }
 
@@ -174,7 +192,16 @@ class WordValidator {
     }
 }
 
-// Export a singleton instance
 export const wordValidator = new WordValidator();
+
+export function scheduleDictionaryPreload() {
+    const run = () => wordValidator.preloadDictionary().catch(() => { });
+    const w = typeof window !== 'undefined' ? (window as unknown as { requestIdleCallback?: (cb: () => void) => number }) : undefined;
+    if (w && typeof w.requestIdleCallback === 'function') {
+        w.requestIdleCallback(run);
+    } else {
+        setTimeout(run, 0);
+    }
+}
 
 export default wordValidator; 
