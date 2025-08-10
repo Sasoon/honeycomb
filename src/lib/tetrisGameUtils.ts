@@ -25,7 +25,7 @@ export function generateRandomLetter(): string {
 }
 
 // Generate letters for the next drop
-export function generateDropLetters(count: number, _round: number): string[] {
+export function generateDropLetters(count: number): string[] {
     const letters: string[] = [];
 
     // For now, just generate regular letters
@@ -49,14 +49,47 @@ export function checkTetrisGameOver(grid: HexCell[]): boolean {
     return filledTopCells.length === topRowCells.length;
 }
 
-// Apply falling letters to the grid
+// Compute the set of empty cells connected to the top via empty adjacency ("air")
+function computeReachableAir(grid: HexCell[]): Set<string> {
+    const air = new Set<string>();
+    const queue: HexCell[] = [];
+
+    // Seed with all empty cells in the top row
+    for (const cell of grid) {
+        if (cell.position.row === 0 && (!cell.letter || !cell.isPlaced)) {
+            air.add(cell.id);
+            queue.push(cell);
+        }
+    }
+
+    // BFS through empty neighbors
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        for (const neighbor of grid) {
+            if (neighbor.id === current.id) continue;
+            if (air.has(neighbor.id)) continue;
+            if (neighbor.letter && neighbor.isPlaced) continue;
+            if (areCellsAdjacent(current, neighbor)) {
+                air.add(neighbor.id);
+                queue.push(neighbor);
+            }
+        }
+    }
+
+    return air;
+}
+
+// Apply falling letters to the grid with contiguous path flood logic
 export function applyFallingTiles(
     grid: HexCell[],
     fallingLetters: string[],
     gridSize: number
-): HexCell[] {
+): { newGrid: HexCell[]; placedCount: number; attemptedCount: number; finalPaths: Record<string, string[]> } {
     // Clone grid
     const newGrid = grid.map(cell => ({ ...cell }));
+
+    // Reset placedThisTurn flags before a new drop
+    newGrid.forEach(c => { c.placedThisTurn = false; });
 
     // Helper function to find cells below a given cell in a hex grid
     const findCellsBelow = (cell: HexCell): HexCell[] => {
@@ -71,13 +104,14 @@ export function applyFallingTiles(
         // The offset for odd rows means columns shift by 0.5
         cellsInRowBelow.forEach(belowCell => {
             const colDiff = Math.abs(belowCell.position.col - cellCol);
-            // Adjacent if column difference is 0 or 0.5
+            // Adjacent if column difference is ~0 or ~0.5
             if (colDiff < 0.6) {
                 possibleCells.push(belowCell);
             }
         });
 
-        return possibleCells.filter(c => !c.letter);
+        // Only return empty cells that are actually adjacent
+        return possibleCells.filter(c => !c.letter && areCellsAdjacent(cell, c));
     };
 
     // First, apply physics-like gravity to all existing tiles
@@ -91,106 +125,137 @@ export function applyFallingTiles(
 
         // Process from bottom to top to avoid conflicts
         for (let row = gridSize - 2; row >= 0; row--) {
-            const cellsInRow = newGrid.filter(cell =>
-                cell.position.row === row && cell.letter && cell.isPlaced
+            const cellsInRow = newGrid
+                .filter(cell => cell.position.row === row && cell.letter && cell.isPlaced && (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn === true);
+
+            cellsInRow.forEach(cell => {
+                const possibleMoves = findCellsBelow(cell);
+
+                // If there are possible moves, pick one (prefer straight down)
+                if (possibleMoves.length > 0) {
+                    // First priority: straight down
+                    const directBelow = possibleMoves.find(c => c.position.col === cell.position.col);
+                    // Second priority: leftmost available position (deterministic)
+                    const targetCell = directBelow || possibleMoves.sort((a, b) => a.position.col - b.position.col)[0];
+
+                    // Move the letter and its placedThisTurn tag
+                    targetCell.letter = cell.letter;
+                    targetCell.isPlaced = true;
+                    // propagate flag
+                    (targetCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn || false;
+                    cell.letter = '';
+                    cell.isPlaced = false;
+                    (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = false;
+                    changesMade = true;
+                }
+            });
+        }
+    }
+
+    // Now apply the new contiguous path flood logic
+    const { placedTiles, finalPaths } = applyFloodTilesWithContiguousPaths(newGrid, fallingLetters, gridSize);
+    const placedCount = placedTiles.length;
+    
+    return { newGrid, placedCount, attemptedCount: fallingLetters.length, finalPaths };
+}
+
+// New contiguous path flood logic
+function applyFloodTilesWithContiguousPaths(
+    grid: HexCell[],
+    fallingLetters: string[],
+    gridSize: number
+): { placedTiles: HexCell[]; finalPaths: Record<string, string[]> } {
+    const finalPaths: Record<string, string[]> = {};
+    const placedTiles: HexCell[] = [];
+    
+    // Get available entry points (top row empty cells)
+    const getAvailableEntryPoints = (): HexCell[] => {
+        const reachableAir = computeReachableAir(grid);
+        return grid
+            .filter(cell => cell.position.row === 0 && !cell.letter && reachableAir.has(cell.id))
+            .sort((a, b) => a.position.col - b.position.col);
+    };
+
+    // Find contiguous path from entry point to final resting position
+    const findContiguousFloodPath = (startCell: HexCell): { path: HexCell[]; finalCell: HexCell | null } => {
+        const path: HexCell[] = [startCell];
+        let currentCell = startCell;
+        const visitedIds = new Set<string>([startCell.id]);
+
+        while (true) {
+            // Find adjacent empty cells that are below current position (downward movement only)
+            const adjacentEmpty = grid.filter(cell => 
+                !cell.letter && 
+                !visitedIds.has(cell.id) &&
+                areCellsAdjacent(currentCell, cell) &&
+                cell.position.row > currentCell.position.row // Only allow downward movement
             );
 
-            cellsInRow.forEach(cell => {
-                const possibleMoves = findCellsBelow(cell);
+            if (adjacentEmpty.length === 0) {
+                // No more downward moves possible - this is our final position
+                return { path, finalCell: currentCell };
+            }
 
-                // If there are possible moves, pick one (preferably straight down)
-                if (possibleMoves.length > 0) {
-                    // Prefer the cell directly below (same column) if available
-                    const directBelow = possibleMoves.find(c => c.position.col === cell.position.col);
-                    const targetCell = directBelow || possibleMoves[0];
+            // For hexagonal tiles, only allow bottom-left or bottom-right movement
+            // Never straight down, never sideways, never upward
+            let nextCell: HexCell;
+            
+            // Randomly choose between available downward-diagonal options
+            nextCell = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)];
 
-                    // Move the letter
-                    targetCell.letter = cell.letter;
-                    targetCell.isPlaced = true;
-                    cell.letter = '';
-                    cell.isPlaced = false;
-                    changesMade = true;
-                }
-            });
+            path.push(nextCell);
+            visitedIds.add(nextCell.id);
+            currentCell = nextCell;
+
+            // Safety check to prevent infinite loops
+            if (path.length > gridSize * 2) {
+                break;
+            }
+        }
+
+        return { path, finalCell: currentCell };
+    };
+
+    // Process each falling letter
+    for (const letter of fallingLetters) {
+        const availableEntries = getAvailableEntryPoints();
+        if (availableEntries.length === 0) {
+            // No more entry points available
+            break;
+        }
+
+        // Randomly select an entry point
+        const entryPoint = availableEntries[Math.floor(Math.random() * availableEntries.length)];
+        
+        // Find the contiguous path from entry to final position
+        const { path, finalCell } = findContiguousFloodPath(entryPoint);
+        
+        if (finalCell) {
+            // Place the letter at the final position
+            finalCell.letter = letter;
+            finalCell.isPlaced = true;
+            (finalCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
+            placedTiles.push(finalCell);
+
+            // Store the path for animation (as cell IDs)
+            finalPaths[finalCell.id] = path.map(cell => cell.id);
+            
+            // Important: Mark the final position as occupied for subsequent tile pathfinding
+            // This ensures that later tiles respect the boundaries set by earlier tiles
         }
     }
 
-    // Now add new falling letters at the top row
-    const topCells = newGrid
-        .filter(cell => cell.position.row === 0)
-        .sort((a, b) => a.position.col - b.position.col);
-
-    // Calculate which columns to drop letters into
-    const availableColumns = topCells.filter(cell => !cell.letter);
-
-    if (availableColumns.length === 0) {
-        // No room for new tiles - game should be over
-        return newGrid;
-    }
-
-    // Distribute letters evenly across columns from left to right
-    const dropCount = Math.min(fallingLetters.length, availableColumns.length);
-
-    // If we have fewer letters than columns, space them out
-    if (dropCount < availableColumns.length) {
-        const spacing = Math.floor(availableColumns.length / dropCount);
-        for (let i = 0; i < dropCount; i++) {
-            const columnIndex = Math.min(i * spacing, availableColumns.length - 1);
-            availableColumns[columnIndex].letter = fallingLetters[i];
-            availableColumns[columnIndex].isPlaced = true;
-        }
-    } else {
-        // Place letters from left to right
-        for (let i = 0; i < dropCount; i++) {
-            availableColumns[i].letter = fallingLetters[i];
-            availableColumns[i].isPlaced = true;
-        }
-    }
-
-    // Apply complete physics simulation until all tiles have settled
-    changesMade = true;
-    iterations = 0;
-
-    while (changesMade && iterations < maxIterations) {
-        changesMade = false;
-        iterations++;
-
-        // Process ALL tiles from bottom to top, left to right for consistent behavior
-        for (let row = gridSize - 2; row >= 0; row--) {
-            const cellsInRow = newGrid.filter(cell =>
-                cell.position.row === row && cell.letter && cell.isPlaced
-            ).sort((a, b) => a.position.col - b.position.col); // Process left to right
-
-            cellsInRow.forEach(cell => {
-                const possibleMoves = findCellsBelow(cell);
-
-                // If there are possible moves, pick one
-                if (possibleMoves.length > 0) {
-                    // Prefer the cell directly below (same column) if available
-                    const directBelow = possibleMoves.find(c => c.position.col === cell.position.col);
-                    const targetCell = directBelow || possibleMoves[0];
-
-                    // Move the letter
-                    targetCell.letter = cell.letter;
-                    targetCell.isPlaced = true;
-                    cell.letter = '';
-                    cell.isPlaced = false;
-                    changesMade = true;
-                }
-            });
-        }
-    }
-
-    return newGrid;
+    return { placedTiles, finalPaths };
 }
 
 // Clear selected tiles and apply gravity
 export function clearTilesAndApplyGravity(
     grid: HexCell[],
     tilesToClear: string[]
-): { newGrid: HexCell[], tilesCleared: number } {
-    let newGrid = grid.map(cell => ({ ...cell }));
+): { newGrid: HexCell[], tilesCleared: number, moveSources: Map<string, string> } {
+    const newGrid = grid.map(cell => ({ ...cell, placedThisTurn: false }));
     let tilesCleared = 0;
+    const moveSources = new Map<string, string>();
 
     // Helper function to find cells below a given cell in a hex grid
     const findCellsBelow = (cell: HexCell): HexCell[] => {
@@ -201,17 +266,15 @@ export function clearTilesAndApplyGravity(
         // Look for cells in the row below
         const cellsInRowBelow = newGrid.filter(c => c.position.row === cellRow + 1);
 
-        // For hex grids with offset pattern:
-        // The offset for odd rows means columns shift by 0.5
         cellsInRowBelow.forEach(belowCell => {
             const colDiff = Math.abs(belowCell.position.col - cellCol);
-            // Adjacent if column difference is 0 or 0.5
             if (colDiff < 0.6) {
                 possibleCells.push(belowCell);
             }
         });
 
-        return possibleCells.filter(c => !c.letter);
+        // Only return empty cells that are actually adjacent
+        return possibleCells.filter(c => !c.letter && areCellsAdjacent(cell, c));
     };
 
     // Clear the selected tiles
@@ -226,8 +289,8 @@ export function clearTilesAndApplyGravity(
 
     // Apply physics-based gravity - tiles fall down to fill gaps
     let changesMade = true;
-    const gridSize = Math.max(...newGrid.map(c => c.position.row)) + 1;
-    const maxIterations = gridSize * 2;
+    const gridSizeLocal = Math.max(...newGrid.map(c => c.position.row)) + 1;
+    const maxIterations = gridSizeLocal * 2;
     let iterations = 0;
 
     while (changesMade && iterations < maxIterations) {
@@ -235,7 +298,7 @@ export function clearTilesAndApplyGravity(
         iterations++;
 
         // Process from bottom to top
-        for (let row = gridSize - 2; row >= 0; row--) {
+        for (let row = gridSizeLocal - 2; row >= 0; row--) {
             const cellsInRow = newGrid.filter(cell =>
                 cell.position.row === row && cell.letter && cell.isPlaced
             );
@@ -243,24 +306,28 @@ export function clearTilesAndApplyGravity(
             cellsInRow.forEach(cell => {
                 const possibleMoves = findCellsBelow(cell);
 
-                // If there are possible moves, pick one (randomly if multiple)
+                // If there are possible moves, pick one deterministically
                 if (possibleMoves.length > 0) {
-                    const targetCell = possibleMoves.length === 1
-                        ? possibleMoves[0]
-                        : possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                    // First priority: straight down
+                    const directBelow = possibleMoves.find(c => c.position.col === cell.position.col);
+                    // Second priority: leftmost available position (deterministic, no randomness)
+                    const targetCell = directBelow || possibleMoves.sort((a, b) => a.position.col - b.position.col)[0];
 
                     // Move the letter
                     targetCell.letter = cell.letter;
                     targetCell.isPlaced = true;
+                    (targetCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true; // Mark as "newly placed" for animation
+                    moveSources.set(targetCell.id, cell.id); // Record the source
                     cell.letter = '';
                     cell.isPlaced = false;
+                    (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = false;
                     changesMade = true;
                 }
             });
         }
     }
 
-    return { newGrid, tilesCleared };
+    return { newGrid, tilesCleared, moveSources };
 }
 
 // Generate starting power cards

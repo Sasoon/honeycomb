@@ -27,7 +27,7 @@ export interface PowerCard {
 }
 
 // Game phases
-export type GamePhase = 'flood' | 'player' | 'gameOver';
+export type GamePhase = 'flood' | 'player' | 'gameOver' | 'gravitySettle';
 
 // Selected tiles for word building
 export interface SelectedTile {
@@ -45,6 +45,8 @@ interface TetrisGameState {
     gridSize: number;
     score: number;
     round: number;
+    gravityMoves?: Map<string, string>; // Optional map of post-score moves (to -> from)
+    floodPaths?: Record<string, string[]>; // Paths for flood tile animations
 
     // Falling tiles mechanics
     nextRows: string[][]; // Letters for upcoming rows
@@ -79,7 +81,6 @@ interface TetrisGameState {
     resetGame: () => void;
 
     // Game flow actions
-    startFloodPhase: () => void;
     startPlayerPhase: () => void;
     endRound: () => void;
 
@@ -88,6 +89,10 @@ interface TetrisGameState {
     deselectTile: (cellId: string) => void;
     clearSelection: () => void;
     submitWord: () => Promise<void>;
+
+    // New minimal actions for one-action-per-turn
+    moveTileOneStep: (sourceCellId: string, targetCellId: string) => void;
+    orbitPivot: (pivotCellId: string, direction?: 'cw' | 'ccw') => void;
 
     // Power card actions
     activatePowerCard: (cardId: string) => void;
@@ -100,8 +105,8 @@ interface TetrisGameState {
 // Initial state
 const initialState: Omit<TetrisGameState,
     'setGameState' | 'initializeGame' | 'resetGame' |
-    'startFloodPhase' | 'startPlayerPhase' | 'endRound' |
-    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' |
+    'startPlayerPhase' | 'endRound' |
+    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
     'activatePowerCard' | 'cancelPowerCard' | 'checkGameOver'
 > = {
     gameInitialized: false,
@@ -146,22 +151,27 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const gridSize = 5; // Default grid size
                 const initialGrid = generateInitialGrid(gridSize);
 
-                // Generate initial letters (about 10-12 letters for start)
-                const initialLetterCount = 10 + Math.floor(Math.random() * 3);
+                // Cap initial letters to bottom 2 rows width
+                const bottomTwoRowCapacity = initialGrid.filter(c => c.position.row >= gridSize - 2).length;
+                const initialLetterCount = Math.min(bottomTwoRowCapacity, 5);
                 const initialLetters: string[] = [];
                 for (let i = 0; i < initialLetterCount; i++) {
                     initialLetters.push(generateRandomLetter());
                 }
 
+                // First settle any pre-placed tiles to the bottom
+                const { newGrid: settledGrid } = clearTilesAndApplyGravity(initialGrid, []);
+
                 // Apply the initial letters as if they were falling from the top
                 // This ensures they end up at the bottom with proper physics
-                const tilesWithLetters = applyFallingTiles(initialGrid, initialLetters, gridSize);
+                const result = applyFallingTiles(settledGrid, initialLetters, gridSize);
+                const tilesWithLetters = result.newGrid;
 
                 const startingPowerCards = generateStartingPowerCards();
 
-                // Generate first drop preview
-                const firstDrop = generateDropLetters(3, 1);
-                const secondDrop = generateDropLetters(3, 1);
+                // Generate first drop preview based on current tilesPerDrop (default 3)
+                const firstDrop = generateDropLetters(3);
+                const secondDrop = generateDropLetters(3);
 
                 set({
                     gameInitialized: true,
@@ -186,46 +196,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 });
             },
 
-            startFloodPhase: () => {
-                const state = get();
-
-                // Use the letters from the preview (nextRows[0])
-                const fallingLetters = state.nextRows[0] || generateDropLetters(state.tilesPerDrop, state.round);
-
-                if (import.meta.env.DEV) {
-                    // eslint-disable-next-line no-console
-                    console.log('Starting flood phase with letters:', fallingLetters);
-                }
-
-                // Apply the falling tiles to the grid - this includes physics simulation
-                const newGrid = applyFallingTiles(state.grid, fallingLetters, state.gridSize);
-
-                // Debug: Check what's in the top row after physics
-                const topRowCells = newGrid.filter(cell => cell.position.row === 0);
-                const tilesInTopRow = topRowCells.filter(cell => cell.letter && cell.isPlaced);
-                if (import.meta.env.DEV) {
-                    // eslint-disable-next-line no-console
-                    console.log('Top row after physics:', tilesInTopRow.length, 'tiles out of', topRowCells.length);
-                }
-
-                // Only check for game over if we couldn't place ANY tiles
-                // This happens when the grid is completely full
-                const isGameOver = fallingLetters.length > 0 && tilesInTopRow.length === topRowCells.length;
-
-                // Shift the preview rows: use existing nextRows[1] as nextRows[0], generate new nextRows[1]
-                const nextDrop1 = state.nextRows[1] || generateDropLetters(state.tilesPerDrop, state.round + 1);
-                const nextDrop2 = generateDropLetters(state.tilesPerDrop, state.round + 1);
-
-                set({
-                    phase: isGameOver ? 'gameOver' : 'flood',
-                    grid: newGrid,
-                    wordsThisRound: [],
-                    nextRows: [nextDrop1, nextDrop2],
-                    selectedTiles: [],
-                    currentWord: ''
-                });
-            },
-
             startPlayerPhase: () => {
                 set({
                     phase: 'player',
@@ -238,18 +208,45 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const state = get();
                 const newRound = state.round + 1;
 
-                // Increase difficulty
-                const newTilesPerDrop = Math.min(state.tilesPerDrop + Math.floor(newRound / 5), 8);
-                const actualTilesPerDrop = state.slowModeRounds > 0 ? Math.max(3, newTilesPerDrop - 2) : newTilesPerDrop;
+                // 1. Consume the current preview for this flood
+                const fallingLetters = state.nextRows[0] || generateDropLetters(state.tilesPerDrop);
 
+                // 2. Apply the flood to the grid
+                const { newGrid, placedCount, finalPaths } = applyFallingTiles(state.grid, fallingLetters, state.gridSize);
+
+                // Loss detection: could not place all falling tiles
+                if (placedCount < fallingLetters.length) {
+                    const totalCells = state.grid.length;
+                    const filledCells = newGrid.filter(c => c.letter && c.isPlaced).length;
+                    const words = state.totalWords;
+                    const points = state.score;
+                    toastService.error(`Game Over — Score: ${points}, Words: ${words}, Board: ${Math.round((filledCells / totalCells) * 100)}%`);
+                    set({ phase: 'gameOver', grid: newGrid });
+                    return;
+                }
+
+                // 3. Determine tilesPerDrop for the *next* round's preview
+                let newTilesPerDrop = state.tilesPerDrop;
+                if (newRound % 3 === 0) {
+                    newTilesPerDrop = Math.min(state.tilesPerDrop + 1, 6);
+                }
+
+                // 4. Generate fresh previews for the upcoming turns using the new count
+                const nextDrop1 = generateDropLetters(newTilesPerDrop);
+                const nextDrop2 = generateDropLetters(newTilesPerDrop);
+
+                // 5. Set the new state all at once
                 set({
                     round: newRound,
-                    tilesPerDrop: actualTilesPerDrop,
-                    slowModeRounds: Math.max(0, state.slowModeRounds - 1),
+                    tilesPerDrop: newTilesPerDrop,
+                    phase: 'flood',
+                    grid: newGrid,
+                    wordsThisRound: [],
+                    nextRows: [nextDrop1, nextDrop2],
+                    selectedTiles: [],
+                    currentWord: '',
+                    floodPaths: finalPaths,
                 });
-
-                // Move to flood phase
-                get().startFloodPhase();
             },
 
             selectTile: (cellId: string) => {
@@ -393,7 +390,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 // Clear the tiles and apply gravity
                 const tilesToClear = state.selectedTiles.map(t => t.cellId);
-                const { newGrid, tilesCleared } = clearTilesAndApplyGravity(state.grid, tilesToClear);
+                const { newGrid, tilesCleared, moveSources } = clearTilesAndApplyGravity(state.grid, tilesToClear);
 
                 // Calculate score
                 const baseScore = state.currentWord.length;
@@ -415,7 +412,9 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     score: state.score + wordScore,
                     tilesCleared: state.tilesCleared + tilesCleared,
                     selectedTiles: [],
-                    currentWord: ''
+                    currentWord: '',
+                    gravityMoves: moveSources,
+                    phase: moveSources.size > 0 ? 'gravitySettle' : 'flood', // Await animation if moves occurred
                 };
 
                 // Add power card if earned
@@ -432,10 +431,101 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 set(updates);
                 toastService.success(`+${wordScore} points!`);
 
-                // Automatically end the player's turn and transition to flood phase (defer to next tick to sync UI)
+                // If no gravity moves, end the round immediately to trigger flood
+                if (moveSources.size === 0) {
+                    setTimeout(() => {
+                        get().endRound();
+                    }, 250);
+                }
+            },
+
+            // New: move one tile to an adjacent empty cell, then end round
+            moveTileOneStep: (sourceCellId: string, targetCellId: string) => {
+                const state = get();
+                if (state.phase !== 'player') return;
+
+                const source = state.grid.find(c => c.id === sourceCellId);
+                const target = state.grid.find(c => c.id === targetCellId);
+                if (!source || !target) return;
+
+                if (!source.letter || !source.isPlaced) {
+                    toastService.error('Select a tile with a letter');
+                    return;
+                }
+                if (target.letter || target.isPlaced) {
+                    toastService.error('Target must be empty');
+                    return;
+                }
+                if (!areCellsAdjacent(source, target)) {
+                    toastService.error('Must move to an adjacent cell');
+                    return;
+                }
+                // Connected constraint: target must have at least one occupied neighbor excluding source
+                const hasConnectedNeighbor = get().grid.some(n => n.id !== source.id && n.letter && n.isPlaced && areCellsAdjacent(target, n));
+                if (!hasConnectedNeighbor) {
+                    toastService.error('Move must stay connected');
+                    return;
+                }
+
+                const newGrid = state.grid.map(cell => {
+                    if (cell.id === source.id) {
+                        return { ...cell, letter: '', isPlaced: false };
+                    }
+                    if (cell.id === target.id) {
+                        return { ...cell, letter: source.letter, isPlaced: true };
+                    }
+                    return cell;
+                });
+
+                set({ grid: newGrid, selectedTiles: [], currentWord: '' });
+
                 setTimeout(() => {
                     get().endRound();
-                }, 250);
+                }, 150);
+            },
+
+            // New: orbit rotate the 6 neighbors around a pivot, then end round
+            orbitPivot: (pivotCellId: string, direction: 'cw' | 'ccw' = 'cw') => {
+                const state = get();
+                if (state.phase !== 'player') return;
+                const pivot = state.grid.find(c => c.id === pivotCellId);
+                if (!pivot) return;
+
+                const p = pivot.position;
+                // Build neighbors by adjacency (distance 1)
+                const neighborCandidates = state.grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
+                // Compute centers in grid coordinates for angular order (use row/col as coarse plane)
+                const neighbors = neighborCandidates
+                    .map(n => ({ n, angle: Math.atan2(n.position.row - p.row, n.position.col - p.col) }))
+                    .sort((a, b) => a.angle - b.angle)
+                    .map(x => x.n);
+
+                if (neighbors.length < 2) {
+                    toastService.error('Not enough neighbors to orbit');
+                    return;
+                }
+
+                const letters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
+                const rotated = direction === 'cw'
+                    ? [letters[letters.length - 1], ...letters.slice(0, letters.length - 1)]
+                    : [...letters.slice(1), letters[0]];
+
+                const neighborIdToNewLetter = new Map<string, string>();
+                neighbors.forEach((n, idx) => neighborIdToNewLetter.set(n.id, rotated[idx]));
+
+                const newGrid = state.grid.map(cell => {
+                    const newLetter = neighborIdToNewLetter.get(cell.id);
+                    if (newLetter !== undefined) {
+                        return { ...cell, letter: newLetter, isPlaced: newLetter !== '' };
+                    }
+                    return cell;
+                });
+
+                set({ grid: newGrid, selectedTiles: [], currentWord: '' });
+
+                setTimeout(() => {
+                    get().endRound();
+                }, 150);
             },
 
             activatePowerCard: (cardId: string) => {

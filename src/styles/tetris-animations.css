@@ -1,0 +1,124 @@
+/* Tetris Game Animation Styles */
+
+/* Smooth transitions for tile overlays */
+.tile-overlay {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Falling tile animation */
+.tile-falling {
+  animation: tileFall 0.3s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+@keyframes tileFall {
+  0% {
+    transform: translateY(-10px) scale(1.1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(0) scale(1.05);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Bounce effect for landing */
+.tile-bounce {
+  animation: tileBounce 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes tileBounce {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-8px) scale(1.1, 0.9);
+  }
+  50% {
+    transform: translateY(0) scale(0.95, 1.05);
+  }
+  70% {
+    transform: translateY(-3px) scale(1.02, 0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Subtle wobble for physics effect */
+.tile-wobble {
+  animation: tileWobble 0.3s ease-out forwards;
+}
+
+@keyframes tileWobble {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-2deg);
+  }
+  75% {
+    transform: rotate(2deg);
+  }
+}
+
+/* Glow effect for new tiles */
+.tile-glow {
+  animation: tileGlow 0.6s ease-out forwards;
+}
+
+@keyframes tileGlow {
+  0% {
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+/* Smooth gravity settling */
+.tile-settling {
+  animation: tileSettle 0.25s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+@keyframes tileSettle {
+  0% {
+    transform: translateY(-5px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* Performance optimizations */
+.hex-grid {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hex-grid__item {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .tile-overlay,
+  .tile-falling,
+  .tile-bounce,
+  .tile-wobble,
+  .tile-glow,
+  .tile-settling {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,10 +1,15 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
-import HexGrid from '../components/HexGrid';
+import HexGrid, { HexCell } from '../components/HexGrid';
+import { areCellsAdjacent } from '../lib/tetrisGameUtils';
+import GameOverModal from '../components/GameOverModal';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
+// Flood animation timing constants
+const FLOOD_STEP_MS = 100; // movement time between centers (ms)
+const FLOOD_PAUSE_MS = 250; // dwell time at each slot (ms)
 
 function mapCenters(container: HTMLElement): Map<string, { x: number; y: number; row: number; col: number }> {
   const result = new Map<string, { x: number; y: number; row: number; col: number }>();
@@ -30,50 +35,200 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   return { w: r.width, h: r.height };
 }
 
+// Simulate tile settling to find actual landing positions (unused)
+/* function simulateTileSettling(
+  startingGrid: Array<{ position: { row: number; col: number }; letter?: string; isPlaced?: boolean }>,
+  newTiles: Array<{ letter: string; startCol: number }>
+): Array<{ letter: string; finalRow: number; finalCol: number; path: Array<{ row: number; col: number }> }> {
+  // Clone grid for simulation
+  const simGrid = startingGrid.map(cell => ({ ...cell }));
+  const results: Array<{ letter: string; finalRow: number; finalCol: number; path: Array<{ row: number; col: number }> }> = [];
+  
+  // Helper to check if a position is empty
+  const isEmpty = (row: number, col: number) => {
+    const tolerance = 0.1;
+    return !simGrid.some(cell => 
+      Math.abs(cell.position.row - row) < tolerance && 
+      Math.abs(cell.position.col - col) < tolerance && 
+      cell.letter && cell.isPlaced
+    );
+  };
+  
+  // Helper to find cells below (using same logic as game)
+  const findCellsBelow = (row: number, col: number) => {
+    const cellsInRowBelow = simGrid.filter(c => c.position.row === row + 1);
+    return cellsInRowBelow.filter(belowCell => {
+      const colDiff = Math.abs(belowCell.position.col - col);
+      return colDiff < 0.6 && isEmpty(belowCell.position.row, belowCell.position.col);
+    });
+  };
+  
+  // Place and settle each tile
+  newTiles.forEach(tile => {
+    const startRow = 0;
+    const startCol = tile.startCol;
+    const path: Array<{ row: number; col: number }> = [{ row: startRow, col: startCol }];
+    
+    let currentRow = startRow;
+    let currentCol = startCol;
+    
+    // Settle the tile step by step
+    let canFall = true;
+    while (canFall) {
+      const cellsBelow = findCellsBelow(currentRow, currentCol);
+      
+      if (cellsBelow.length > 0) {
+        // Prefer straight down, then leftmost
+        const directBelow = cellsBelow.find(c => Math.abs(c.position.col - currentCol) < 0.1);
+        const targetCell = directBelow || cellsBelow.sort((a, b) => a.position.col - b.position.col)[0];
+        
+        currentRow = targetCell.position.row;
+        currentCol = targetCell.position.col;
+        path.push({ row: currentRow, col: currentCol });
+      } else {
+        canFall = false;
+      }
+    }
+    
+    // Mark this position as occupied for next tiles
+    const occupiedCell = simGrid.find(c => 
+      Math.abs(c.position.row - currentRow) < 0.1 && 
+      Math.abs(c.position.col - currentCol) < 0.1
+    );
+    if (occupiedCell) {
+      occupiedCell.letter = tile.letter;
+      occupiedCell.isPlaced = true;
+    }
+    
+    results.push({
+      letter: tile.letter,
+      finalRow: currentRow,
+      finalCol: currentCol,
+      path
+    });
+  });
+  
+  return results;
+}*/
+
 // Compute a visual path of centers by walking rows toward the target and choosing the cell whose x is closest to the target x in each row
-function computeCenterPath(
-  grid: Array<{ position: { row: number; col: number } }>,
+// The path stops when it encounters a blockage (no valid adjacent empty cells)
+// Currently unused - replaced by settling simulation
+/* function computeCenterPath(
+  grid: Array<{ position: { row: number; col: number }; letter?: string; isPlaced?: boolean }>,
   centers: Map<string, { x: number; y: number; row: number; col: number }>,
   startRow: number,
-  target: { row: number; col: number }
+  target: { row: number; col: number },
+  occupiedPreFlood: Set<string>
 ): Array<{ row: number; col: number; center: { x: number; y: number } }> {
+  type CenterCandidate = { key: string; row: number; col: number; center: { x: number; y: number } };
   const rows = Array.from(new Set(grid.map(c => c.position.row))).sort((a, b) => a - b);
   const targetCenter = centers.get(`${target.row},${target.col}`);
-  if (!targetCenter) return [];
+  if (!targetCenter) {
+    console.warn(`[PATH-DEBUG] No center found for target (${target.row}, ${target.col})`);
+    return [];
+  }
   const path: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
-  for (let r of rows) {
+  
+  const isDebug = typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugAnim') === '1';
+  if (isDebug) {
+    console.log(`[PATH-DEBUG] Computing path to target (${target.row}, ${target.col})`);
+  }
+
+  let previous: { row: number; col: number } | null = null;
+  for (const r of rows) {
     if (r < startRow) continue;
     const rowCells = grid.filter(c => c.position.row === r);
-    const candidates = rowCells
-      .map(c => ({ key: `${c.position.row},${c.position.col}`, row: c.position.row, col: c.position.col }))
-      .map(k => ({ ...k, center: centers.get(`${k.row},${k.col}`) }))
-      .filter(k => !!k.center) as Array<{ key: string; row: number; col: number; center: { x: number; y: number } }>;
-    if (candidates.length === 0) continue;
-    let best = candidates[0];
-    let bestDx = Math.abs((best.center.x) - targetCenter.x);
-    for (const c of candidates) {
+    const rawCandidates: CenterCandidate[] = [];
+    for (const rc of rowCells) {
+      const ctr = centers.get(`${rc.position.row},${rc.position.col}`);
+      if (!ctr) continue;
+      rawCandidates.push({
+        key: `${rc.position.row},${rc.position.col}`,
+        row: rc.position.row,
+        col: rc.position.col,
+        center: { x: ctr.x, y: ctr.y },
+      });
+    }
+    if (rawCandidates.length === 0) continue;
+
+    // Restrict to adjacency with previous selection to ensure contiguous steps
+    const candidates: CenterCandidate[] = previous
+      ? rawCandidates.filter(c => areCellsAdjacent(
+          { position: { row: previous!.row, col: previous!.col } } as any,
+          { position: { row: c.row, col: c.col } } as any
+        ))
+      : rawCandidates;
+
+    // Filter out occupied cells (except the final target if we've reached it)
+    const validCandidates = candidates.filter(c => {
+      const key = `${c.row},${c.col}`;
+      const isFinal = c.row === target.row && c.col === target.col;
+      // Allow the final target even if occupied, but only if we can reach it
+      return !occupiedPreFlood.has(key) || (isFinal && r === target.row);
+    });
+
+    // If no valid candidates, we're blocked - stop here
+    if (validCandidates.length === 0) {
+      if (isDebug) {
+        console.log(`[PATH-DEBUG] Blocked at row ${r}, no valid adjacent cells. Path so far:`, 
+          path.map(p => `(${p.row},${p.col})`).join(' -> '));
+        console.log(`[PATH-DEBUG] Raw candidates:`, rawCandidates.map(c => `(${c.row},${c.col})`));
+        console.log(`[PATH-DEBUG] Adjacent candidates:`, candidates.map(c => `(${c.row},${c.col})`));
+        console.log(`[PATH-DEBUG] Occupied positions:`, Array.from(occupiedPreFlood));
+      }
+      return path;
+    }
+
+    // Prefer the closest x to target from valid candidates
+    let best: CenterCandidate | null = null;
+    let bestDx = Infinity;
+    for (const c of validCandidates) {
       const dx = Math.abs(c.center.x - targetCenter.x);
       if (dx < bestDx) { best = c; bestDx = dx; }
     }
+    
+    if (!best) {
+      if (isDebug) console.log(`[PATH-DEBUG] No best candidate found at row ${r}`);
+      return path;
+    }
+    
     path.push({ row: best.row, col: best.col, center: { x: best.center.x, y: best.center.y } });
-    if (r === target.row) break;
+    previous = { row: best.row, col: best.col };
+    
+    if (isDebug) {
+      console.log(`[PATH-DEBUG] Added step (${best.row}, ${best.col}) to path`);
+    }
+    
+    // Stop if we've reached a position that matches our actual settling point
+    const bestKey = `${best.row},${best.col}`;
+    if (occupiedPreFlood.has(bestKey) && best.row === target.row && best.col === target.col) {
+      if (isDebug) console.log(`[PATH-DEBUG] Reached final target at (${best.row}, ${best.col})`);
+      break;
+    }
   }
   return path;
-}
+}*/
 
-type Overlay = { id: string; letter: string; x: number; y: number; pulse: number; isFinal?: boolean };
+type Overlay = { id: string; letter: string; x: number; y: number; pulse: number; isFinal?: boolean; rX?: number; rY?: number };
 
-type DebugDot = { x: number; y: number; key: string };
+type MoveTarget = { cellId: string; x: number; y: number };
 
-const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; }) => {
+type FxOverlay = { key: string; letter: string; x: number; y: number };
+
+// (no-op placeholder removed)
+
+const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [previousGrid, setPreviousGrid] = useState<typeof grid>([]);
   const lastPlayerGridRef = useRef<typeof previousGrid>([]);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [fxOverlays, setFxOverlays] = useState<FxOverlay[]>([]);
   const timersRef = useRef<number[]>([]);
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
-  const [debugDots, setDebugDots] = useState<DebugDot[]>([]);
+  const [moveTargets, setMoveTargets] = useState<MoveTarget[]>([]);
+  const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const {
     gameInitialized,
@@ -84,7 +239,6 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
     selectedTiles,
     currentWord,
     isWordValid,
-    powerCards: _powerCards,
     wordsThisRound,
     nextRows,
     previewLevel,
@@ -92,10 +246,14 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
     selectTile,
     clearSelection,
     submitWord,
-    endRound: _endRound,
+    endRound,
     startPlayerPhase,
     resetGame,
-    gridSize
+    gridSize,
+    moveTileOneStep,
+    orbitPivot,
+    gravityMoves,
+    floodPaths,
   } = useTetrisGameStore();
 
   useEffect(() => { if (!gameInitialized) initializeGame(); }, [gameInitialized, initializeGame]);
@@ -103,8 +261,45 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
     if (phase === 'player') {
       setPreviousGrid(grid);
       lastPlayerGridRef.current = grid;
+      // Reset contextual UI state at start of player phase
+      setMoveTargets([]);
+      setOrbitAnchor(null);
+      setFxOverlays([]);
     }
   }, [phase, grid]);
+
+  // Compute contextual move targets and orbit anchor when exactly one tile is selected
+  useEffect(() => {
+    if (phase !== 'player') return;
+    const container = containerRef.current; if (!container) return;
+    if (selectedTiles.length === 1) {
+      const centers = mapCenters(container);
+      const selectedId = selectedTiles[0].cellId;
+      const selectedCell = grid.find(c => c.id === selectedId);
+      if (!selectedCell) return;
+      // Orbit anchor at selected cell center
+      const sCenter = centers.get(`${selectedCell.position.row},${selectedCell.position.col}`);
+      setOrbitAnchor(sCenter ? { x: sCenter.x, y: sCenter.y } : null);
+      // Compute adjacent empty targets using the same adjacency logic as selection/scoring
+      const targets: MoveTarget[] = grid
+        .filter(c => c.id !== selectedCell.id && areCellsAdjacent(selectedCell, c))
+        .filter(c => !c.letter || !c.isPlaced)
+        .filter(c => {
+          // Must remain connected: at least one occupied neighbor other than the source
+          return grid.some(n => n.id !== selectedCell.id && n.letter && n.isPlaced && areCellsAdjacent(c, n));
+        })
+        .map(c => {
+          const ctr = centers.get(`${c.position.row},${c.position.col}`);
+          return ctr ? { cellId: c.id, x: ctr.x, y: ctr.y } : null;
+        })
+        .filter((t): t is MoveTarget => !!t);
+      setMoveTargets(targets);
+    } else {
+      // Hide contextual UI when multi-select or none
+      setMoveTargets([]);
+      setOrbitAnchor(null);
+    }
+  }, [selectedTiles, grid, phase]);
 
   // Keep cell size in sync (resize)
   useEffect(() => {
@@ -117,88 +312,415 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
   }, []);
 
   useEffect(() => {
-    timersRef.current.forEach(t => clearTimeout(t));
+    timersRef.current.forEach(t => window.clearTimeout(t));
     timersRef.current = [];
 
-    if (phase !== 'flood') return;
     const container = containerRef.current; if (!container) return;
-
     const centers = mapCenters(container);
 
-    const baseline = previousGrid.length > 0 ? previousGrid : lastPlayerGridRef.current;
+    let animationDoneSignal = () => {};
 
-    const newlyFilled = grid.filter(cell => {
-      const prev = baseline.find(p => p.id === cell.id);
-      return cell.letter && cell.isPlaced && prev && !prev.letter;
-    });
+    if (phase === 'gravitySettle' && gravityMoves && gravityMoves.size > 0) {
+        const newlySettled = grid.filter(cell => cell.placedThisTurn);
+        setHiddenCellIds(newlySettled.map(c => c.id));
+        let maxDelay = 0;
 
-    setHiddenCellIds(newlyFilled.map(c => c.id));
+        newlySettled.forEach((cell, idx) => {
+            const sourceId = gravityMoves.get(cell.id);
+            const sourceCell = previousGrid.find(c => c.id === sourceId);
+            if (!sourceCell) return;
 
-    const stepMs = 220;
-    const showDebug = typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugPath') === '1';
-    if (showDebug) setDebugDots([]);
+            const from = centers.get(`${sourceCell.position.row},${sourceCell.position.col}`);
+            const to = centers.get(`${cell.position.row},${cell.position.col}`);
+            if (!from || !to) return;
 
-    newlyFilled.forEach((cell, idx) => {
-      const col = cell.position.col;
-      const columnSlots = grid
-        .filter(c => c.position.col === col)
-        .map(c => c.position.row);
-      const startRow = Math.min(...columnSlots);
+            const ovKey = `gset-${cell.id}-${Date.now()}`;
+            setFxOverlays(prev => [...prev, { key: ovKey, letter: cell.letter, x: from.x, y: from.y }]);
 
-      // Build path of centers row-by-row toward targetX
-      const pathCenters = computeCenterPath(grid, centers, startRow, { row: cell.position.row, col: cell.position.col });
-      if (pathCenters.length === 0) return;
+            const animT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.map(o => o.key === ovKey ? { ...o, x: to.x, y: to.y } : o));
+            }, 90 + idx * 60);
+            timersRef.current.push(animT);
 
-      if (showDebug) setDebugDots(prev => [...prev, ...pathCenters.map((pc, i) => ({ x: pc.center.x, y: pc.center.y, key: `${cell.id}-c-${i}` }))]);
+            const finalDelay = 320 + idx * 60;
+            maxDelay = Math.max(maxDelay, finalDelay);
 
-      const initial = pathCenters[0].center;
-      setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y - cellSize.h * 1.2, pulse: 0 }]);
+            const doneT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
+                setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
+            }, finalDelay);
+            timersRef.current.push(doneT);
+        });
 
-      const cascadeDelay = idx * 100;
-      pathCenters.forEach((pc, i) => {
-        const t = window.setTimeout(() => {
-          setOverlays(prev => prev.map(o => (
-            o.id === cell.id ? { ...o, x: pc.center.x, y: pc.center.y, pulse: o.pulse + 1 } : o
-          )));
-        }, cascadeDelay + i * stepMs);
-        timersRef.current.push(t);
-      });
+        animationDoneSignal = () => {
+          const advanceT = window.setTimeout(() => {
+            endRound();
+          }, maxDelay + 80);
+          timersRef.current.push(advanceT);
+        };
+    } else if (phase === 'flood') {
+        const newlyFilled = grid
+          .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
+          .sort((a, b) => (a.position.row - b.position.row) || (a.position.col - b.position.col));
+        // Only hide tiles we will animate; leave others visible to avoid disappearing tiles
+        setHiddenCellIds(newlyFilled.map(c => c.id));
 
-      const finalBounceDelay = cascadeDelay + pathCenters.length * stepMs;
-      const bounceT = window.setTimeout(() => {
-        setOverlays(prev => prev.map(o => (
-          o.id === cell.id ? { ...o, isFinal: true, pulse: o.pulse + 1 } : o
-        )));
-      }, finalBounceDelay);
-      timersRef.current.push(bounceT);
+        const debugAnim = typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugAnim') === '1';
+        const tNow = () => (typeof performance !== 'undefined' ? Math.round(performance.now()) : Date.now());
 
-      const doneT = window.setTimeout(() => {
-        setOverlays(prev => prev.filter(o => o.id !== cell.id));
-        setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
-      }, finalBounceDelay + 180);
-      timersRef.current.push(doneT);
-    });
+        // Animation constants
+        const stepMs = FLOOD_STEP_MS; // duration to move between centers
+        const pauseMs = FLOOD_PAUSE_MS;  // dwell time at each slot
+        const perStep = stepMs + pauseMs;
+
+        // Use the provided flood paths from the new flood logic
+        const centers = mapCenters(containerRef.current!);
+        
+        if (debugAnim) {
+          console.log('[FLOOD-DEBUG] Starting synchronized animation for', newlyFilled.length, 'tiles');
+          console.log('[FLOOD-DEBUG] Flood paths available:', Object.keys(floodPaths || {}).length);
+        }
+        
+        const tilePaths = newlyFilled.map(cell => {
+          // Use the exact path from the flood logic
+          const pathIds = floodPaths && floodPaths[cell.id];
+          
+          if (!pathIds || pathIds.length === 0) {
+            console.warn(`[FLOOD-ERROR] No path found for tile ${cell.id} in flood paths`);
+            return null;
+          }
+          
+          // Convert path IDs to centers, ensuring we follow the exact flood path
+          const pathCenters: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
+          
+          for (const pathId of pathIds) {
+            const pathCell = grid.find(g => g.id === pathId);
+            if (!pathCell) {
+              console.warn(`[FLOOD-ERROR] Path cell ${pathId} not found in grid`);
+              continue;
+            }
+            
+            const center = centers.get(`${pathCell.position.row},${pathCell.position.col}`);
+            if (!center) {
+              console.warn(`[FLOOD-ERROR] Center not found for path cell (${pathCell.position.row},${pathCell.position.col})`);
+              continue;
+            }
+            
+            pathCenters.push({
+              row: pathCell.position.row,
+              col: pathCell.position.col,
+              center
+            });
+          }
+          
+          if (pathCenters.length === 0) {
+            console.warn(`[FLOOD-ERROR] No valid path centers for tile ${cell.id}`);
+            return null;
+          }
+          
+          if (debugAnim) {
+            console.log(`[FLOOD-DEBUG] Synchronized path for ${cell.id}: ${pathCenters.map(p => `(${p.row},${p.col})`).join(' -> ')}`);
+          }
+          
+          return { cell, pathCenters };
+        }).filter(tp => tp !== null);
+
+        // Improved collision detection system that respects contiguous paths
+        const occupancy = new Map<string, Set<number>>(); // slotKey -> set of timeIndices (stepIndex + offset)
+        const tileOffsets = new Map<string, number>();
+        
+        // Sort tile paths by path length and starting position for better collision resolution
+        const sortedTilePaths = [...tilePaths].sort((a, b) => {
+          // Prioritize shorter paths first (they're more constrained)
+          const lengthDiff = a.pathCenters.length - b.pathCenters.length;
+          if (lengthDiff !== 0) return lengthDiff;
+          
+          // Then by starting column (left to right)
+          return a.pathCenters[0].col - b.pathCenters[0].col;
+        });
+        
+        sortedTilePaths.forEach(tp => {
+          let offset = 0;
+          const maxOffset = 10; // Limit search to prevent infinite loops
+          
+          while (offset < maxOffset) {
+            let conflict = false;
+            
+            // Check for conflicts along the entire path
+            for (let i = 0; i < tp.pathCenters.length; i++) {
+              const pc = tp.pathCenters[i];
+              const key = `${pc.row},${pc.col}`;
+              const timeIndex = i + offset;
+              const set = occupancy.get(key);
+              
+              if (set && set.has(timeIndex)) {
+                conflict = true;
+                break;
+              }
+              
+              // Additional check: ensure contiguous movement (no skipping over occupied slots)
+              if (i > 0) {
+                const prevPc = tp.pathCenters[i - 1];
+                const prevKey = `${prevPc.row},${prevPc.col}`;
+                const prevSet = occupancy.get(prevKey);
+                const prevTimeIndex = (i - 1) + offset;
+                
+                // Ensure previous step is clear before moving to current
+                if (prevSet && prevSet.has(prevTimeIndex + 1)) {
+                  conflict = true;
+                  break;
+                }
+              }
+            }
+            
+            if (!conflict) {
+              // Reserve all positions in the path
+              for (let i = 0; i < tp.pathCenters.length; i++) {
+                const pc = tp.pathCenters[i];
+                const key = `${pc.row},${pc.col}`;
+                const timeIndex = i + offset;
+                
+                if (!occupancy.has(key)) occupancy.set(key, new Set<number>());
+                occupancy.get(key)!.add(timeIndex);
+                
+                // Also reserve a buffer time to prevent phasing
+                occupancy.get(key)!.add(timeIndex + 1);
+              }
+              
+              tileOffsets.set(tp.cell.id, offset);
+              break;
+            }
+            
+            offset++;
+          }
+          
+          // Fallback: if no valid offset found, use the maximum offset
+          if (offset >= maxOffset) {
+            tileOffsets.set(tp.cell.id, maxOffset);
+          }
+        });
+
+        let maxFinalDelay = 0;
+
+        if (debugAnim) {
+          console.log('[FLD] START scheduling', {
+            tiles: tilePaths.map(tp => ({ id: tp.cell.id, target: tp.cell.position, offset: tileOffsets.get(tp.cell.id) }))
+          });
+        }
+
+        // Use the sorted paths for consistent animation ordering
+        sortedTilePaths.forEach(({ cell, pathCenters }) => {
+            const initial = pathCenters[0].center;
+            setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y - cellSize.h * 1.2, pulse: 0, rX: 0, rY: 0 }]);
+
+            const offset = tileOffsets.get(cell.id) ?? 0;
+            const baseDelay = offset * perStep;
+            
+            if (debugAnim) {
+              console.log(`[FLOOD-DEBUG] Animating tile ${cell.id} with offset ${offset} along ${pathCenters.length} steps`);
+            }
+
+            // Animate each step of the contiguous path with consistent timing
+            pathCenters.forEach((pc, stepIndex) => {
+                const stepDelay = baseDelay + stepIndex * perStep;
+                
+                const arriveT = window.setTimeout(() => {
+                    if (debugAnim) {
+                      console.log(`[FLOOD-STEP] Tile ${cell.id} step ${stepIndex} at (${pc.row},${pc.col})`);
+                    }
+                    
+                    // Compute realistic recoil based on movement direction
+                    let rX = 0, rY = 0;
+                    if (stepIndex > 0) {
+                        const prevPc = pathCenters[stepIndex - 1];
+                        const dx = pc.center.x - prevPc.center.x;
+                        const dy = pc.center.y - prevPc.center.y;
+                        const mag = Math.max(1, Math.hypot(dx, dy));
+                        
+                        // Scale recoil based on cell size
+                        const ampX = Math.min(12, cellSize.w * 0.1);
+                        const ampY = Math.min(12, cellSize.h * 0.1);
+                        rX = -dx / mag * ampX;
+                        rY = -dy / mag * ampY;
+                    }
+                    
+                    setOverlays(prev => prev.map(o => 
+                        o.id === cell.id 
+                          ? { ...o, x: pc.center.x, y: pc.center.y, pulse: o.pulse + 1, rX, rY }
+                          : o
+                    ));
+                }, stepDelay);
+                timersRef.current.push(arriveT);
+            });
+
+            // Final impact animation
+            const finalStepDelay = baseDelay + (pathCenters.length - 1) * perStep;
+            const finalBounceDelay = finalStepDelay + stepMs;
+            
+            if (finalBounceDelay > maxFinalDelay) maxFinalDelay = finalBounceDelay;
+            
+            const bounceT = window.setTimeout(() => {
+                if (debugAnim) console.log(`[FLOOD-FINAL] Tile ${cell.id} final bounce`);
+                setOverlays(prev => prev.map(o => 
+                    o.id === cell.id 
+                      ? { ...o, isFinal: true, pulse: o.pulse + 1, rX: 0, rY: 0 } 
+                      : o
+                ));
+            }, finalBounceDelay);
+            timersRef.current.push(bounceT);
+
+            // Clean up animation
+            const cleanupDelay = finalBounceDelay + 100;
+            const doneT = window.setTimeout(() => {
+                if (debugAnim) {
+                  const finalPos = pathCenters[pathCenters.length - 1];
+                  console.log(`[FLOOD-DONE] Animation completed for tile ${cell.id} at (${finalPos.row}, ${finalPos.col})`);
+                }
+                
+                setOverlays(prev => prev.filter(o => o.id !== cell.id));
+                setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
+            }, cleanupDelay);
+            timersRef.current.push(doneT);
+        });
+        
+        animationDoneSignal = () => {
+            const advanceDelay = tilePaths.length === 0 ? 120 : maxFinalDelay + 160;
+            const advanceT = window.setTimeout(() => {
+                if (debugAnim) console.log('[FLD] ADVANCE', { at: tNow() });
+                startPlayerPhase();
+            }, advanceDelay);
+            timersRef.current.push(advanceT);
+        };
+    }
+    
+    animationDoneSignal();
 
     return () => {
-      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current.forEach(t => window.clearTimeout(t));
       timersRef.current = [];
     };
-  }, [phase, grid, previousGrid, cellSize.h]);
+  }, [phase, grid, previousGrid, cellSize.h, startPlayerPhase, gravityMoves, floodPaths, endRound]);
 
   const hasSelection = currentWord.length > 0;
   const validationState = currentWord.length >= 3 ? isWordValid : undefined;
 
+  // Default selection for words
+  const handleCellClick = useCallback((cell: HexCell) => {
+    if (phase !== 'player') return;
+    selectTile(cell.id);
+  }, [phase, selectTile]);
+
+  // Animated move: slide letter from source to target, hide letters during animation, then commit move
+  const handleMoveTo = useCallback((sourceCellId: string, targetCellId: string) => {
+    const container = containerRef.current; if (!container) return;
+    const centers = mapCenters(container);
+    const source = grid.find(c => c.id === sourceCellId);
+    const target = grid.find(c => c.id === targetCellId);
+    if (!source || !target) return;
+    const sCenter = centers.get(`${source.position.row},${source.position.col}`);
+    const tCenter = centers.get(`${target.position.row},${target.position.col}`);
+    if (!sCenter || !tCenter) return;
+
+    // Hide source letter during animation
+    setHiddenCellIds(prev => Array.from(new Set([...prev, sourceCellId])));
+
+    // Spawn overlay at source and animate to target
+    const ovKey = `mvfx-${sourceCellId}-${targetCellId}-${Date.now()}`;
+    setFxOverlays(prev => [...prev, { key: ovKey, letter: source.letter, x: sCenter.x, y: sCenter.y }]);
+    // Animate
+    const t = window.setTimeout(() => {
+      setFxOverlays(prev => prev.map(o => o.key === ovKey ? { ...o, x: tCenter.x, y: tCenter.y } : o));
+    }, 0);
+    timersRef.current.push(t);
+
+    // Commit move shortly after
+    const commitT = window.setTimeout(() => {
+      moveTileOneStep(sourceCellId, targetCellId);
+      setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
+      setHiddenCellIds(prev => prev.filter(id => id !== sourceCellId));
+    }, 140);
+    timersRef.current.push(commitT);
+  }, [grid, moveTileOneStep]);
+
+  // Animated orbit: slide neighbor letters to next positions, hide during animation, then commit orbit
+  const handleOrbit = useCallback((pivotCellId: string, dir: 'cw' | 'ccw') => {
+    const container = containerRef.current; if (!container) return;
+    const centers = mapCenters(container);
+    const pivot = grid.find(c => c.id === pivotCellId); if (!pivot) return;
+
+    // Build neighbors by adjacency and sort by angle around pivot for stable order
+    const neighborTuples = grid
+      .filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot))
+      .map(cell => ({ cell, center: centers.get(`${cell.position.row},${cell.position.col}`) }))
+      .filter((x): x is { cell: typeof grid[number]; center: { x: number; y: number; row: number; col: number } } => !!x.center);
+
+    const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
+    if (!pivotCenter || neighborTuples.length < 2) return;
+
+    const neighbors = neighborTuples
+      .map(x => ({ ...x, angle: Math.atan2(x.center.y - pivotCenter.y, x.center.x - pivotCenter.x) }))
+      .sort((a, b) => a.angle - b.angle);
+
+    // Letters and targets by index
+    const letters = neighbors.map(n => (n.cell.letter && n.cell.isPlaced ? n.cell.letter : ''));
+    const targets = neighbors.map(n => ({ x: n.center.x, y: n.center.y }));
+
+    // Hide shown letters while animating
+    setHiddenCellIds(prev => Array.from(new Set([...prev, ...neighbors.map(n => n.cell.id)])));
+
+    // Create overlay per letter index and remember key at that index
+    const keysByIndex: Array<string | null> = neighbors.map(() => null);
+    neighbors.forEach((n, idx) => {
+      const letter = letters[idx];
+      if (!letter) return;
+      const key = `orfx-${n.cell.id}-${Date.now()}`;
+      keysByIndex[idx] = key;
+      setFxOverlays(prev => [...prev, { key, letter, x: n.center.x, y: n.center.y }]);
+    });
+
+    // Animate overlays to next angular position; skip empty slots safely
+    const animT = window.setTimeout(() => {
+      neighbors.forEach((_n, idx) => {
+        const letter = letters[idx];
+        if (!letter) return;
+        const nextIdx = dir === 'cw' ? (idx + 1) % neighbors.length : (idx - 1 + neighbors.length) % neighbors.length;
+        const tCtr = targets[nextIdx];
+        const key = keysByIndex[idx];
+        if (!key || !tCtr) return;
+        setFxOverlays(prev => prev.map(o => o.key === key ? { ...o, x: tCtr.x, y: tCtr.y } : o));
+      });
+    }, 0);
+    timersRef.current.push(animT);
+
+    // Commit orbit shortly after
+    const commitT = window.setTimeout(() => {
+      orbitPivot(pivotCellId, dir);
+      // Clear overlays and unhide
+      setFxOverlays(prev => prev.filter(o => !o.key.startsWith('orfx-')));
+      setHiddenCellIds(prev => prev.filter(id => !neighbors.some(n => n.cell.id === id)));
+    }, 180);
+    timersRef.current.push(commitT);
+  }, [grid, orbitPivot]);
+
   const handleRestart = () => {
     // Stop any ongoing animations
-    timersRef.current.forEach(t => clearTimeout(t));
+    timersRef.current.forEach(t => window.clearTimeout(t));
     timersRef.current = [];
     setOverlays([]);
+    setFxOverlays([]);
     setHiddenCellIds([]);
-    setDebugDots([]);
-    setPreviousGrid([] as any);
+    setPreviousGrid([]);
     resetGame();
     initializeGame();
   };
+  
+  const toggleDebugMode = () => {
+    const current = localStorage.getItem('tetrisDebugAnim') === '1';
+    localStorage.setItem('tetrisDebugAnim', current ? '0' : '1');
+    console.log(`[DEBUG] Flood animation debug ${current ? 'DISABLED' : 'ENABLED'}`);
+  };
+
+  const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
     <div className="game-container min-h-screen bg-amber-50">
@@ -244,45 +766,138 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
                 {overlays.map(ov => (
                   <motion.div
                     key={ov.id}
-                    initial={{ opacity: 0, scale: 0.9, x: ov.x - cellSize.w / 2, y: ov.y - cellSize.h / 2 }}
+                    initial={{ opacity: 0, scale: 0.92, x: ov.x - cellSize.w / 2, y: ov.y - cellSize.h / 2 }}
                     animate={{ opacity: 1, scale: 1, x: ov.x - cellSize.w / 2, y: ov.y - cellSize.h / 2 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18, ease: 'easeInOut' }}
+                    transition={{ type: 'tween', duration: FLOOD_STEP_MS / 1000, ease: 'linear' }}
                     style={{ position: 'absolute', left: 0, top: 0 }}
                   >
                     <motion.div
                       key={ov.pulse}
                       initial={false}
-                      animate={{ scale: ov.isFinal ? [1, 1.08, 1] : [1, 1.06, 1] }}
-                      transition={{ duration: ov.isFinal ? 0.18 : 0.14, ease: 'easeOut' }}
-                      className="flex items-center justify-center"
+                      animate={{ 
+                        // Squash/stretch on impact for weight
+                        scaleX: ov.isFinal ? [1, 1.08, 1] : [1, 1.035, 1],
+                        scaleY: ov.isFinal ? [1, 0.92, 1] : [1, 0.975, 1],
+                        opacity: ov.isFinal ? [0.92, 1] : 0.96,
+                        boxShadow: ov.isFinal 
+                          ? ['0 14px 26px rgba(0,0,0,0.16)','0 6px 14px rgba(0,0,0,0.08)','0 0 0 rgba(0,0,0,0)'] 
+                          : '0 10px 20px rgba(0,0,0,0.12)'
+                      }}
+                      transition={{ duration: ov.isFinal ? 0.15 : 0.2, ease: 'easeOut' }}
+                      className="flex items-center justify-center relative"
                       style={{
                         width: `${cellSize.w}px`,
                         height: `${cellSize.h}px`,
                         clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                        background: '#eef2ff',
-                        border: '2px solid #a78bfa',
-                        borderRadius: 8,
-                        boxShadow: ov.isFinal ? '0 10px 22px rgba(99,102,241,0.38)' : '0 8px 18px rgba(99,102,241,0.35)'
+                        background: 'rgba(229,231,235,0.96)', // slightly darker than before
+                        borderRadius: 8
                       }}
                     >
-                      <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{ov.letter}</span>
+                      {/* Recoil inner wrapper */}
+                      <motion.div
+                        key={`recoil-${ov.pulse}`}
+                        animate={{ x: [0, ov.rX || 0, 0], y: [0, ov.rY || 0, 0] }}
+                        transition={{ type: 'tween', duration: 0.26, ease: [0.2, 0.7, 0.2, 1], times: [0, 0.45, 1] }}
+                        className="flex items-center justify-center w-full h-full"
+                      >
+                        <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{ov.letter}</span>
+                      </motion.div>
                     </motion.div>
                   </motion.div>
                 ))}
               </AnimatePresence>
-
-              {/* Optional debug dots for path centers */}
-              {typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugPath') === '1' && debugDots.map(d => (
-                <div key={d.key} style={{ position: 'absolute', left: d.x, top: d.y, transform: 'translate(-50%, -50%)', width: 6, height: 6, borderRadius: 6, background: '#9333ea' }} />
-              ))}
             </div>
+
+            {/* Player-phase FX overlays (move/orbit) */}
+            <div className="pointer-events-none absolute inset-0 z-50">
+              <AnimatePresence>
+                {fxOverlays.map(fx => (
+                  <motion.div
+                    key={fx.key}
+                    initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1 }}
+                    animate={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.22 }}
+                    style={{ position: 'absolute', left: 0, top: 0 }}
+                  >
+                    <div
+                      className="flex items-center justify-center relative"
+                      style={{
+                        width: `${cellSize.w}px`,
+                        height: `${cellSize.h}px`,
+                        clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                        background: 'rgba(229,231,235,0.96)', // slightly darker than before
+                        borderRadius: 8,
+                        boxShadow: '0 6px 14px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+
+            {/* Contextual interactive elements (move targets, orbit) */}
+            {phase === 'player' && selectedSingle && moveTargets.map(t => (
+              <div
+                key={`mv-${t.cellId}`}
+                onClick={() => handleMoveTo(selectedSingle.cellId, t.cellId)}
+                title="Move here"
+                className="shadow-inner"
+                style={{
+                  position: 'absolute',
+                  left: t.x,
+                  top: t.y,
+                  transform: 'translate(-50%, -50%)',
+                  width: `${cellSize.w}px`,
+                  height: `${cellSize.h}px`,
+                  clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                  background: 'rgba(0,0,0,0.18)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  zIndex: 60
+                }}
+              />
+            ))}
+
+            {phase === 'player' && selectedSingle && orbitAnchor && (
+              <div style={{ position: 'absolute', left: orbitAnchor.x, top: orbitAnchor.y, transform: 'translate(-50%, -50%)', zIndex: 60 }}>
+                {/* CCW at top-left (purple, subtle hover rotation) */}
+                <button
+                  onClick={() => handleOrbit(selectedSingle.cellId, 'ccw')}
+                  aria-label="Orbit counter-clockwise"
+                  className="absolute -top-8 -left-8 w-8 h-8 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow flex items-center justify-center transition-transform duration-150 hover:-rotate-12"
+                  style={{ transform: 'translate(-25%, -25%)' }}
+                  title="Rotate CCW"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36" />
+                  </svg>
+                </button>
+                {/* CW at top-right (purple, subtle hover rotation) */}
+                <button
+                  onClick={() => handleOrbit(selectedSingle.cellId, 'cw')}
+                  aria-label="Orbit clockwise"
+                  className="absolute -top-8 -right-8 w-8 h-8 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow flex items-center justify-center transition-transform duration-150 hover:rotate-12"
+                  style={{ transform: 'translate(25%, -25%)' }}
+                  title="Rotate CW"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.13-9.36" />
+                  </svg>
+                </button>
+              </div>
+            )}
 
             {/* Grid */}
             <div className="grid-container flex justify-center mt-12 relative z-10">
               <HexGrid
                 cells={grid.map(c => ({ ...c, isSelected: selectedTiles.some(t => t.cellId === c.id) }))}
-                onCellClick={(cell) => selectTile(cell.id)}
+                onCellClick={handleCellClick}
                 isWordValid={validationState}
                 isPlacementPhase={phase === 'player' ? !hasSelection : true}
                 isWordAlreadyScored={false}
@@ -297,7 +912,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
               <div className="mt-4 p-4 bg-gray-100 rounded-lg">
                 <h3 className="text-sm font-semibold text-gray-600 mb-2">Next Drop</h3>
                 <div className="flex justify-center gap-2">
-                                      {nextRows[0]?.map((letter, idx) => (
+                  {nextRows[0]?.map((letter, idx) => (
                     <div key={idx} className="w-10 h-10 bg-gray-300 rounded border border-black flex items-center justify-center font-bold">
                       {letter}
                     </div>
@@ -321,18 +936,26 @@ const TetrisGame = ({ isSidebarOpen, openMenu: _openMenu, closeMenu: _closeMenu 
                 <>
                   <button onClick={() => submitWord()} disabled={currentWord.length < 3} className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Submit Word</button>
                   <button onClick={() => clearSelection()} disabled={selectedTiles.length === 0} className="py-2 px-4 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Clear</button>
-
                 </>
               )}
-              {phase === 'flood' && (
-                <button onClick={() => startPlayerPhase()} className="py-3 px-6 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-md transition-colors animate-pulse">Start Playing!</button>
-              )}
+              {/* Removed Start Playing button; auto-advance to player phase after flood */}
               <button onClick={handleRestart} className="py-2 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md transition-colors">Restart Game</button>
+              <button onClick={toggleDebugMode} className="py-1 px-2 bg-purple-500 hover:bg-purple-600 text-white text-sm rounded-md transition-colors">Debug</button>
             </div>
           </div>
         </div>
       </div>
       <Toaster position="bottom-center" />
+
+      {/* Game Over Modal */}
+      <GameOverModal
+        isOpen={phase === 'gameOver'}
+        score={score}
+        words={wordsThisRound.length} // Assuming totalWords is not directly available here, using wordsThisRound.length
+        boardPercent={Math.round((grid.filter(c => c.letter && c.isPlaced).length / Math.max(1, grid.length)) * 100)}
+        onRestart={handleRestart}
+        onClose={() => startPlayerPhase()}
+      />
     </div>
   );
 };
