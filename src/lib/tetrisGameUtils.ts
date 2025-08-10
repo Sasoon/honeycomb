@@ -50,7 +50,7 @@ export function checkTetrisGameOver(grid: HexCell[]): boolean {
 }
 
 // Compute the set of empty cells connected to the top via empty adjacency ("air")
-function computeReachableAir(grid: HexCell[]): Set<string> {
+export function computeReachableAir(grid: HexCell[]): Set<string> {
     const air = new Set<string>();
     const queue: HexCell[] = [];
 
@@ -84,7 +84,7 @@ export function applyFallingTiles(
     grid: HexCell[],
     fallingLetters: string[],
     gridSize: number
-): { newGrid: HexCell[]; placedCount: number; attemptedCount: number; finalPaths: Record<string, string[]> } {
+): { newGrid: HexCell[]; placedCount: number; attemptedCount: number; finalPaths: Record<string, string[]>; unplacedLetters: string[] } {
     // Clone grid
     const newGrid = grid.map(cell => ({ ...cell }));
 
@@ -153,98 +153,201 @@ export function applyFallingTiles(
     }
 
     // Now apply the new contiguous path flood logic
-    const { placedTiles, finalPaths } = applyFloodTilesWithContiguousPaths(newGrid, fallingLetters, gridSize);
+    const { placedTiles, finalPaths, unplacedLetters } = applyFloodTilesWithContiguousPaths(newGrid, fallingLetters, gridSize);
     const placedCount = placedTiles.length;
     
-    return { newGrid, placedCount, attemptedCount: fallingLetters.length, finalPaths };
+    return { newGrid, placedCount, attemptedCount: fallingLetters.length, finalPaths, unplacedLetters };
 }
 
-// New contiguous path flood logic
+// Sequential multi-wave flood logic - drop tiles in waves that fit available entry points
 function applyFloodTilesWithContiguousPaths(
     grid: HexCell[],
     fallingLetters: string[],
     gridSize: number
-): { placedTiles: HexCell[]; finalPaths: Record<string, string[]> } {
+): { placedTiles: HexCell[]; finalPaths: Record<string, string[]>; unplacedLetters: string[] } {
     const finalPaths: Record<string, string[]> = {};
-    const placedTiles: HexCell[] = [];
+    const allPlacedTiles: HexCell[] = [];
     
-    // Get available entry points (top row empty cells)
-    const getAvailableEntryPoints = (): HexCell[] => {
+    // Track positions occupied by flood tiles that have already resolved their paths
+    const globalOccupiedPositions = new Set<string>();
+    
+    // Debug logging
+    if (typeof console !== 'undefined') {
+        console.log(`[FLOOD-WAVES] Processing ${fallingLetters.length} tiles in sequential waves`);
+    }
+    
+    // Split letters into waves based on available entry points
+    const remainingLetters = [...fallingLetters];
+    let waveNumber = 0;
+    const maxWaves = 5; // Safety limit
+    
+    while (remainingLetters.length > 0 && waveNumber < maxWaves) {
+        waveNumber++;
+        
+        // Get available entry points for this wave
         const reachableAir = computeReachableAir(grid);
-        return grid
-            .filter(cell => cell.position.row === 0 && !cell.letter && reachableAir.has(cell.id))
-            .sort((a, b) => a.position.col - b.position.col);
-    };
+        const topRowCells = grid.filter(cell => cell.position.row === 0);
+        const emptyTopCells = topRowCells.filter(cell => !cell.letter && reachableAir.has(cell.id));
+        const notGloballyOccupied = emptyTopCells.filter(cell => !globalOccupiedPositions.has(cell.id));
+        
+        if (typeof console !== 'undefined') {
+            console.log(`[FLOOD-WAVES] Wave ${waveNumber}: Top row analysis:`);
+            console.log(`  - Total top row cells: ${topRowCells.length}`);
+            console.log(`  - Empty top cells (reachable): ${emptyTopCells.length}`);
+            console.log(`  - Not globally occupied: ${notGloballyOccupied.length}`);
+            console.log(`  - Global occupied positions: ${Array.from(globalOccupiedPositions).length}`);
+            console.log(`  - Current grid state:`, topRowCells.map(c => `(${c.position.row},${c.position.col}):${c.letter || 'empty'}`));
+        }
+        
+        const availableEntries = notGloballyOccupied.sort((a, b) => a.position.col - b.position.col);
+        
+        if (availableEntries.length === 0) {
+            if (typeof console !== 'undefined') {
+                console.log(`[FLOOD-WAVES] Wave ${waveNumber}: No entry points available, stopping`);
+                console.log(`[FLOOD-WAVES] Remaining letters: ${remainingLetters.join(', ')}`);
+            }
+            break;
+        }
+        
+        // Process only as many tiles as we have entry points
+        const waveSize = Math.min(remainingLetters.length, availableEntries.length);
+        const currentWave = remainingLetters.splice(0, waveSize);
+        
+        if (typeof console !== 'undefined') {
+            console.log(`[FLOOD-WAVES] Wave ${waveNumber}: Processing ${waveSize} tiles with ${availableEntries.length} entry points`);
+        }
+        
+        // Process this wave with standard flood logic
+        const waveResult = processFloodWave(grid, currentWave, availableEntries, globalOccupiedPositions, gridSize);
+        
+        // Collect results from this wave
+        allPlacedTiles.push(...waveResult.placedTiles);
+        Object.assign(finalPaths, waveResult.finalPaths);
+        
+        // Update global occupancy with this wave's paths
+        // Only mark the FINAL positions as globally occupied
+        // This allows subsequent waves to use top row positions that previous waves passed through
+        waveResult.placedTiles.forEach(tile => {
+            globalOccupiedPositions.add(tile.id);
+        });
+        
+        if (typeof console !== 'undefined') {
+            console.log(`[FLOOD-WAVES] Wave ${waveNumber}: Added ${waveResult.placedTiles.length} tiles to global occupancy`);
+            console.log(`[FLOOD-WAVES] Global occupied after wave: ${Array.from(globalOccupiedPositions).length} positions`);
+        }
+        
+        // If this wave couldn't place any tiles, stop to prevent infinite loop
+        if (waveResult.placedTiles.length === 0) {
+            if (typeof console !== 'undefined') {
+                console.log(`[FLOOD-WAVES] Wave ${waveNumber}: No tiles placed, stopping`);
+            }
+            break;
+        }
+    }
+    
+    if (typeof console !== 'undefined') {
+        console.log(`[FLOOD-WAVES] Completed ${waveNumber} waves, placed ${allPlacedTiles.length} out of ${fallingLetters.length} tiles`);
+    }
+    
+    return { placedTiles: allPlacedTiles, finalPaths, unplacedLetters: remainingLetters };
+}
 
-    // Find contiguous path from entry point to final resting position
-    const findContiguousFloodPath = (startCell: HexCell): { path: HexCell[]; finalCell: HexCell | null } => {
+// Process a single wave of flood tiles
+function processFloodWave(
+    grid: HexCell[],
+    waveLetters: string[],
+    entryPoints: HexCell[],
+    globalOccupied: Set<string>,
+    gridSize: number
+): { placedTiles: HexCell[]; finalPaths: Record<string, string[]> } {
+    const placedTiles: HexCell[] = [];
+    const finalPaths: Record<string, string[]> = {};
+    const waveOccupied = new Set<string>(globalOccupied);
+    
+    // Check if a position is connected to existing tiles
+    const isPositionConnected = (cell: HexCell): boolean => {
+        return grid.some(adjacentCell => 
+            adjacentCell.letter && 
+            adjacentCell.isPlaced && 
+            areCellsAdjacent(cell, adjacentCell)
+        );
+    };
+    
+    // Find contiguous path for a single tile
+    const findFloodPath = (startCell: HexCell): { path: HexCell[]; finalCell: HexCell | null } => {
         const path: HexCell[] = [startCell];
         let currentCell = startCell;
         const visitedIds = new Set<string>([startCell.id]);
 
         while (true) {
-            // Find adjacent empty cells that are below current position (downward movement only)
+            // Find adjacent empty cells that are below current position
             const adjacentEmpty = grid.filter(cell => 
-                !cell.letter && 
+                !cell.letter && // Empty cell
+                !waveOccupied.has(cell.id) && // Not occupied by other wave tiles
                 !visitedIds.has(cell.id) &&
                 areCellsAdjacent(currentCell, cell) &&
-                cell.position.row > currentCell.position.row // Only allow downward movement
+                cell.position.row > currentCell.position.row // Only downward movement
             );
 
             if (adjacentEmpty.length === 0) {
-                // No more downward moves possible - this is our final position
-                return { path, finalCell: currentCell };
+                // No more moves - check if current position is connected
+                if (isPositionConnected(currentCell)) {
+                    return { path, finalCell: currentCell };
+                } else {
+                    // Find last connected position in path
+                    for (let i = path.length - 1; i >= 0; i--) {
+                        if (isPositionConnected(path[i])) {
+                            return { path: path.slice(0, i + 1), finalCell: path[i] };
+                        }
+                    }
+                    return { path, finalCell: null };
+                }
             }
 
-            // For hexagonal tiles, only allow bottom-left or bottom-right movement
-            // Never straight down, never sideways, never upward
-            let nextCell: HexCell;
-            
-            // Randomly choose between available downward-diagonal options
-            nextCell = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)];
-
+            // Random choice for left/right movement
+            const nextCell = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)];
             path.push(nextCell);
             visitedIds.add(nextCell.id);
             currentCell = nextCell;
 
-            // Safety check to prevent infinite loops
+            // Safety check
             if (path.length > gridSize * 2) {
+                for (let i = path.length - 1; i >= 0; i--) {
+                    if (isPositionConnected(path[i])) {
+                        return { path: path.slice(0, i + 1), finalCell: path[i] };
+                    }
+                }
                 break;
             }
         }
 
         return { path, finalCell: currentCell };
     };
-
-    // Process each falling letter
-    for (const letter of fallingLetters) {
-        const availableEntries = getAvailableEntryPoints();
-        if (availableEntries.length === 0) {
-            // No more entry points available
-            break;
-        }
-
-        // Randomly select an entry point
-        const entryPoint = availableEntries[Math.floor(Math.random() * availableEntries.length)];
+    
+    // Process each letter in this wave
+    for (let i = 0; i < waveLetters.length && i < entryPoints.length; i++) {
+        const letter = waveLetters[i];
+        const entryPoint = entryPoints[i];
         
-        // Find the contiguous path from entry to final position
-        const { path, finalCell } = findContiguousFloodPath(entryPoint);
+        const { path, finalCell } = findFloodPath(entryPoint);
         
         if (finalCell) {
-            // Place the letter at the final position
+            // Place the tile
             finalCell.letter = letter;
             finalCell.isPlaced = true;
             (finalCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
             placedTiles.push(finalCell);
-
-            // Store the path for animation (as cell IDs)
+            
+            // Store path for animation
             finalPaths[finalCell.id] = path.map(cell => cell.id);
             
-            // Important: Mark the final position as occupied for subsequent tile pathfinding
-            // This ensures that later tiles respect the boundaries set by earlier tiles
+            // Mark path as occupied for subsequent tiles in this wave
+            path.forEach(pathCell => {
+                waveOccupied.add(pathCell.id);
+            });
         }
     }
-
+    
     return { placedTiles, finalPaths };
 }
 

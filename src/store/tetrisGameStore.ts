@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLetters, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter } from '../lib/tetrisGameUtils';
+import { generateDropLetters, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, computeReachableAir } from '../lib/tetrisGameUtils';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 
@@ -208,14 +208,33 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const state = get();
                 const newRound = state.round + 1;
 
-                // 1. Consume the current preview for this flood
-                const fallingLetters = state.nextRows[0] || generateDropLetters(state.tilesPerDrop);
+                // 1. Determine tilesPerDrop for THIS round first
+                let currentTilesPerDrop = state.tilesPerDrop;
+                if (newRound % 3 === 0) {
+                    currentTilesPerDrop = Math.min(state.tilesPerDrop + 1, 6);
+                    console.log(`[STORE] Round ${newRound}: Incrementing tiles from ${state.tilesPerDrop} to ${currentTilesPerDrop}`);
+                }
 
-                // 2. Apply the flood to the grid
-                const { newGrid, placedCount, finalPaths } = applyFallingTiles(state.grid, fallingLetters, state.gridSize);
+                // 2. Generate flood tiles for this round using the correct count
+                const fallingLetters = state.nextRows[0] || generateDropLetters(currentTilesPerDrop);
+                
+                // If the preview was generated with old count but we need more tiles, add them
+                const actualTilesNeeded = currentTilesPerDrop;
+                let actualFallingLetters = fallingLetters;
+                if (fallingLetters.length < actualTilesNeeded) {
+                    const additionalTiles = generateDropLetters(actualTilesNeeded - fallingLetters.length);
+                    actualFallingLetters = [...fallingLetters, ...additionalTiles];
+                    console.log(`[STORE] Expanded falling letters from ${fallingLetters.length} to ${actualFallingLetters.length}`);
+                }
+                
+                console.log(`[STORE] Round ${newRound}: Processing ${actualFallingLetters.length} falling tiles (target: ${currentTilesPerDrop})`);
+                
 
-                // Loss detection: could not place all falling tiles
-                if (placedCount < fallingLetters.length) {
+                // 3. Apply the flood to the grid
+                const { newGrid, placedCount, finalPaths, unplacedLetters } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
+
+                // 4. Loss detection: only trigger if no tiles could be placed at all
+                if (placedCount === 0 && actualFallingLetters.length > 0) {
                     const totalCells = state.grid.length;
                     const filledCells = newGrid.filter(c => c.letter && c.isPlaced).length;
                     const words = state.totalWords;
@@ -224,21 +243,26 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     set({ phase: 'gameOver', grid: newGrid });
                     return;
                 }
-
-                // 3. Determine tilesPerDrop for the *next* round's preview
-                let newTilesPerDrop = state.tilesPerDrop;
-                if (newRound % 3 === 0) {
-                    newTilesPerDrop = Math.min(state.tilesPerDrop + 1, 6);
+                
+                // If some tiles couldn't be placed, carry them to next round
+                if (unplacedLetters.length > 0) {
+                    console.log(`[STORE] Carrying over ${unplacedLetters.length} unplaced tiles to next round`);
                 }
 
-                // 4. Generate fresh previews for the upcoming turns using the new count
-                const nextDrop1 = generateDropLetters(newTilesPerDrop);
-                const nextDrop2 = generateDropLetters(newTilesPerDrop);
+                // 5. Generate fresh previews for the upcoming turns
+                // If there are unplaced tiles, prepend them to the next drop
+                let nextDrop1 = generateDropLetters(currentTilesPerDrop);
+                if (unplacedLetters.length > 0) {
+                    // Prepend unplaced tiles and adjust the generated tiles count
+                    const newTilesNeeded = Math.max(0, currentTilesPerDrop - unplacedLetters.length);
+                    nextDrop1 = [...unplacedLetters, ...nextDrop1.slice(0, newTilesNeeded)];
+                }
+                const nextDrop2 = generateDropLetters(currentTilesPerDrop);
 
-                // 5. Set the new state all at once
+                // 6. Set the new state all at once
                 set({
                     round: newRound,
-                    tilesPerDrop: newTilesPerDrop,
+                    tilesPerDrop: currentTilesPerDrop,
                     phase: 'flood',
                     grid: newGrid,
                     wordsThisRound: [],

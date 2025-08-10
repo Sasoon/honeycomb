@@ -894,7 +894,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
             )}
 
             {/* Grid */}
-            <div className="grid-container flex justify-center mt-12 relative z-10">
+            <div className={`grid-container flex justify-center mt-12 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
               <HexGrid
                 cells={grid.map(c => ({ ...c, isSelected: selectedTiles.some(t => t.cellId === c.id) }))}
                 onCellClick={handleCellClick}

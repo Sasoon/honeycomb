@@ -64,6 +64,7 @@ const CellView = memo(function CellView({
       data-cell-id={cell.id}
       data-row={cell.position.row}
       data-col={cell.position.col}
+      data-placed-this-turn={cell.placedThisTurn ? 'true' : 'false'}
       className={`hex-grid__item ${containerClass}`}
       onClick={() => onClick(cell)}
       layout

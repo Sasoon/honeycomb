@@ -98,6 +98,13 @@
   }
 }
 
+/* Hide flood tiles that aren't in top row during flood phase */
+.flood-phase .hex-grid .hex-grid__item[data-placed-this-turn="true"]:not([data-row="0"]) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.1s ease;
+}
+
 /* Performance optimizations */
 .hex-grid {
   transform: translateZ(0);
