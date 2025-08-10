@@ -381,6 +381,9 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
           console.log('[FLOOD-DEBUG] Flood paths available:', Object.keys(floodPaths || {}).length);
         }
         
+                 // Prevent top-row overlap: ensure one overlay per top-row entry at t=0
+        const usedTopEntries = new Set<string>();
+        const topRowStartJitter = new Map<string, number>();
         const tilePaths = newlyFilled.map(cell => {
           // Use the exact path from the flood logic
           const pathIds = floodPaths && floodPaths[cell.id];
@@ -391,7 +394,21 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
           }
           
           // Convert path IDs to centers, ensuring we follow the exact flood path
-          const pathCenters: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
+                     const pathCenters: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
+
+           // Skip top-row duplicate at t=0 if multiple tiles share the same entry
+           const firstCell = grid.find(g => g.id === pathIds[0]);
+                        if (firstCell && firstCell.position.row === 0) {
+               const entryKey = `${firstCell.position.row},${firstCell.position.col}`;
+               if (usedTopEntries.has(entryKey)) {
+                 // Nudge this tile to start 1 step later visually (it will animate starting from next path center)
+                 pathIds.shift();
+                 // Add a small per-entry jitter so staggered starters look natural
+                 const prev = topRowStartJitter.get(entryKey) || 0;
+                 topRowStartJitter.set(entryKey, prev + 1);
+               }
+               usedTopEntries.add(entryKey);
+             }
           
           for (const pathId of pathIds) {
             const pathCell = grid.find(g => g.id === pathId);
@@ -441,7 +458,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
         
         sortedTilePaths.forEach(tp => {
           let offset = 0;
-          const maxOffset = 10; // Limit search to prevent infinite loops
+          const maxOffset = 20; // Increased to handle more converging tiles
           
           while (offset < maxOffset) {
             let conflict = false;
@@ -474,18 +491,21 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
             }
             
             if (!conflict) {
-              // Reserve all positions in the path
-              for (let i = 0; i < tp.pathCenters.length; i++) {
-                const pc = tp.pathCenters[i];
-                const key = `${pc.row},${pc.col}`;
-                const timeIndex = i + offset;
-                
-                if (!occupancy.has(key)) occupancy.set(key, new Set<number>());
-                occupancy.get(key)!.add(timeIndex);
-                
-                // Also reserve a buffer time to prevent phasing
-                occupancy.get(key)!.add(timeIndex + 1);
-              }
+                             // Reserve all positions in the path (except top row) with time buffers
+               for (let i = 0; i < tp.pathCenters.length; i++) {
+                 const pc = tp.pathCenters[i];
+                 if (pc.row <= 0) continue; // allow top-row reuse
+                 const key = `${pc.row},${pc.col}`;
+                 const timeIndex = i + offset;
+                 
+                 if (!occupancy.has(key)) occupancy.set(key, new Set<number>());
+                 occupancy.get(key)!.add(timeIndex);
+                 
+                 // Also reserve a buffer time to prevent phasing (3-frame buffer)
+                 occupancy.get(key)!.add(timeIndex + 1);
+                 occupancy.get(key)!.add(timeIndex + 2);
+                 occupancy.get(key)!.add(timeIndex + 3);
+               }
               
               tileOffsets.set(tp.cell.id, offset);
               break;
@@ -513,8 +533,18 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
             const initial = pathCenters[0].center;
             setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y - cellSize.h * 1.2, pulse: 0, rX: 0, rY: 0 }]);
 
-            const offset = tileOffsets.get(cell.id) ?? 0;
-            const baseDelay = offset * perStep;
+                         const offset = tileOffsets.get(cell.id) ?? 0;
+             let baseDelay = offset * perStep;
+
+             // Apply a mild jitter for tiles starting from the same top-row entry
+             const firstPathStep = pathCenters[0];
+             if (firstPathStep && firstPathStep.row === 0) {
+               const entryKey = `${firstPathStep.row},${firstPathStep.col}`;
+               const count = topRowStartJitter.get(entryKey) || 0;
+               if (count > 0) {
+                 baseDelay += Math.min(count * 40, 160); // cap jitter at 160ms
+               }
+             }
             
             if (debugAnim) {
               console.log(`[FLOOD-DEBUG] Animating tile ${cell.id} with offset ${offset} along ${pathCenters.length} steps`);
