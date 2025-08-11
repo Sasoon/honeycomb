@@ -944,6 +944,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 setIsDragging(true);
                 
                 let totalRotation = 0; // Track cumulative rotation across multiple full turns
+                let currentSnappedSteps = 0; // Track snapped steps locally in closure
                 
                 const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
                   moveE.preventDefault();
@@ -958,24 +959,29 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                   const currentAngle = Math.atan2(containerMoveY - orbitAnchor.y, containerMoveX - orbitAnchor.x);
                   let deltaAngle = currentAngle - startAngle;
                   
-                  // Handle angle wrapping to accumulate total rotation
-                  const prevDelta = totalRotation;
-                  const angleDiff = deltaAngle - (prevDelta % (2 * Math.PI));
+                  // Normalize the delta angle to -π to π
+                  while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+                  while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
                   
-                  // Detect crossing over ±π boundary
-                  if (angleDiff > Math.PI) {
-                    totalRotation = prevDelta - (2 * Math.PI - (deltaAngle - prevDelta));
-                  } else if (angleDiff < -Math.PI) {
-                    totalRotation = prevDelta + (2 * Math.PI + (deltaAngle - prevDelta));
+                  // Accumulate total rotation across multiple turns
+                  const angleDifference = deltaAngle - totalRotation;
+                  if (angleDifference > Math.PI) {
+                    totalRotation = deltaAngle - 2 * Math.PI;
+                  } else if (angleDifference < -Math.PI) {
+                    totalRotation = deltaAngle + 2 * Math.PI;
                   } else {
                     totalRotation = deltaAngle;
                   }
+                  
+                  console.log(`[DRAG-DEBUG] totalRotation: ${(totalRotation * 180 / Math.PI).toFixed(1)}°`);
                   
                   // Calculate snapped rotation - hex positions are every 60° (π/3)
                   const snapIncrement = Math.PI / 3; // 60 degrees
                   const rawSteps = totalRotation / snapIncrement;
                   const snappedSteps = Math.round(rawSteps);
                   const snappedAngle = snappedSteps * snapIncrement;
+                  
+                  console.log(`[DRAG-DEBUG] rawSteps: ${rawSteps.toFixed(2)}, snappedSteps: ${snappedSteps}`);
                   
                   // Apply magnetic snapping - if we're within 15° of a snap point, snap to it
                   const snapThreshold = Math.PI / 12; // 15 degrees
@@ -984,9 +990,13 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                   if (distanceToSnap < snapThreshold) {
                     setCurrentDragAngle(snappedAngle);
                     setSnappedRotation(snappedSteps);
+                    currentSnappedSteps = snappedSteps; // Update local variable
+                    console.log(`[DRAG-DEBUG] SNAPPED to ${snappedSteps} steps`);
                   } else {
                     setCurrentDragAngle(totalRotation);
                     setSnappedRotation(snappedSteps); // Still track the target snap for visual feedback
+                    currentSnappedSteps = snappedSteps; // Update local variable
+                    console.log(`[DRAG-DEBUG] Tracking towards ${snappedSteps} steps`);
                   }
                 };
                 
@@ -995,21 +1005,58 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                   setIsDragging(false);
                   
                   // Commit the rotation if we moved at least one full step (60°)
-                  if (Math.abs(snappedRotation) >= 1) {
-                    const direction = snappedRotation > 0 ? 'cw' : 'ccw';
-                    const steps = Math.abs(snappedRotation);
+                  if (Math.abs(currentSnappedSteps) >= 1) {
+                    const direction = currentSnappedSteps > 0 ? 'cw' : 'ccw';
+                    const steps = Math.abs(currentSnappedSteps);
                     
-                    console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations`);
+                    console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations (currentSnappedSteps: ${currentSnappedSteps})`);
                     
-                    // Apply rotations one by one with the existing handleOrbit function
+                    // Apply all rotations directly to the game store in one go
+                    let tempPivotId = selectedSingle.cellId;
                     for (let i = 0; i < steps; i++) {
-                      setTimeout(() => {
-                        console.log(`[ORBIT-DRAG] Applying step ${i + 1}/${steps} ${direction}`);
-                        handleOrbit(selectedSingle.cellId, direction);
-                      }, i * 200); // Longer delay to see each step
+                      console.log(`[ORBIT-DRAG] Applying step ${i + 1}/${steps} ${direction}`);
+                      
+                      // Bypass the handleOrbit animation and call orbitPivot directly
+                      // But only consume freeOrbitAvailable on the first call
+                      if (i === 0) {
+                        orbitPivot(tempPivotId, direction);
+                      } else {
+                        // For subsequent rotations, call the orbit logic directly without the availability check
+                        const currentGrid = useTetrisGameStore.getState().grid;
+                        const pivot = currentGrid.find(c => c.id === tempPivotId);
+                        if (pivot) {
+                          const p = pivot.position;
+                          const neighborCandidates = currentGrid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
+                          const neighbors = neighborCandidates
+                            .map(n => ({ n, angle: Math.atan2(n.position.row - p.row, n.position.col - p.col) }))
+                            .sort((a, b) => a.angle - b.angle)
+                            .map(x => x.n);
+
+                          if (neighbors.length >= 2) {
+                            const letters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
+                            const rotated = direction === 'cw'
+                              ? [letters[letters.length - 1], ...letters.slice(0, letters.length - 1)]
+                              : [...letters.slice(1), letters[0]];
+
+                            const neighborIdToNewLetter = new Map<string, string>();
+                            neighbors.forEach((n, idx) => neighborIdToNewLetter.set(n.id, rotated[idx]));
+
+                            const newGrid = currentGrid.map(cell => {
+                              const newLetter = neighborIdToNewLetter.get(cell.id);
+                              if (newLetter !== undefined) {
+                                return { ...cell, letter: newLetter, isPlaced: newLetter !== '' };
+                              }
+                              return cell;
+                            });
+
+                            // Update the grid directly without consuming freeOrbitAvailable
+                            useTetrisGameStore.setState({ grid: newGrid });
+                          }
+                        }
+                      }
                     }
                   } else {
-                    console.log(`[ORBIT-DRAG] No rotation committed (snappedRotation: ${snappedRotation})`);
+                    console.log(`[ORBIT-DRAG] No rotation committed (currentSnappedSteps: ${currentSnappedSteps})`);
                   }
                   
                   setCurrentDragAngle(0);
