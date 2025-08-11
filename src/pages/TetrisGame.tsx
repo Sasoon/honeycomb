@@ -246,6 +246,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     wordsThisRound,
     nextRows,
     previewLevel,
+    freeMoveAvailable,
     freeOrbitAvailable,
     initializeGame,
     selectTile,
@@ -876,7 +877,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
             </div>
 
             {/* Contextual interactive elements (move targets, orbit) - hide during drag */}
-            {phase === 'player' && selectedSingle && !isDragging && moveTargets.map(t => (
+            {phase === 'player' && selectedSingle && !isDragging && freeMoveAvailable && moveTargets.map(t => (
               <div
                 key={`mv-${t.cellId}`}
                 onClick={() => handleMoveTo(selectedSingle.cellId, t.cellId)}
@@ -898,7 +899,27 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               />
             ))}
 
-            {phase === 'player' && selectedSingle && orbitAnchor && (() => {
+            {/* Subtle hex selection outline around pivot - always show when tile selected */}
+            {phase === 'player' && selectedSingle && orbitAnchor && (
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  left: orbitAnchor.x,
+                  top: orbitAnchor.y,
+                  transform: 'translate(-50%, -50%)',
+                  width: `${cellSize.w}px`,
+                  height: `${cellSize.h}px`,
+                  clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                  border: `2px solid ${freeOrbitAvailable ? 'rgba(59, 130, 246, 0.6)' : 'rgba(156, 163, 175, 0.4)'}`,
+                  zIndex: 58,
+                  boxShadow: freeOrbitAvailable 
+                    ? '0 2px 4px rgba(59, 130, 246, 0.3), inset 0 0 0 1px rgba(59, 130, 246, 0.2)' 
+                    : '0 1px 2px rgba(0, 0, 0, 0.1)'
+                }}
+              />
+            )}
+
+            {phase === 'player' && selectedSingle && orbitAnchor && freeOrbitAvailable && (() => {
               // Arc Dragger UI for orbit controls
               const container = containerRef.current;
               if (!container) return null;
@@ -1079,23 +1100,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               
               return (
                 <>
-                  {/* Glowing hex selection ring around pivot */}
-                  <div
-                    className="absolute pointer-events-none"
-                    style={{
-                      left: orbitAnchor.x,
-                      top: orbitAnchor.y,
-                      transform: 'translate(-50%, -50%)',
-                      width: `${cellSize.w * 1.4}px`,
-                      height: `${cellSize.h * 1.4}px`,
-                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                      border: `3px solid ${freeOrbitAvailable ? 'rgba(59, 130, 246, 0.8)' : 'rgba(156, 163, 175, 0.5)'}`,
-                      zIndex: 58,
-                      boxShadow: freeOrbitAvailable ? '0 0 12px rgba(59, 130, 246, 0.4)' : 'none',
-                      animation: freeOrbitAvailable ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none'
-                    }}
-                  />
-                  
                   {/* Single drag handle for orbit */}
                   {freeOrbitAvailable && (
                     <div
@@ -1103,8 +1107,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       onTouchStart={handleDragStart}
                       className="absolute cursor-grab active:cursor-grabbing"
                       style={{
-                        left: orbitAnchor.x + Math.cos(-Math.PI / 6) * ringRadius, // Top-right position
-                        top: orbitAnchor.y + Math.sin(-Math.PI / 6) * ringRadius,
+                        left: orbitAnchor.x, // Center horizontally
+                        top: orbitAnchor.y - cellSize.h * 0.4, // Top of the tile
                         transform: 'translate(-50%, -50%)',
                         width: '24px',
                         height: '24px',
