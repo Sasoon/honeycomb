@@ -1262,7 +1262,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
         words={wordsThisRound.length} // Assuming totalWords is not directly available here, using wordsThisRound.length
         boardPercent={Math.round((grid.filter(c => c.letter && c.isPlaced).length / Math.max(1, grid.length)) * 100)}
         onRestart={handleRestart}
-        onClose={() => startPlayerPhase()}
+        onClose={() => { /* modal non-dismissible; force restart */ }}
       />
     </div>
   );

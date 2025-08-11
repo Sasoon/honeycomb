@@ -6,10 +6,9 @@ interface GameOverModalProps {
   words: number;
   boardPercent: number;
   onRestart: () => void;
-  onClose: () => void;
 }
 
-const GameOverModal = ({ isOpen, score, words, boardPercent, onRestart, onClose }: GameOverModalProps) => {
+const GameOverModal = ({ isOpen, score, words, boardPercent, onRestart }: GameOverModalProps) => {
   if (!isOpen) return null;
   return (
     <AnimatePresence>
@@ -32,7 +31,6 @@ const GameOverModal = ({ isOpen, score, words, boardPercent, onRestart, onClose 
               <div className="text-xl font-bold">{boardPercent}%</div>
             </div>
             <div className="flex justify-between">
-              <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
               <button onClick={onRestart} className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">Restart</button>
             </div>
           </motion.div>
