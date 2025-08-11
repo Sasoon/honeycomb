@@ -231,6 +231,21 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentDragAngle, setCurrentDragAngle] = useState<number>(0);
+  const orbitPlanRef = useRef<{
+    pivotId: string;
+    // Canonical 6 slots around pivot: null where grid has no neighbor
+    slotIndexToCell: (HexCell | null)[];
+    // Map each neighbor cell id to its canonical slot index [0..5]
+    cellIdToSlotIndex: Map<string, number>;
+    // Ordered present neighbors in canonical order (non-null of slotIndexToCell)
+    orderedNeighbors: HexCell[];
+    // Map neighbor id -> index in orderedNeighbors
+    neighborIdToPresentIndex: Map<string, number>;
+    // Pivot center from DOM for positioning
+    pivotCenter: { x: number; y: number };
+  } | null>(null);
+  const [lockedSteps, setLockedSteps] = useState<number>(0); // magnetic snapped steps
+  const lockedStepsRef = useRef<number>(0);
 
   const {
     gameInitialized,
@@ -864,8 +879,48 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               const centers = mapCenters(container);
               const pivot = grid.find(c => c.id === selectedSingle.cellId);
               if (!pivot) return null;
-              
-              // Get adjacent occupied tiles that will orbit
+
+              // Build canonical 6-slot map around pivot using DOM centers
+              const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
+              if (!pivotCenter) return null;
+
+              // All actual neighbors within grid
+              const neighborCandidates = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
+
+              // Quantize neighbor angle to one of 6 slots
+              const slotIndexToCell: (HexCell | null)[] = new Array(6).fill(null);
+              const cellIdToSlotIndex = new Map<string, number>();
+              neighborCandidates.forEach(cell => {
+                const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
+                if (!ctr) return;
+                const angle = Math.atan2(ctr.y - pivotCenter.y, ctr.x - pivotCenter.x);
+                const norm = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                const slotIdx = Math.round(norm / (Math.PI / 3)) % 6;
+                // If collision, keep the closer one by angle distance
+                if (slotIndexToCell[slotIdx]) {
+                  const existing = slotIndexToCell[slotIdx]!;
+                  const eCtr = centers.get(`${existing.position.row},${existing.position.col}`);
+                  if (eCtr) {
+                    const eAngle = Math.atan2(eCtr.y - pivotCenter.y, eCtr.x - pivotCenter.x);
+                    const eNorm = ((eAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                    const diffExisting = Math.abs(eNorm - slotIdx * (Math.PI / 3));
+                    const diffNew = Math.abs(norm - slotIdx * (Math.PI / 3));
+                    if (diffNew < diffExisting) slotIndexToCell[slotIdx] = cell;
+                  }
+                } else {
+                  slotIndexToCell[slotIdx] = cell;
+                }
+                cellIdToSlotIndex.set(cell.id, slotIdx);
+              });
+
+              const orderedNeighbors = slotIndexToCell.filter((c): c is HexCell => !!c);
+              const neighborIdToPresentIndex = new Map<string, number>();
+              orderedNeighbors.forEach((n, idx) => neighborIdToPresentIndex.set(n.id, idx));
+
+              orbitPlanRef.current = { pivotId: pivot.id, slotIndexToCell, cellIdToSlotIndex, orderedNeighbors, neighborIdToPresentIndex, pivotCenter };
+              // Do not set state here to avoid render loops; initialize on drag start
+
+              // Adjacent tiles with letters to preview during drag
               const adjacentTiles = grid
                 .filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced)
                 .map(cell => {
@@ -876,131 +931,123 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 })
                 .filter((item): item is { cell: HexCell; center: { x: number; y: number }; angle: number } => item !== null)
                 .sort((a, b) => a.angle - b.angle);
-              
-              // Only show orbit controls if there are at least 2 tiles to orbit
-              if (adjacentTiles.length < 2) return null;
-              
+
+              if (adjacentTiles.length < 1) return null;
+
               const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
                 if (!freeOrbitAvailable) return;
                 e.preventDefault();
                 e.stopPropagation();
-                
+
+                // Initialize snapped state at start of drag
+                setLockedSteps(0);
+                lockedStepsRef.current = 0;
+
                 const rect = container.getBoundingClientRect();
                 const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
                 const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-                
-                // Convert to container-relative coordinates
+
                 const containerX = clientX - rect.left;
                 const containerY = clientY - rect.top;
-                
+
                 const startAngle = Math.atan2(containerY - orbitAnchor.y, containerX - orbitAnchor.x);
                 setCurrentDragAngle(0);
                 setIsDragging(true);
-                
-                let totalRotation = 0; // Track cumulative rotation across multiple full turns
-                let currentSnappedSteps = 0; // Track snapped steps locally in closure
-                
+
+                let totalRotation = 0;
+                // Local copies to control hysteresis
+                let currentLockedStepsLocal = 0;
+
                 const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
                   moveE.preventDefault();
-                  
+
                   const moveClientX = 'touches' in moveE ? moveE.touches[0].clientX : moveE.clientX;
                   const moveClientY = 'touches' in moveE ? moveE.touches[0].clientY : moveE.clientY;
-                  
-                  // Convert to container-relative coordinates
+
                   const containerMoveX = moveClientX - rect.left;
                   const containerMoveY = moveClientY - rect.top;
-                  
+
                   const currentAngle = Math.atan2(containerMoveY - orbitAnchor.y, containerMoveX - orbitAnchor.x);
                   let deltaAngle = currentAngle - startAngle;
-                  
-                  // Normalize the delta angle to -π to π
+
                   while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
                   while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
-                  
-                  // Accumulate total rotation across multiple turns
+
+                  // Update totalRotation with unwrap
                   const angleDifference = deltaAngle - totalRotation;
-                  if (angleDifference > Math.PI) {
-                    totalRotation = deltaAngle - 2 * Math.PI;
-                  } else if (angleDifference < -Math.PI) {
-                    totalRotation = deltaAngle + 2 * Math.PI;
-                  } else {
-                    totalRotation = deltaAngle;
+                  if (angleDifference > Math.PI) totalRotation = deltaAngle - 2 * Math.PI;
+                  else if (angleDifference < -Math.PI) totalRotation = deltaAngle + 2 * Math.PI;
+                  else totalRotation = deltaAngle;
+
+                  // Hysteresis thresholds (radians)
+                  const enterThreshold = Math.PI / 18; // ~10° to enter next slot
+                  const exitThreshold = Math.PI / 9;  // ~20° to leave the current slot
+
+                  // Angle relative to current locked slot center
+                  const relAngle = totalRotation - currentLockedStepsLocal * (Math.PI / 3);
+                  let proposedStep = 0;
+                  if (relAngle > enterThreshold) proposedStep = +1;
+                  else if (relAngle < -enterThreshold) proposedStep = -1;
+
+                  // Only allow at most ±1 change at a time and enforce exit threshold to go back
+                  if (proposedStep !== 0) {
+                    // If attempting to revert, require larger threshold
+                    if ((proposedStep === -1 && relAngle > -exitThreshold) || (proposedStep === +1 && relAngle < enterThreshold)) {
+                      proposedStep = 0;
+                    }
                   }
-                  
-                  console.log(`[DRAG-DEBUG] totalRotation: ${(totalRotation * 180 / Math.PI).toFixed(1)}°`);
-                  
-                  // Calculate snapped rotation - hex positions are every 60° (π/3)
-                  const snapIncrement = Math.PI / 3; // 60 degrees
-                  const rawSteps = totalRotation / snapIncrement;
-                  const snappedSteps = Math.round(rawSteps);
-                  const snappedAngle = snappedSteps * snapIncrement;
-                  
-                  console.log(`[DRAG-DEBUG] rawSteps: ${rawSteps.toFixed(2)}, snappedSteps: ${snappedSteps}`);
-                  
-                  // Apply magnetic snapping - if we're within 15° of a snap point, snap to it
-                  const snapThreshold = Math.PI / 12; // 15 degrees
-                  const distanceToSnap = Math.abs(totalRotation - snappedAngle);
-                  
-                  if (distanceToSnap < snapThreshold) {
-                    setCurrentDragAngle(snappedAngle);
-                    currentSnappedSteps = snappedSteps; // Update local variable
-                    console.log(`[DRAG-DEBUG] SNAPPED to ${snappedSteps} steps`);
-                  } else {
-                    setCurrentDragAngle(totalRotation);
-                    currentSnappedSteps = snappedSteps; // Update local variable
-                    console.log(`[DRAG-DEBUG] Tracking towards ${snappedSteps} steps`);
+
+                  // No external-ring; rotate among present neighbors only (always legal within grid)
+
+                  if (proposedStep !== 0) {
+                    currentLockedStepsLocal += proposedStep;
+                    setLockedSteps(currentLockedStepsLocal);
+                    lockedStepsRef.current = currentLockedStepsLocal;
                   }
+
+                  // Drive soft angle for UI feedback (handle rotation)
+                  setCurrentDragAngle(totalRotation);
                 };
-                
+
                 const handleDragEnd = (endE: MouseEvent | TouchEvent) => {
                   endE.preventDefault();
                   setIsDragging(false);
-                  
-                  // Commit the rotation if we moved at least one full step (60°)
-                  if (Math.abs(currentSnappedSteps) >= 1) {
-                    const direction = currentSnappedSteps > 0 ? 'cw' : 'ccw';
-                    const steps = Math.abs(currentSnappedSteps);
-                    
-                    console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations (currentSnappedSteps: ${currentSnappedSteps})`);
-                    
-                    // Apply all rotations directly to the game store (consistent approach)
+
+                  const steps = Math.abs(lockedStepsRef.current);
+                  if (steps >= 1) {
+                    const direction = lockedStepsRef.current > 0 ? 'cw' : 'ccw';
+                    console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations (lockedSteps: ${lockedStepsRef.current})`);
+
                     let currentGrid = useTetrisGameStore.getState().grid;
-                    
-                    // Apply all steps sequentially to the grid
+                    const plan = orbitPlanRef.current;
+                    const pivot = currentGrid.find(c => c.id === selectedSingle.cellId);
+                    if (!pivot || !plan || plan.pivotId !== pivot.id) return;
+
+                    // Use canonical ordered neighbors for commit
+                    const neighbors = plan.orderedNeighbors;
+                    if (neighbors.length < 2) return;
+
+                    let finalLetters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
                     for (let i = 0; i < steps; i++) {
                       console.log(`[ORBIT-DRAG] Applying step ${i + 1}/${steps} ${direction}`);
-                      
-                      const pivot = currentGrid.find(c => c.id === selectedSingle.cellId);
-                      if (pivot) {
-                        const p = pivot.position;
-                        const neighborCandidates = currentGrid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
-                        const neighbors = neighborCandidates
-                          .map(n => ({ n, angle: Math.atan2(n.position.row - p.row, n.position.col - p.col) }))
-                          .sort((a, b) => a.angle - b.angle)
-                          .map(x => x.n);
-
-                        if (neighbors.length >= 2) {
-                          const letters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
-                          const rotated = direction === 'cw'
-                            ? [letters[letters.length - 1], ...letters.slice(0, letters.length - 1)]
-                            : [...letters.slice(1), letters[0]];
-
-                          const neighborIdToNewLetter = new Map<string, string>();
-                          neighbors.forEach((n, idx) => neighborIdToNewLetter.set(n.id, rotated[idx]));
-
-                          // Update the grid for this step
-                          currentGrid = currentGrid.map(cell => {
-                            const newLetter = neighborIdToNewLetter.get(cell.id);
-                            if (newLetter !== undefined) {
-                              return { ...cell, letter: newLetter, isPlaced: newLetter !== '' };
-                            }
-                            return cell;
-                          });
-                        }
+                      if (direction === 'cw') {
+                        finalLetters = [finalLetters[finalLetters.length - 1], ...finalLetters.slice(0, finalLetters.length - 1)];
+                      } else {
+                        finalLetters = [...finalLetters.slice(1), finalLetters[0]];
                       }
                     }
-                    
-                    // Apply final grid state and consume freeOrbitAvailable
+
+                    const neighborIdToNewLetter = new Map<string, string>();
+                    neighbors.forEach((n, idx) => neighborIdToNewLetter.set(n.id, finalLetters[idx]));
+
+                    currentGrid = currentGrid.map(cell => {
+                      const finalLetter = neighborIdToNewLetter.get(cell.id);
+                      if (finalLetter !== undefined) {
+                        return { ...cell, letter: finalLetter, isPlaced: finalLetter !== '' };
+                      }
+                      return cell;
+                    });
+
                     useTetrisGameStore.setState({ 
                       grid: currentGrid, 
                       selectedTiles: [], 
@@ -1008,17 +1055,17 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       freeOrbitAvailable: false 
                     });
                   } else {
-                    console.log(`[ORBIT-DRAG] No rotation committed (currentSnappedSteps: ${currentSnappedSteps})`);
+                    console.log(`[ORBIT-DRAG] No rotation committed (lockedSteps: ${lockedStepsRef.current})`);
                   }
-                  
+
                   setCurrentDragAngle(0);
-                  
+
                   document.removeEventListener('mousemove', handleDragMove);
                   document.removeEventListener('mouseup', handleDragEnd);
                   document.removeEventListener('touchmove', handleDragMove);
                   document.removeEventListener('touchend', handleDragEnd);
                 };
-                
+
                 document.addEventListener('mousemove', handleDragMove, { passive: false });
                 document.addEventListener('mouseup', handleDragEnd, { passive: false });
                 document.addEventListener('touchmove', handleDragMove, { passive: false });
@@ -1027,15 +1074,14 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               
               return (
                 <>
-                  {/* Single drag handle for orbit */}
                   {freeOrbitAvailable && (
                     <div
                       onMouseDown={handleDragStart}
                       onTouchStart={handleDragStart}
                       className="absolute cursor-grab active:cursor-grabbing"
                       style={{
-                        left: orbitAnchor.x, // Center horizontally
-                        top: orbitAnchor.y - cellSize.h * 0.4, // Top of the tile
+                        left: orbitAnchor.x,
+                        top: orbitAnchor.y - cellSize.h * 0.4,
                         transform: 'translate(-50%, -50%)',
                         width: '24px',
                         height: '24px',
@@ -1059,44 +1105,35 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                     </div>
                   )}
                   
-                  {/* Real-time rotation preview during drag with magnetic snapping */}
                   {isDragging && (
                     <>
                       {adjacentTiles.map(({ cell, center }) => {
-                        // Calculate rotated position using the current drag angle
-                        const dx = center.x - orbitAnchor.x;
-                        const dy = center.y - orbitAnchor.y;
-                        const rotatedX = orbitAnchor.x + dx * Math.cos(currentDragAngle) - dy * Math.sin(currentDragAngle);
-                        const rotatedY = orbitAnchor.y + dx * Math.sin(currentDragAngle) + dy * Math.cos(currentDragAngle);
-                        
-                        // Calculate if this position is "snapped" - within snap threshold
-                        const snapIncrement = Math.PI / 3; // 60 degrees
-                        const snappedAngle = Math.round(currentDragAngle / snapIncrement) * snapIncrement;
-                        const distanceToSnap = Math.abs(currentDragAngle - snappedAngle);
-                        const isSnapped = distanceToSnap < Math.PI / 12; // 15 degrees
-                        
+                        // Drive overlay from locked steps using canonical slots
+                        const plan = orbitPlanRef.current;
+                        let drawX = center.x - cellSize.w / 2;
+                        let drawY = center.y - cellSize.h / 2;
+                        if (plan) {
+                          const presentIdx = plan.neighborIdToPresentIndex.get(cell.id);
+                          if (presentIdx !== undefined && plan.orderedNeighbors.length > 0) {
+                            const n = plan.orderedNeighbors.length;
+                            const targetIdx = ((presentIdx + lockedStepsRef.current) % n + n) % n;
+                            const targetCell = plan.orderedNeighbors[targetIdx];
+                            const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
+                            if (targetCtr) {
+                              drawX = targetCtr.x - cellSize.w / 2;
+                              drawY = targetCtr.y - cellSize.h / 2;
+                            }
+                          }
+                        }
+
+                        // Snappy spring
                         return (
                           <motion.div
                             key={`preview-${cell.id}`}
                             className="absolute pointer-events-none"
-                            initial={{ 
-                              x: rotatedX - cellSize.w / 2, 
-                              y: rotatedY - cellSize.h / 2,
-                              scale: 1,
-                              opacity: 1
-                            }}
-                            animate={{
-                              x: rotatedX - cellSize.w / 2,
-                              y: rotatedY - cellSize.h / 2,
-                              scale: isSnapped ? 1.05 : 1, // Slight scale up when snapped
-                              opacity: 1
-                            }}
-                            transition={{
-                              type: "spring",
-                              stiffness: isSnapped ? 400 : 150, // Stiffer spring for snapping
-                              damping: isSnapped ? 25 : 20,
-                              mass: 0.5
-                            }}
+                            initial={{ x: drawX, y: drawY, scale: 1, opacity: 1 }}
+                            animate={{ x: drawX, y: drawY, scale: 1.04, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 600, damping: 40, mass: 1.2 }}
                             style={{
                               position: 'absolute',
                               left: 0,
@@ -1104,10 +1141,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               width: `${cellSize.w}px`,
                               height: `${cellSize.h}px`,
                               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                              background: isSnapped 
-                                ? 'rgba(34, 197, 94, 0.4)' // Green when snapped
-                                : 'rgba(59, 130, 246, 0.3)', // Blue when floating
-                              border: `2px solid ${isSnapped ? 'rgba(34, 197, 94, 0.8)' : 'rgba(59, 130, 246, 0.6)'}`,
+                              background: 'rgba(34, 197, 94, 0.32)',
+                              border: '2px solid rgba(34, 197, 94, 0.85)',
                               borderRadius: 8,
                               zIndex: 59,
                               display: 'flex',
@@ -1115,51 +1150,40 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               justifyContent: 'center',
                               fontSize: '1rem',
                               fontWeight: 'bold',
-                              color: isSnapped ? 'rgba(34, 197, 94, 0.9)' : 'rgba(59, 130, 246, 0.9)',
-                              boxShadow: isSnapped 
-                                ? '0 0 12px rgba(34, 197, 94, 0.4)' // Glow when snapped
-                                : 'none'
+                              color: 'rgba(34, 197, 94, 0.92)',
+                              boxShadow: '0 0 10px rgba(34, 197, 94, 0.3)'
                             }}
                           >
                             {cell.letter}
                           </motion.div>
                         );
                       })}
-                      
-                      {/* Visual feedback for snap points */}
+
+                      {/* Optional: show subtle snap points (kept lightweight) */}
                       {Array.from({ length: 6 }, (_, i) => {
                         const snapAngle = (i * Math.PI) / 3; // Every 60°
                         const snapRadius = cellSize.w * 0.45;
                         const snapX = orbitAnchor.x + Math.cos(snapAngle) * snapRadius;
                         const snapY = orbitAnchor.y + Math.sin(snapAngle) * snapRadius;
-                        
-                        // Check if current rotation is close to this snap point
-                        const distanceToThisSnap = Math.abs(((currentDragAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - snapAngle);
-                        const isNearSnap = Math.min(distanceToThisSnap, 2 * Math.PI - distanceToThisSnap) < Math.PI / 12;
-                        
+                        const currentAngle = ((currentDragAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                        const distanceToThisSnap = Math.abs(currentAngle - snapAngle);
+                        const isNearSnap = Math.min(distanceToThisSnap, 2 * Math.PI - distanceToThisSnap) < Math.PI / 18;
                         return (
                           <motion.div
                             key={`snap-${i}`}
                             className="absolute pointer-events-none"
-                            animate={{
-                              scale: isNearSnap ? 1.5 : 1,
-                              opacity: isNearSnap ? 0.8 : 0.3,
-                            }}
-                            transition={{
-                              type: "spring",
-                              stiffness: 300,
-                              damping: 20
-                            }}
+                            animate={{ scale: isNearSnap ? 1.5 : 1, opacity: isNearSnap ? 0.8 : 0.25 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
                             style={{
                               left: snapX,
                               top: snapY,
                               transform: 'translate(-50%, -50%)',
                               width: '8px',
                               height: '8px',
-                              background: isNearSnap ? 'rgba(34, 197, 94, 0.8)' : 'rgba(156, 163, 175, 0.6)',
+                              background: isNearSnap ? 'rgba(34, 197, 94, 0.8)' : 'rgba(156, 163, 175, 0.5)',
                               borderRadius: '50%',
                               zIndex: 57,
-                              boxShadow: isNearSnap ? '0 0 8px rgba(34, 197, 94, 0.4)' : 'none'
+                              boxShadow: isNearSnap ? '0 0 8px rgba(34, 197, 94, 0.35)' : 'none'
                             }}
                           />
                         );
