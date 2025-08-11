@@ -244,7 +244,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     // Pivot center from DOM for positioning
     pivotCenter: { x: number; y: number };
   } | null>(null);
-  const [lockedSteps, setLockedSteps] = useState<number>(0); // magnetic snapped steps
+  const [, setLockedSteps] = useState<number>(0); // magnetic snapped steps (value stored in ref)
   const lockedStepsRef = useRef<number>(0);
 
   const {
@@ -980,8 +980,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                   else totalRotation = deltaAngle;
 
                   // Hysteresis thresholds (radians)
-                  const enterThreshold = Math.PI / 18; // ~10° to enter next slot
-                  const exitThreshold = Math.PI / 9;  // ~20° to leave the current slot
+                  const enterThreshold = Math.PI / 24; // ~7.5° to enter next slot (easier to snap in)
+                  const exitThreshold = Math.PI / 5;  // ~36° to leave the current slot (harder to pull out)
 
                   // Angle relative to current locked slot center
                   const relAngle = totalRotation - currentLockedStepsLocal * (Math.PI / 3);
@@ -1132,8 +1132,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                             key={`preview-${cell.id}`}
                             className="absolute pointer-events-none"
                             initial={{ x: drawX, y: drawY, scale: 1, opacity: 1 }}
-                            animate={{ x: drawX, y: drawY, scale: 1.04, opacity: 1 }}
-                            transition={{ type: 'spring', stiffness: 600, damping: 40, mass: 1.2 }}
+                            animate={{ x: drawX, y: drawY, scale: 1.02, opacity: 1 }}
+                            transition={{ type: 'spring', stiffness: 650, damping: 50, mass: 1.5 }}
                             style={{
                               position: 'absolute',
                               left: 0,
