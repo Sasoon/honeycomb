@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLetters, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter } from '../lib/tetrisGameUtils';
+import { generateDropLetters, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, checkTetrisGameOver } from '../lib/tetrisGameUtils';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 
@@ -246,38 +246,21 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
 
                 // 3. Apply the flood to the grid
-                const { newGrid, placedCount, finalPaths, unplacedLetters } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
+                const { newGrid, finalPaths } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
 
-                // 4. Loss detection
-                // A) Immediate loss if no tiles could be placed at all
-                if (placedCount === 0 && actualFallingLetters.length > 0) {
-                    const totalCells = state.grid.length;
+                // 4. Loss detection — only when the top row is fully blocked
+                if (checkTetrisGameOver(newGrid)) {
+                    const totalCells = newGrid.length;
                     const filledCells = newGrid.filter(c => c.letter && c.isPlaced).length;
                     const words = state.totalWords;
                     const points = state.score;
-                    toastService.error(`Game Over — Score: ${points}, Words: ${words}, Board: ${Math.round((filledCells / totalCells) * 100)}%`);
-                    set({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
-                    return;
-                }
-                // B) New rule: if any subsequent waves cannot resolve (unplaced letters remain), game over
-                if (unplacedLetters.length > 0) {
-                    const totalCells = state.grid.length;
-                    const filledCells = newGrid.filter(c => c.letter && c.isPlaced).length;
-                    const words = state.totalWords;
-                    const points = state.score;
-                    toastService.error(`Game Over — No space for ${unplacedLetters.length} tile(s). Score: ${points}, Words: ${words}, Board: ${Math.round((filledCells / totalCells) * 100)}%`);
+                    toastService.error(`Game Over — Score: ${points}, Words: ${words}, Board: ${Math.round((filledCells / Math.max(1, totalCells)) * 100)}%`);
                     set({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
                     return;
                 }
 
                 // 5. Generate fresh previews for the upcoming turns
-                // If there are unplaced tiles, prepend them to the next drop
                 let nextDrop1 = generateDropLetters(currentTilesPerDrop);
-                if (unplacedLetters.length > 0) {
-                    // Prepend unplaced tiles and adjust the generated tiles count
-                    const newTilesNeeded = Math.max(0, currentTilesPerDrop - unplacedLetters.length);
-                    nextDrop1 = [...unplacedLetters, ...nextDrop1.slice(0, newTilesNeeded)];
-                }
                 const nextDrop2 = generateDropLetters(currentTilesPerDrop);
 
                 // 6. Set the new state all at once
