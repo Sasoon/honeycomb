@@ -229,6 +229,9 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
   const [moveTargets, setMoveTargets] = useState<MoveTarget[]>([]);
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartAngle, setDragStartAngle] = useState<number | null>(null);
+  const [currentDragAngle, setCurrentDragAngle] = useState<number>(0);
 
   const {
     gameInitialized,
@@ -242,12 +245,14 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     wordsThisRound,
     nextRows,
     previewLevel,
+    freeOrbitAvailable,
     initializeGame,
     selectTile,
     clearSelection,
     submitWord,
     endRound,
     startPlayerPhase,
+    endPlayerPhase,
     resetGame,
     gridSize,
     moveTileOneStep,
@@ -892,36 +897,222 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               />
             ))}
 
-            {phase === 'player' && selectedSingle && orbitAnchor && (
-              <div style={{ position: 'absolute', left: orbitAnchor.x, top: orbitAnchor.y, transform: 'translate(-50%, -50%)', zIndex: 60 }}>
-                {/* CCW at top-left (purple, subtle hover rotation) */}
-                <button
-                  onClick={() => handleOrbit(selectedSingle.cellId, 'ccw')}
-                  aria-label="Orbit counter-clockwise"
-                  className="absolute -top-8 -left-8 w-8 h-8 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow flex items-center justify-center transition-transform duration-150 hover:-rotate-12"
-                  style={{ transform: 'translate(-25%, -25%)' }}
-                  title="Rotate CCW"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="1 4 1 10 7 10" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36" />
-                  </svg>
-                </button>
-                {/* CW at top-right (purple, subtle hover rotation) */}
-                <button
-                  onClick={() => handleOrbit(selectedSingle.cellId, 'cw')}
-                  aria-label="Orbit clockwise"
-                  className="absolute -top-8 -right-8 w-8 h-8 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow flex items-center justify-center transition-transform duration-150 hover:rotate-12"
-                  style={{ transform: 'translate(25%, -25%)' }}
-                  title="Rotate CW"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="23 4 23 10 17 10" />
-                    <path d="M20.49 15a9 9 0 1 1-2.13-9.36" />
-                  </svg>
-                </button>
-              </div>
-            )}
+            {phase === 'player' && selectedSingle && orbitAnchor && (() => {
+              // Arc Dragger UI for orbit controls
+              const container = containerRef.current;
+              if (!container) return null;
+              const centers = mapCenters(container);
+              const pivot = grid.find(c => c.id === selectedSingle.cellId);
+              if (!pivot) return null;
+              
+              // Get adjacent occupied tiles that will orbit
+              const adjacentTiles = grid
+                .filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced)
+                .map(cell => {
+                  const center = centers.get(`${cell.position.row},${cell.position.col}`);
+                  if (!center) return null;
+                  const angle = Math.atan2(center.y - orbitAnchor.y, center.x - orbitAnchor.x);
+                  return { cell, center, angle };
+                })
+                .filter((item): item is { cell: HexCell; center: { x: number; y: number }; angle: number } => item !== null)
+                .sort((a, b) => a.angle - b.angle);
+              
+              // Only show orbit controls if there are at least 2 tiles to orbit
+              if (adjacentTiles.length < 2) return null;
+              
+              const handleDragStart = (e: React.MouseEvent | React.TouchEvent, direction: 'cw' | 'ccw') => {
+                if (!freeOrbitAvailable) return;
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const rect = container.getBoundingClientRect();
+                const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+                const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+                
+                // Convert to container-relative coordinates
+                const containerX = clientX - rect.left;
+                const containerY = clientY - rect.top;
+                
+                const startAngle = Math.atan2(containerY - orbitAnchor.y, containerX - orbitAnchor.x);
+                setDragStartAngle(startAngle);
+                setCurrentDragAngle(0);
+                setIsDragging(true);
+                
+                const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
+                  moveE.preventDefault();
+                  
+                  const moveClientX = 'touches' in moveE ? moveE.touches[0].clientX : moveE.clientX;
+                  const moveClientY = 'touches' in moveE ? moveE.touches[0].clientY : moveE.clientY;
+                  
+                  // Convert to container-relative coordinates
+                  const containerMoveX = moveClientX - rect.left;
+                  const containerMoveY = moveClientY - rect.top;
+                  
+                  const currentAngle = Math.atan2(containerMoveY - orbitAnchor.y, containerMoveX - orbitAnchor.x);
+                  let deltaAngle = currentAngle - startAngle;
+                  
+                  // Normalize angle to -π to π
+                  while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+                  while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+                  
+                  setCurrentDragAngle(deltaAngle);
+                };
+                
+                const handleDragEnd = (endE: MouseEvent | TouchEvent) => {
+                  endE.preventDefault();
+                  setIsDragging(false);
+                  
+                  // Determine direction based on drag angle
+                  const threshold = Math.PI / 6; // 30 degrees
+                  
+                  if (Math.abs(currentDragAngle) > threshold) {
+                    const finalDirection = currentDragAngle > 0 ? 'cw' : 'ccw';
+                    handleOrbit(selectedSingle.cellId, finalDirection);
+                  }
+                  
+                  setCurrentDragAngle(0);
+                  setDragStartAngle(null);
+                  
+                  document.removeEventListener('mousemove', handleDragMove);
+                  document.removeEventListener('mouseup', handleDragEnd);
+                  document.removeEventListener('touchmove', handleDragMove);
+                  document.removeEventListener('touchend', handleDragEnd);
+                };
+                
+                document.addEventListener('mousemove', handleDragMove, { passive: false });
+                document.addEventListener('mouseup', handleDragEnd, { passive: false });
+                document.addEventListener('touchmove', handleDragMove, { passive: false });
+                document.addEventListener('touchend', handleDragEnd, { passive: false });
+              };
+              
+              const ringRadius = cellSize.w * 0.6;
+              
+              return (
+                <>
+                  {/* Glowing hex selection ring around pivot */}
+                  <div
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: orbitAnchor.x,
+                      top: orbitAnchor.y,
+                      transform: 'translate(-50%, -50%)',
+                      width: `${cellSize.w * 1.4}px`,
+                      height: `${cellSize.h * 1.4}px`,
+                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                      border: `3px solid ${freeOrbitAvailable ? 'rgba(59, 130, 246, 0.8)' : 'rgba(156, 163, 175, 0.5)'}`,
+                      zIndex: 58,
+                      boxShadow: freeOrbitAvailable ? '0 0 12px rgba(59, 130, 246, 0.4)' : 'none',
+                      animation: freeOrbitAvailable ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none'
+                    }}
+                  />
+                  
+                  {/* Drag handles on the ring */}
+                  {freeOrbitAvailable && (
+                    <>
+                      {/* CCW handle - top-left */}
+                      <div
+                        onMouseDown={(e) => handleDragStart(e, 'ccw')}
+                        onTouchStart={(e) => handleDragStart(e, 'ccw')}
+                        className="absolute cursor-grab active:cursor-grabbing"
+                        style={{
+                          left: orbitAnchor.x + Math.cos(-3 * Math.PI / 4) * ringRadius,
+                          top: orbitAnchor.y + Math.sin(-3 * Math.PI / 4) * ringRadius,
+                          transform: 'translate(-50%, -50%)',
+                          width: '20px',
+                          height: '20px',
+                          background: 'rgba(59, 130, 246, 0.9)',
+                          borderRadius: '50%',
+                          border: '2px solid white',
+                          zIndex: 62,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          userSelect: 'none',
+                          touchAction: 'none'
+                        }}
+                        title="Drag to rotate counter-clockwise"
+                      >
+                        ↺
+                      </div>
+                      
+                      {/* CW handle - top-right */}
+                      <div
+                        onMouseDown={(e) => handleDragStart(e, 'cw')}
+                        onTouchStart={(e) => handleDragStart(e, 'cw')}
+                        className="absolute cursor-grab active:cursor-grabbing"
+                        style={{
+                          left: orbitAnchor.x + Math.cos(-Math.PI / 4) * ringRadius,
+                          top: orbitAnchor.y + Math.sin(-Math.PI / 4) * ringRadius,
+                          transform: 'translate(-50%, -50%)',
+                          width: '20px',
+                          height: '20px',
+                          background: 'rgba(59, 130, 246, 0.9)',
+                          borderRadius: '50%',
+                          border: '2px solid white',
+                          zIndex: 62,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          userSelect: 'none',
+                          touchAction: 'none'
+                        }}
+                        title="Drag to rotate clockwise"
+                      >
+                        ↻
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* Real-time rotation preview during drag */}
+                  {isDragging && (
+                    <>
+                      {adjacentTiles.map(({ cell, center }) => {
+                        // Calculate rotated position
+                        const dx = center.x - orbitAnchor.x;
+                        const dy = center.y - orbitAnchor.y;
+                        const rotatedX = orbitAnchor.x + dx * Math.cos(currentDragAngle) - dy * Math.sin(currentDragAngle);
+                        const rotatedY = orbitAnchor.y + dx * Math.sin(currentDragAngle) + dy * Math.cos(currentDragAngle);
+                        
+                        return (
+                          <div
+                            key={`preview-${cell.id}`}
+                            className="absolute pointer-events-none"
+                            style={{
+                              left: rotatedX,
+                              top: rotatedY,
+                              transform: 'translate(-50%, -50%)',
+                              width: `${cellSize.w}px`,
+                              height: `${cellSize.h}px`,
+                              clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                              background: 'rgba(59, 130, 246, 0.3)',
+                              border: '2px solid rgba(59, 130, 246, 0.6)',
+                              borderRadius: 8,
+                              zIndex: 59,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              fontWeight: 'bold',
+                              color: 'rgba(59, 130, 246, 0.9)'
+                            }}
+                          >
+                            {cell.letter}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Grid */}
             <div className={`grid-container flex justify-center mt-12 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
@@ -966,6 +1157,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 <>
                   <button onClick={() => submitWord()} disabled={currentWord.length < 3} className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Submit Word</button>
                   <button onClick={() => clearSelection()} disabled={selectedTiles.length === 0} className="py-2 px-4 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Clear</button>
+                  <button onClick={() => endPlayerPhase()} className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-md transition-colors">End Turn</button>
                 </>
               )}
               {/* Removed Start Playing button; auto-advance to player phase after flood */}

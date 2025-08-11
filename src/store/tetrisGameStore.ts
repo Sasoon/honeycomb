@@ -47,6 +47,9 @@ interface TetrisGameState {
     round: number;
     gravityMoves?: Map<string, string>; // Optional map of post-score moves (to -> from)
     floodPaths?: Record<string, string[]>; // Paths for flood tile animations
+    // Free utility actions
+    freeMoveAvailable?: boolean;
+    freeOrbitAvailable?: boolean;
 
     // Falling tiles mechanics
     nextRows: string[][]; // Letters for upcoming rows
@@ -83,6 +86,7 @@ interface TetrisGameState {
     // Game flow actions
     startPlayerPhase: () => void;
     endRound: () => void;
+    endPlayerPhase: () => void;
 
     // Player actions
     selectTile: (cellId: string) => void;
@@ -105,7 +109,7 @@ interface TetrisGameState {
 // Initial state
 const initialState: Omit<TetrisGameState,
     'setGameState' | 'initializeGame' | 'resetGame' |
-    'startPlayerPhase' | 'endRound' |
+    'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
     'activatePowerCard' | 'cancelPowerCard' | 'checkGameOver'
 > = {
@@ -186,6 +190,8 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     selectedTiles: [],
                     currentWord: '',
                     wordsThisRound: [],
+                    freeMoveAvailable: true,
+                    freeOrbitAvailable: true,
                 });
             },
 
@@ -201,7 +207,16 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
+                    freeMoveAvailable: true,
+                    freeOrbitAvailable: true,
                 });
+            },
+
+            endPlayerPhase: () => {
+                const state = get();
+                if (state.phase !== 'player') return;
+                // Advance to flood for this turn
+                get().endRound();
             },
 
             endRound: () => {
@@ -507,11 +522,14 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     return cell;
                 });
 
-                set({ grid: newGrid, selectedTiles: [], currentWord: '' });
-
-                setTimeout(() => {
-                    get().endRound();
-                }, 150);
+                // If free move is available, consume it and stay in player phase; otherwise block
+                if (state.freeMoveAvailable) {
+                    set({ grid: newGrid, selectedTiles: [], currentWord: '', freeMoveAvailable: false });
+                    toastService.success('Free move used');
+                } else {
+                    toastService.error('Move already used this turn');
+                    return;
+                }
             },
 
             // New: orbit rotate the 6 neighbors around a pivot, then end round
@@ -551,11 +569,14 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     return cell;
                 });
 
-                set({ grid: newGrid, selectedTiles: [], currentWord: '' });
-
-                setTimeout(() => {
-                    get().endRound();
-                }, 150);
+                // If free orbit is available, consume it and stay in player phase; otherwise block
+                if (state.freeOrbitAvailable) {
+                    set({ grid: newGrid, selectedTiles: [], currentWord: '', freeOrbitAvailable: false });
+                    toastService.success('Free orbit used');
+                } else {
+                    toastService.error('Orbit already used this turn');
+                    return;
+                }
             },
 
             activatePowerCard: (cardId: string) => {
