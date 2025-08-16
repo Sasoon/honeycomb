@@ -1,5 +1,7 @@
-// Instead of eager loading the full dictionary
-// import wordsDictionary from './words_dictionary.json';
+// ENABLE dictionary (~173k words) and blacklist are loaded lazily/dynamically to avoid inflating bundle size
+// The JSON files should be generated in build step or checked in to src/lib
+// enable1.json   : { "word": 1, ... }
+// offensive_words.json : [ "word1", "word2", ... ]
 
 // Cache to store validated words for performance (limit size to avoid memory issues)
 const validWordCache = new Map<string, boolean>();
@@ -23,7 +25,8 @@ type SuggestionsRequest = { type: 'suggestions'; prefix: string; limit?: number 
  */
 class WordValidator {
     private dictionary: Dictionary | null = null;
-    private dictionaryPromise: Promise<Dictionary> | null = null;
+    private blacklist: Set<string> | null = null;
+    private dictionaryPromise: Promise<void> | null = null;
     private usedWords: Set<string>;
     private isLoading = false;
     private _isReady = false;  // New property to track if dictionary is fully loaded
@@ -85,26 +88,27 @@ class WordValidator {
         return this._isReady;
     }
 
-    private async loadDictionaryIfNeeded(): Promise<Dictionary> {
-        if (this.dictionary) return this.dictionary;
+    private async loadDictionaryIfNeeded(): Promise<void> {
+        if (this.dictionary && this.blacklist) return;
         if (this.dictionaryPromise) return this.dictionaryPromise;
 
         this.isLoading = true;
-        this.dictionaryPromise = import('./words_dictionary.json')
-            .then(module => {
-                this.dictionary = module.default as Dictionary;
-                if (import.meta.env.DEV) {
-                    console.log(`Dictionary loaded with ${Object.keys(this.dictionary).length} words`);
-                }
-                this.isLoading = false;
-                this._isReady = true;
-                return this.dictionary;
-            })
-            .catch(error => {
-                console.error('Error loading dictionary:', error);
-                this.isLoading = false;
-                return {} as Dictionary;
-            });
+        this.dictionaryPromise = Promise.all([
+            import('./enable1.json'),
+            import('./offensive_words.json')
+        ]).then(([dictModule, blModule]) => {
+            this.dictionary = dictModule.default as Dictionary;
+            const blList = blModule.default as unknown as string[];
+            this.blacklist = new Set(blList.map(w => w.toLowerCase()));
+            if (import.meta.env.DEV) {
+                console.log(`ENABLE dictionary loaded (${Object.keys(this.dictionary).length}) with blacklist (${this.blacklist.size})`);
+            }
+            this.isLoading = false;
+            this._isReady = true;
+        }).catch(err => {
+            console.error('Error loading dictionary/blacklist', err);
+            this.isLoading = false;
+        });
 
         return this.dictionaryPromise;
     }
@@ -124,8 +128,8 @@ class WordValidator {
         if (validWordCache.has(normalized)) return validWordCache.get(normalized)!;
         if (this.worker) return false;
 
-        if (this.dictionary) {
-            const isValid = normalized in this.dictionary;
+        if (this.dictionary && this.blacklist) {
+            const isValid = (normalized in this.dictionary) && !this.blacklist.has(normalized);
             this.addToCache(normalized, isValid);
             return isValid;
         }
@@ -151,8 +155,8 @@ class WordValidator {
             return res.isValid;
         }
 
-        const dictionary = await this.loadDictionaryIfNeeded();
-        const isValid = normalized in dictionary;
+        await this.loadDictionaryIfNeeded();
+        const isValid = !!this.dictionary && (normalized in this.dictionary) && !this.blacklist!.has(normalized);
         this.addToCache(normalized, isValid);
         return isValid;
     }
@@ -176,12 +180,13 @@ class WordValidator {
             return res.suggestions.filter(w => !this.isWordUsed(w)).slice(0, limit);
         }
 
-        const dictionary = await this.loadDictionaryIfNeeded();
+        await this.loadDictionaryIfNeeded();
+        const dictionary = this.dictionary || {};
         const suggestions = Object.keys(dictionary)
             .filter(word =>
                 word.startsWith(normalizedPrefix) &&
                 word.length >= 3 &&
-                !this.isWordUsed(word)
+                !this.isWordUsed(word) && !this.blacklist!.has(word)
             )
             .slice(0, limit);
         return suggestions;

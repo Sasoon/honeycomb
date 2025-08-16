@@ -37,6 +37,107 @@ export function generateDropLetters(count: number): string[] {
     return letters;
 }
 
+// === Dynamic letter generation =====================================================
+// Utility sets
+const VOWELS = new Set(['A', 'E', 'I', 'O', 'U']);
+
+// Common bigram → preferred completion letters (very small sample; extendable)
+const COMPLETION_HINTS: Record<string, string[]> = {
+    'TH': ['E', 'A', 'I'],
+    'IN': ['G', 'E'],
+    'AN': ['D', 'T'],
+    'RE': ['D', 'S'],
+    'QU': ['E', 'I', 'O'],
+};
+
+function isVowel(l: string) { return VOWELS.has(l); }
+
+function computeVowelRatio(grid: HexCell[]): number {
+    let vowels = 0, total = 0;
+    for (const cell of grid) {
+        if (!cell.letter || !cell.isPlaced) continue;
+        total++;
+        if (isVowel(cell.letter)) vowels++;
+    }
+    return total === 0 ? 0.4 : vowels / total;
+}
+
+// Collect adjacent bigrams (unordered) that exist on board
+function collectLiveStems(grid: HexCell[]): Set<string> {
+    const stems = new Set<string>();
+    for (const a of grid) {
+        if (!a.letter || !a.isPlaced) continue;
+        for (const b of grid) {
+            if (b.id === a.id || !b.letter || !b.isPlaced) continue;
+            if (areCellsAdjacent(a, b)) {
+                stems.add((a.letter + b.letter).toUpperCase());
+            }
+        }
+    }
+    return stems;
+}
+
+function boostLetters(weights: Record<string, number>, letters: string[], factor = 2) {
+    for (const l of letters) { if (weights[l]) weights[l] *= factor; }
+}
+function dampLetters(weights: Record<string, number>, letters: string[], factor = 0.25) {
+    for (const l of letters) { if (weights[l]) weights[l] *= factor; }
+}
+
+function boardContainsLetter(grid: HexCell[], letter: string): boolean {
+    return grid.some(c => c.letter === letter && c.isPlaced);
+}
+
+function weightedSample(weights: Record<string, number>, count: number): string[] {
+    const result: string[] = [];
+    const letters = Object.keys(weights);
+    for (let i = 0; i < count; i++) {
+        const total = letters.reduce((sum, l) => sum + weights[l], 0);
+        let r = Math.random() * total;
+        for (const l of letters) {
+            r -= weights[l];
+            if (r <= 0) { result.push(l); break; }
+        }
+    }
+    return result;
+}
+
+// Public smart generator
+export function generateDropLettersSmart(count: number, grid: HexCell[], rewardCreative = false): string[] {
+    // 1. Copy baseline
+    const weights: Record<string, number> = { ...LETTER_WEIGHTS };
+
+    // 2. Balance vowels/consonants
+    const vRatio = computeVowelRatio(grid);
+    if (vRatio < 0.30) {
+        boostLetters(weights, Array.from(VOWELS), 2);
+    } else if (vRatio > 0.50) {
+        dampLetters(weights, Array.from(VOWELS), 0.5);
+    }
+
+    // 3. Promote completers for live stems
+    const stems = collectLiveStems(grid);
+    const completers = new Set<string>();
+    stems.forEach(stem => {
+        const hints = COMPLETION_HINTS[stem];
+        if (hints) { hints.forEach(l => completers.add(l)); }
+    });
+    if (completers.size > 0) {
+        boostLetters(weights, Array.from(completers), 2.5);
+    }
+
+    // 4. Dead-combo guard (Q without U)
+    if (!boardContainsLetter(grid, 'U')) dampLetters(weights, ['Q'], 0.15);
+
+    // 5. Optional creative reward – tilt toward higher-value consonants
+    if (rewardCreative) {
+        boostLetters(weights, ['Y', 'K', 'H', 'B', 'M', 'P'], 1.8);
+    }
+
+    return weightedSample(weights, count);
+}
+// === End dynamic letter generation ===============================================
+
 // Check if the game is over (top row has tiles)
 export function checkTetrisGameOver(grid: HexCell[]): boolean {
     // Find cells in the top row (row 0)

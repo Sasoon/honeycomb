@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLetters, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, checkTetrisGameOver } from '../lib/tetrisGameUtils';
+import { generateDropLettersSmart, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, checkTetrisGameOver } from '../lib/tetrisGameUtils';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 
@@ -176,8 +176,8 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const startingPowerCards = generateStartingPowerCards();
 
                 // Generate first drop preview based on current tilesPerDrop (default 3)
-                const firstDrop = generateDropLetters(3);
-                const secondDrop = generateDropLetters(3);
+                const firstDrop = generateDropLettersSmart(3, tilesWithLetters, false);
+                const secondDrop = generateDropLettersSmart(3, tilesWithLetters, false);
 
                 set({
                     gameInitialized: true,
@@ -234,13 +234,14 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 }
 
                 // 2. Generate flood tiles for this round using the correct count
-                const fallingLetters = state.nextRows[0] || generateDropLetters(currentTilesPerDrop);
+                const rewardCreative = (!state.freeMoveAvailable) || (!state.freeOrbitAvailable);
+                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative);
 
                 // If the preview was generated with old count but we need more tiles, add them
                 const actualTilesNeeded = currentTilesPerDrop;
                 let actualFallingLetters = fallingLetters;
                 if (fallingLetters.length < actualTilesNeeded) {
-                    const additionalTiles = generateDropLetters(actualTilesNeeded - fallingLetters.length);
+                    const additionalTiles = generateDropLettersSmart(actualTilesNeeded - fallingLetters.length, state.grid, rewardCreative);
                     actualFallingLetters = [...fallingLetters, ...additionalTiles];
                     console.log(`[STORE] Expanded falling letters from ${fallingLetters.length} to ${actualFallingLetters.length}`);
                 }
@@ -263,14 +264,14 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 }
 
                 // 5. Generate fresh previews for the upcoming turns
-                let nextDrop1 = generateDropLetters(currentTilesPerDrop);
-                const nextDrop2 = generateDropLetters(currentTilesPerDrop);
+                let nextDrop1 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
+                const nextDrop2 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
 
                 // 6. Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid
                     .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
                     .map(cell => cell.id);
-                
+
                 set({
                     round: newRound,
                     tilesPerDrop: currentTilesPerDrop,
