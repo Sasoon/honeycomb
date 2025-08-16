@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
+import { playSound } from '../lib/sound';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
@@ -11,19 +12,26 @@ const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual cente
 const FLOOD_STEP_MS = 100; // movement time between centers (ms)
 const FLOOD_PAUSE_MS = 250; // dwell time at each slot (ms)
 
+// Memoized version to avoid expensive DOM walks on every call
+const _centersCache = new WeakMap<HTMLElement, { key: string; map: Map<string, { x:number;y:number;row:number;col:number }> }>();
 function mapCenters(container: HTMLElement): Map<string, { x: number; y: number; row: number; col: number }> {
+  const rect = container.getBoundingClientRect();
+  const key = `${rect.width}x${rect.height}-${container.querySelectorAll('.hex-grid__item').length}`;
+  const cached = _centersCache.get(container);
+  if (cached && cached.key === key) return cached.map;
+
   const result = new Map<string, { x: number; y: number; row: number; col: number }>();
-  const base = container.getBoundingClientRect();
   container.querySelectorAll<HTMLElement>('.hex-grid__item').forEach(el => {
     const rowAttr = el.getAttribute('data-row');
     const colAttr = el.getAttribute('data-col');
     if (!rowAttr || !colAttr) return;
     const row = Number(rowAttr);
     const col = Number(colAttr);
-    const slot = el.parentElement as HTMLElement; // wrapper defines slot size/position
+    const slot = el.parentElement as HTMLElement;
     const r = (slot || el).getBoundingClientRect();
-    result.set(`${row},${col}`, { x: r.left - base.left + r.width / 2, y: r.top - base.top + r.height / 2 + CENTER_NUDGE_Y, row, col });
+    result.set(`${row},${col}`, { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 + CENTER_NUDGE_Y, row, col });
   });
+  _centersCache.set(container, { key, map: result });
   return result;
 }
 
@@ -680,6 +688,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       ? { ...o, isFinal: true, pulse: o.pulse + 1, rX: 0, rY: 0 } 
                       : o
                 ));
+                playSound('land');
+                if (navigator.vibrate) navigator.vibrate(10);
             }, finalBounceDelay);
             timersRef.current.push(bounceT);
 

@@ -51,12 +51,16 @@ const CellView = memo(function CellView({
   containerClass,
   setRef,
   showLetter,
+  onPointerDown,
+  onPointerEnter,
 }: {
   cell: HexCell;
   onClick: (cell: HexCell) => void;
   containerClass: string;
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
+  onPointerDown: (e: React.PointerEvent, cell: HexCell) => void;
+  onPointerEnter: (e: React.PointerEvent, cell: HexCell) => void;
 }) {
   return (
     <motion.div
@@ -68,6 +72,8 @@ const CellView = memo(function CellView({
       data-placed-this-turn={cell.placedThisTurn ? 'true' : 'false'}
       className={`hex-grid__item ${containerClass}`}
       onClick={() => onClick(cell)}
+      onPointerDown={(e) => onPointerDown(e, cell)}
+      onPointerEnter={(e) => onPointerEnter(e, cell)}
       layout
       style={{ position: 'relative' }}
     >
@@ -107,6 +113,27 @@ const HexGrid = ({
   hiddenLetterCellIds = [],
   isTetrisVariant = false,
 }: HexGridProps) => {
+  // ----- Drag-to-select helpers (Tetris variant only) -----
+  const isSelectingRef = useRef(false);
+
+  const handlePointerUp = () => { isSelectingRef.current = false; };
+  useEffect(() => {
+    document.addEventListener('pointerup', handlePointerUp);
+    return () => document.removeEventListener('pointerup', handlePointerUp);
+  }, []);
+
+  const handlePointerDown = (e: React.PointerEvent, cell: HexCell) => {
+    if (isTetrisVariant && e.pointerType === 'touch') {
+      isSelectingRef.current = true;
+      onCellClick(cell);
+    }
+  };
+
+  const handlePointerEnter = (e: React.PointerEvent, cell: HexCell) => {
+    if (isTetrisVariant && isSelectingRef.current && e.pointerType === 'touch') {
+      onCellClick(cell);
+    }
+  };
   // State for the animated tile (piston movement only) - disabled in tetris variant
   const [animatedTile, setAnimatedTile] = useState<AnimatedTile | null>(null);
   
@@ -431,6 +458,8 @@ const HexGrid = ({
                     containerClass={cellStyles(cell).container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
+                    onPointerDown={handlePointerDown}
+                    onPointerEnter={handlePointerEnter}
                   />
                 </div>
               );
@@ -494,6 +523,7 @@ const HexGrid = ({
       </AnimatePresence>
       
       <style>{`
+        .letter-tile { user-select:none; -webkit-user-select:none; }
         .piston-animated-tile {
           pointer-events: none;
           will-change: transform;
