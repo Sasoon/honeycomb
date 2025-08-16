@@ -47,6 +47,7 @@ interface TetrisGameState {
     round: number;
     gravityMoves?: Map<string, string>; // Optional map of post-score moves (to -> from)
     floodPaths?: Record<string, string[]>; // Paths for flood tile animations
+    tilesHiddenForAnimation?: string[]; // Tiles that should be hidden during animation
     // Free utility actions
     freeMoveAvailable?: boolean;
     freeOrbitAvailable?: boolean;
@@ -139,6 +140,7 @@ const initialState: Omit<TetrisGameState,
 
     slowModeRounds: 0,
     previewLevel: 1,
+    tilesHiddenForAnimation: [],
 
     lastSaved: Date.now(),
 };
@@ -209,6 +211,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     currentWord: '',
                     freeMoveAvailable: true,
                     freeOrbitAvailable: true,
+                    tilesHiddenForAnimation: [],
                 });
             },
 
@@ -263,7 +266,11 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 let nextDrop1 = generateDropLetters(currentTilesPerDrop);
                 const nextDrop2 = generateDropLetters(currentTilesPerDrop);
 
-                // 6. Set the new state all at once
+                // 6. Set the new state all at once, including hidden tiles for animation
+                const newlyPlacedTileIds = newGrid
+                    .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
+                    .map(cell => cell.id);
+                
                 set({
                     round: newRound,
                     tilesPerDrop: currentTilesPerDrop,
@@ -274,6 +281,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     selectedTiles: [],
                     currentWord: '',
                     floodPaths: finalPaths,
+                    tilesHiddenForAnimation: newlyPlacedTileIds,
                 });
             },
 

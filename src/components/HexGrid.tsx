@@ -32,6 +32,7 @@ export interface HexGridProps {
   isGameActive?: boolean;
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
   hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
+  isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
 }
 
 // Interface for the animated tile (either piston or undo)
@@ -104,11 +105,12 @@ const HexGrid = ({
   isWordAlreadyScored,
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
+  isTetrisVariant = false,
 }: HexGridProps) => {
-  // State for the animated tile (piston movement only)
+  // State for the animated tile (piston movement only) - disabled in tetris variant
   const [animatedTile, setAnimatedTile] = useState<AnimatedTile | null>(null);
   
-  // State to track the target cell ID during animations
+  // State to track the target cell ID during animations - disabled in tetris variant
   const [pistonAnimationTargetId, setPistonAnimationTargetId] = useState<string | null>(null);
   
   // Refs to track positions of cells
@@ -123,8 +125,14 @@ const HexGrid = ({
   const prevPlacedTilesRef = useRef<HexCell[]>([]);
   const animationTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   
-  // Effect to detect piston movement and trigger animation
+  // Effect to detect piston movement and trigger animation - disabled in tetris variant
   useEffect(() => {
+    if (isTetrisVariant) {
+      // Skip piston animations in tetris variant
+      prevCellsRef.current = cells.map(c => ({ id: c.id, letter: c.letter, placedThisTurn: c.placedThisTurn }));
+      return;
+    }
+    
     // Find the source cell (the one that had a letter but now doesn't)
     let sourceCell: Pick<HexCell, 'id' | 'letter'> | null = null;
     let targetCell: HexCell | null = null;
@@ -336,12 +344,12 @@ const HexGrid = ({
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
     const isPistonTarget = cell.id === pistonAnimationTargetId;
     
-    if (cell.isPistonTarget) {
-      // Highlight the cell targeted by a piston (highest priority)
+    if (!isTetrisVariant && cell.isPistonTarget) {
+      // Highlight the cell targeted by a piston (highest priority) - only in base game
       bgColor = 'bg-amber-100';
       extraClasses += ' scale-105';
-    } else if (cell.isAdjacentToPistonSource) {
-      // Highlight cells adjacent to a selected piston target
+    } else if (!isTetrisVariant && cell.isAdjacentToPistonSource) {
+      // Highlight cells adjacent to a selected piston target - only in base game
       // Style differently based on whether the cell is empty or occupied
       if (cell.isPlaced) {
         // Occupied adjacent cells - use orange to indicate replacement
@@ -441,9 +449,9 @@ const HexGrid = ({
         {renderHoneycombRows()}
       </div>
       
-      {/* Animated tile for piston movement only */}
+      {/* Animated tile for piston movement only - disabled in tetris variant */}
       <AnimatePresence mode="sync">
-        {animatedTile && animatedTile.isAnimating && (
+        {!isTetrisVariant && animatedTile && animatedTile.isAnimating && (
           <motion.div
             initial={{ 
               position: 'fixed', 

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
@@ -231,6 +231,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentDragAngle, setCurrentDragAngle] = useState<number>(0);
+  const operationInProgressRef = useRef<boolean>(false);
   const orbitPlanRef = useRef<{
     pivotId: string;
     // Canonical 6 slots around pivot: null where grid has no neighbor
@@ -273,10 +274,21 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     moveTileOneStep,
     gravityMoves,
     floodPaths,
+    tilesHiddenForAnimation,
   } = useTetrisGameStore();
 
   useEffect(() => { if (!gameInitialized) initializeGame(); }, [gameInitialized, initializeGame]);
   useEffect(() => {
+    // CRITICAL FIX: If entering flood phase, immediately hide any newly placed tiles
+    // This prevents the flash by hiding tiles SYNCHRONOUSLY before they can render
+    if (phase === 'flood') {
+      const newlyFilled = grid.filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn);
+      if (newlyFilled.length > 0) {
+        const newIds = newlyFilled.map(c => c.id);
+        setHiddenCellIds(prev => [...new Set([...prev, ...newIds])]);
+      }
+    }
+    
     if (phase === 'player') {
       setPreviousGrid(grid);
       lastPlayerGridRef.current = grid;
@@ -284,6 +296,17 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
       setMoveTargets([]);
       setOrbitAnchor(null);
       setFxOverlays([]);
+    }
+  }, [phase, grid]);
+
+  // Use layout effect to hide tiles synchronously before painting
+  useLayoutEffect(() => {
+    if (phase === 'flood') {
+      const newlyPlaced = grid.filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn);
+      if (newlyPlaced.length > 0) {
+        console.log('[FLOOD-DEBUG] Hiding tiles synchronously before paint:', newlyPlaced.map(c => c.id));
+        setHiddenCellIds(prev => [...new Set([...prev, ...newlyPlaced.map(c => c.id)])]);
+      }
     }
   }, [phase, grid]);
 
@@ -342,9 +365,11 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     if (phase === 'gravitySettle' && gravityMoves && gravityMoves.size > 0) {
         const newlySettled = grid.filter(cell => cell.placedThisTurn);
         setHiddenCellIds(newlySettled.map(c => c.id));
-        let maxDelay = 0;
-
-        newlySettled.forEach((cell, idx) => {
+        
+        // Group tiles by their settling distance for staggered animation
+        const tilesByDistance = new Map<number, Array<{ cell: HexCell; sourceCell: HexCell; from: { x: number; y: number }; to: { x: number; y: number } }>>();
+        
+        newlySettled.forEach((cell) => {
             const sourceId = gravityMoves.get(cell.id);
             const sourceCell = previousGrid.find(c => c.id === sourceId);
             if (!sourceCell) return;
@@ -352,37 +377,77 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
             const from = centers.get(`${sourceCell.position.row},${sourceCell.position.col}`);
             const to = centers.get(`${cell.position.row},${cell.position.col}`);
             if (!from || !to) return;
-
-            const ovKey = `gset-${cell.id}-${Date.now()}`;
-            setFxOverlays(prev => [...prev, { key: ovKey, letter: cell.letter, x: from.x, y: from.y }]);
-
-            const animT = window.setTimeout(() => {
-                setFxOverlays(prev => prev.map(o => o.key === ovKey ? { ...o, x: to.x, y: to.y } : o));
-            }, 90 + idx * 60);
-            timersRef.current.push(animT);
-
-            const finalDelay = 320 + idx * 60;
-            maxDelay = Math.max(maxDelay, finalDelay);
-
-            const doneT = window.setTimeout(() => {
-                setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
-                setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
-            }, finalDelay);
-            timersRef.current.push(doneT);
+            
+            const distance = Math.abs(cell.position.row - sourceCell.position.row);
+            if (!tilesByDistance.has(distance)) {
+                tilesByDistance.set(distance, []);
+            }
+            tilesByDistance.get(distance)!.push({ cell, sourceCell, from, to });
+        });
+        
+        let maxDelay = 0;
+        const baseDelay = 120; // Base animation duration
+        const staggerDelay = 80; // Time between distance groups
+        
+        // Animate by distance groups (shorter distances first)
+        const sortedDistances = Array.from(tilesByDistance.keys()).sort((a, b) => a - b);
+        
+        sortedDistances.forEach((distance, distanceIdx) => {
+            const tilesAtDistance = tilesByDistance.get(distance)!;
+            
+            tilesAtDistance.forEach((tileData, tileIdx) => {
+                const { cell, from, to } = tileData;
+                const ovKey = `gset-${cell.id}-${Date.now()}`;
+                
+                // Spawn overlay at source
+                setFxOverlays(prev => [...prev, { 
+                    key: ovKey, 
+                    letter: cell.letter, 
+                    x: from.x, 
+                    y: from.y 
+                }]);
+                
+                // Smooth staggered start within distance group
+                const groupStartDelay = distanceIdx * staggerDelay;
+                const tileStartDelay = groupStartDelay + (tileIdx * 25); // Small stagger within group
+                
+                // Start animation
+                const animT = window.setTimeout(() => {
+                    setFxOverlays(prev => prev.map(o => 
+                        o.key === ovKey ? { ...o, x: to.x, y: to.y } : o
+                    ));
+                }, tileStartDelay);
+                timersRef.current.push(animT);
+                
+                // Calculate animation duration based on distance (longer falls take more time)
+                const animDuration = baseDelay + (distance * 30);
+                const finalDelay = tileStartDelay + animDuration;
+                maxDelay = Math.max(maxDelay, finalDelay);
+                
+                // Clean up overlay and reveal tile
+                const doneT = window.setTimeout(() => {
+                    setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
+                    setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
+                }, finalDelay);
+                timersRef.current.push(doneT);
+            });
         });
 
         animationDoneSignal = () => {
           const advanceT = window.setTimeout(() => {
             endRound();
-          }, maxDelay + 80);
+          }, maxDelay + 100);
           timersRef.current.push(advanceT);
         };
     } else if (phase === 'flood') {
         const newlyFilled = grid
           .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
           .sort((a, b) => (a.position.row - b.position.row) || (a.position.col - b.position.col));
-        // Only hide tiles we will animate; leave others visible to avoid disappearing tiles
-        setHiddenCellIds(newlyFilled.map(c => c.id));
+        
+        // Prevent flash by ensuring tiles are hidden immediately when flood phase starts
+        if (newlyFilled.length > 0) {
+          setHiddenCellIds(newlyFilled.map(c => c.id));
+        }
 
         const debugAnim = typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugAnim') === '1';
         const tNow = () => (typeof performance !== 'undefined' ? Math.round(performance.now()) : Date.now());
@@ -661,25 +726,43 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
   const handleMoveTo = useCallback((sourceCellId: string, targetCellId: string) => {
-    const container = containerRef.current; if (!container) return;
+    if (operationInProgressRef.current) return;
+    operationInProgressRef.current = true;
+    
+    const container = containerRef.current; if (!container) {
+      operationInProgressRef.current = false;
+      return;
+    }
+    
     const centers = mapCenters(container);
     const source = grid.find(c => c.id === sourceCellId);
     const target = grid.find(c => c.id === targetCellId);
-    if (!source || !target) return;
+    if (!source || !target) {
+      operationInProgressRef.current = false;
+      return;
+    }
+    
     const sCenter = centers.get(`${source.position.row},${source.position.col}`);
     const tCenter = centers.get(`${target.position.row},${target.position.col}`);
-    if (!sCenter || !tCenter) return;
+    if (!sCenter || !tCenter) {
+      operationInProgressRef.current = false;
+      return;
+    }
 
+    // Clear any existing overlays to prevent duplicates
+    setFxOverlays(prev => prev.filter(o => !o.key.includes(sourceCellId)));
+    
     // Hide source letter during animation
     setHiddenCellIds(prev => Array.from(new Set([...prev, sourceCellId])));
 
     // Spawn overlay at source and animate to target
     const ovKey = `mvfx-${sourceCellId}-${targetCellId}-${Date.now()}`;
     setFxOverlays(prev => [...prev, { key: ovKey, letter: source.letter, x: sCenter.x, y: sCenter.y }]);
+    
     // Animate
     const t = window.setTimeout(() => {
       setFxOverlays(prev => prev.map(o => o.key === ovKey ? { ...o, x: tCenter.x, y: tCenter.y } : o));
-    }, 0);
+    }, 50);
     timersRef.current.push(t);
 
     // Commit move shortly after
@@ -687,6 +770,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
       moveTileOneStep(sourceCellId, targetCellId);
       setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
       setHiddenCellIds(prev => prev.filter(id => id !== sourceCellId));
+      operationInProgressRef.current = false;
     }, 140);
     timersRef.current.push(commitT);
   }, [grid, moveTileOneStep]);
@@ -700,6 +784,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     setFxOverlays([]);
     setHiddenCellIds([]);
     setPreviousGrid([]);
+    operationInProgressRef.current = false;
     resetGame();
     initializeGame();
   };
@@ -766,22 +851,27 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       key={ov.pulse}
                       initial={false}
                       animate={{ 
-                        // Squash/stretch on impact for weight
-                        scaleX: ov.isFinal ? [1, 1.08, 1] : [1, 1.035, 1],
-                        scaleY: ov.isFinal ? [1, 0.92, 1] : [1, 0.975, 1],
-                        opacity: ov.isFinal ? [0.92, 1] : 0.96,
-                        boxShadow: ov.isFinal 
-                          ? ['0 14px 26px rgba(0,0,0,0.16)','0 6px 14px rgba(0,0,0,0.08)','0 0 0 rgba(0,0,0,0)'] 
-                          : '0 10px 20px rgba(0,0,0,0.12)'
+                        // Enhanced squash/stretch on impact for weight
+                        scaleX: ov.isFinal ? 1.05 : 1,
+                        scaleY: ov.isFinal ? 0.95 : 1,
+                        opacity: ov.isFinal ? 1 : 0.96,
+                        rotateZ: ov.isFinal ? 2 : 0
                       }}
-                      transition={{ duration: ov.isFinal ? 0.15 : 0.2, ease: 'easeOut' }}
+                      transition={{ 
+                        duration: ov.isFinal ? 0.25 : 0.2, 
+                        ease: ov.isFinal ? "easeOut" : 'easeOut',
+                        type: "tween"
+                      }}
                       className="flex items-center justify-center relative"
                       style={{
                         width: `${cellSize.w}px`,
                         height: `${cellSize.h}px`,
                         clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                        background: 'rgba(229,231,235,0.96)', // slightly darker than before
-                        borderRadius: 8
+                        background: 'rgba(229,231,235,0.96)',
+                        borderRadius: 8,
+                        boxShadow: ov.isFinal 
+                          ? '0 6px 14px rgba(0,0,0,0.08)' 
+                          : '0 10px 20px rgba(0,0,0,0.12)'
                       }}
                     >
                       {/* Recoil inner wrapper */}
@@ -799,31 +889,45 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               </AnimatePresence>
             </div>
 
-            {/* Player-phase FX overlays (move/orbit) */}
+            {/* Player-phase FX overlays (move/orbit/gravity) */}
             <div className="pointer-events-none absolute inset-0 z-50">
               <AnimatePresence>
                 {fxOverlays.map(fx => (
                   <motion.div
                     key={fx.key}
-                    initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1 }}
-                    animate={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.22 }}
+                    initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1 }}
+                    animate={{ 
+                      x: fx.x - cellSize.w / 2, 
+                      y: fx.y - cellSize.h / 2, 
+                      opacity: 1,
+                      scale: 1
+                    }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ 
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 30,
+                      mass: 1
+                    }}
                     style={{ position: 'absolute', left: 0, top: 0 }}
                   >
-                    <div
+                    <motion.div
                       className="flex items-center justify-center relative"
                       style={{
                         width: `${cellSize.w}px`,
                         height: `${cellSize.h}px`,
                         clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                        background: 'rgba(229,231,235,0.96)', // slightly darker than before
+                        background: 'rgba(229,231,235,0.96)',
                         borderRadius: 8,
-                        boxShadow: '0 6px 14px rgba(0,0,0,0.08)'
+                        boxShadow: '0 6px 14px rgba(0,0,0,0.12)'
                       }}
+                      whileHover={{ scale: 1.05 }}
+                      initial={{ rotateZ: 0 }}
+                      animate={{ rotateZ: 0 }}
+                      transition={{ duration: 0.4, ease: "easeInOut" }}
                     >
                       <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
-                    </div>
+                    </motion.div>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -1013,19 +1117,29 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                   endE.preventDefault();
                   setIsDragging(false);
 
+                  if (operationInProgressRef.current) return;
+
                   const steps = Math.abs(lockedStepsRef.current);
                   if (steps >= 1) {
+                    operationInProgressRef.current = true;
+                    
                     const direction = lockedStepsRef.current > 0 ? 'cw' : 'ccw';
                     console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations (lockedSteps: ${lockedStepsRef.current})`);
 
                     let currentGrid = useTetrisGameStore.getState().grid;
                     const plan = orbitPlanRef.current;
                     const pivot = currentGrid.find(c => c.id === selectedSingle.cellId);
-                    if (!pivot || !plan || plan.pivotId !== pivot.id) return;
+                    if (!pivot || !plan || plan.pivotId !== pivot.id) {
+                      operationInProgressRef.current = false;
+                      return;
+                    }
 
                     // Use canonical ordered neighbors for commit
                     const neighbors = plan.orderedNeighbors;
-                    if (neighbors.length < 2) return;
+                    if (neighbors.length < 2) {
+                      operationInProgressRef.current = false;
+                      return;
+                    }
 
                     let finalLetters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
                     for (let i = 0; i < steps; i++) {
@@ -1054,6 +1168,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       currentWord: '', 
                       freeOrbitAvailable: false 
                     });
+                    
+                    operationInProgressRef.current = false;
                   } else {
                     console.log(`[ORBIT-DRAG] No rotation committed (lockedSteps: ${lockedStepsRef.current})`);
                   }
@@ -1204,6 +1320,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 isWordAlreadyScored={false}
                 placedTilesThisTurn={[]}
                 gridSize={gridSize}
+                isTetrisVariant={true}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,
                   ...(isDragging && selectedSingle ? 
@@ -1262,7 +1379,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
         words={wordsThisRound.length} // Assuming totalWords is not directly available here, using wordsThisRound.length
         boardPercent={Math.round((grid.filter(c => c.letter && c.isPlaced).length / Math.max(1, grid.length)) * 100)}
         onRestart={handleRestart}
-        onClose={() => { /* modal non-dismissible; force restart */ }}
       />
     </div>
   );

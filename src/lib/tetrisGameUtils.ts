@@ -290,7 +290,7 @@ function processFloodWave(
         );
     };
 
-    // Find contiguous path for a single tile
+    // Find contiguous path for a single tile with preference for deepest positions
     const findFloodPath = (startCell: HexCell): { path: HexCell[]; finalCell: HexCell | null } => {
         const path: HexCell[] = [startCell];
         let currentCell = startCell;
@@ -301,30 +301,40 @@ function processFloodWave(
         }
 
         while (true) {
-            // Only consider bottom-left or bottom-right neighbors (never straight down)
-            const adjacentCandidates = grid.filter(cell =>
+            // Prefer straight down first, then diagonal
+            const straightDown = grid.filter(cell =>
                 cell.position.row === currentCell.position.row + 1 &&
+                Math.abs(cell.position.col - currentCell.position.col) < 0.1 &&
                 areCellsAdjacent(currentCell, cell) &&
-                Math.abs(cell.position.col - currentCell.position.col) > 0.1
-            );
-
-            const adjacentEmpty = adjacentCandidates.filter(cell =>
-                !cell.letter && // Empty cell
-                !waveOccupied.has(cell.id) && // Not occupied by other wave tiles
+                !cell.letter &&
+                !waveOccupied.has(cell.id) &&
                 !visitedIds.has(cell.id)
             );
 
-            if (typeof console !== 'undefined' && adjacentCandidates.length > 0) {
-                const blocked = adjacentCandidates.filter(cell =>
-                    cell.letter || waveOccupied.has(cell.id) || visitedIds.has(cell.id)
-                );
-                if (blocked.length > 0) {
-                    console.log(`[FLOOD-PATH] At (${currentCell.position.row},${currentCell.position.col}): ${blocked.length} blocked cells:`,
-                        blocked.map(c => `(${c.position.row},${c.position.col}):${c.letter || 'occupied'}`).join(', '));
-                }
+            const diagonalCandidates = grid.filter(cell =>
+                cell.position.row === currentCell.position.row + 1 &&
+                areCellsAdjacent(currentCell, cell) &&
+                Math.abs(cell.position.col - currentCell.position.col) > 0.1 &&
+                !cell.letter &&
+                !waveOccupied.has(cell.id) &&
+                !visitedIds.has(cell.id)
+            );
+
+            // Always prefer straight down if available
+            let nextCell: HexCell | null = null;
+            if (straightDown.length > 0) {
+                nextCell = straightDown[0];
+            } else if (diagonalCandidates.length > 0) {
+                // If no straight down, use diagonal but prefer the one that leads to deeper positions
+                nextCell = diagonalCandidates.sort((a, b) => {
+                    // Prefer positions that have more empty space below them
+                    const aSpaceBelow = grid.filter(c => c.position.row > a.position.row && !c.letter).length;
+                    const bSpaceBelow = grid.filter(c => c.position.row > b.position.row && !c.letter).length;
+                    return bSpaceBelow - aSpaceBelow;
+                })[0];
             }
 
-            if (adjacentEmpty.length === 0) {
+            if (!nextCell) {
                 // No more moves - check if current position is connected
                 if (isPositionConnected(currentCell)) {
                     return { path, finalCell: currentCell };
@@ -339,8 +349,6 @@ function processFloodWave(
                 }
             }
 
-            // Random choice for left/right movement
-            const nextCell = adjacentEmpty[Math.floor(Math.random() * adjacentEmpty.length)];
             path.push(nextCell);
             visitedIds.add(nextCell.id);
             currentCell = nextCell;
