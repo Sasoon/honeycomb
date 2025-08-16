@@ -51,16 +51,14 @@ const CellView = memo(function CellView({
   containerClass,
   setRef,
   showLetter,
-  onPointerDown,
-  onPointerEnter,
+  // drag handlers removed
 }: {
   cell: HexCell;
   onClick: (cell: HexCell) => void;
   containerClass: string;
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
-  onPointerDown: (e: React.PointerEvent, cell: HexCell) => void;
-  onPointerEnter: (e: React.PointerEvent, cell: HexCell) => void;
+  // drag handlers removed
 }) {
   return (
     <motion.div
@@ -72,8 +70,7 @@ const CellView = memo(function CellView({
       data-placed-this-turn={cell.placedThisTurn ? 'true' : 'false'}
       className={`hex-grid__item ${containerClass}`}
       onClick={() => onClick(cell)}
-      onPointerDown={(e) => onPointerDown(e, cell)}
-      onPointerEnter={(e) => onPointerEnter(e, cell)}
+      // drag handlers removed
       layout
       style={{ position: 'relative' }}
     >
@@ -113,27 +110,7 @@ const HexGrid = ({
   hiddenLetterCellIds = [],
   isTetrisVariant = false,
 }: HexGridProps) => {
-  // ----- Drag-to-select helpers (Tetris variant only) -----
-  const isSelectingRef = useRef(false);
-
-  const handlePointerUp = () => { isSelectingRef.current = false; };
-  useEffect(() => {
-    document.addEventListener('pointerup', handlePointerUp);
-    return () => document.removeEventListener('pointerup', handlePointerUp);
-  }, []);
-
-  const handlePointerDown = (e: React.PointerEvent, cell: HexCell) => {
-    if (isTetrisVariant && e.pointerType === 'touch') {
-      isSelectingRef.current = true;
-      onCellClick(cell);
-    }
-  };
-
-  const handlePointerEnter = (e: React.PointerEvent, cell: HexCell) => {
-    if (isTetrisVariant && isSelectingRef.current && e.pointerType === 'touch') {
-      onCellClick(cell);
-    }
-  };
+  // drag-to-select removed: revert to tap/click only
   // State for the animated tile (piston movement only) - disabled in tetris variant
   const [animatedTile, setAnimatedTile] = useState<AnimatedTile | null>(null);
   
@@ -458,8 +435,7 @@ const HexGrid = ({
                     containerClass={cellStyles(cell).container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
-                    onPointerDown={handlePointerDown}
-                    onPointerEnter={handlePointerEnter}
+                    // drag handlers removed
                   />
                 </div>
               );
