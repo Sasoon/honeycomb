@@ -282,7 +282,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     moveTileOneStep,
     gravityMoves,
     floodPaths,
-    tilesHiddenForAnimation,
+    tilesHiddenForAnimation: _unusedTiles,
   } = useTetrisGameStore();
 
   useEffect(() => { if (!gameInitialized) initializeGame(); }, [gameInitialized, initializeGame]);
