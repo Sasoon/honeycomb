@@ -255,6 +255,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   } | null>(null);
   const [, setLockedSteps] = useState<number>(0); // magnetic snapped steps (value stored in ref)
   const lockedStepsRef = useRef<number>(0);
+  const [isOverCancel, setIsOverCancel] = useState<boolean>(false);
+  const isOverCancelRef = useRef<boolean>(false);
 
   const {
     gameInitialized,
@@ -1056,6 +1058,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 // Initialize snapped state at start of drag
                 setLockedSteps(0);
                 lockedStepsRef.current = 0;
+                setIsOverCancel(false);
+                isOverCancelRef.current = false;
 
                 const rect = container.getBoundingClientRect();
                 const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -1080,6 +1084,25 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
 
                   const containerMoveX = moveClientX - rect.left;
                   const containerMoveY = moveClientY - rect.top;
+
+                  // Detect pointer over cancel (X) icon area while dragging
+                  const iconCX = orbitAnchor.x;
+                  const iconCY = orbitAnchor.y - cellSize.h * 0.4;
+                  const dxIcon = containerMoveX - iconCX;
+                  const dyIcon = containerMoveY - iconCY;
+                  const distIcon = Math.hypot(dxIcon, dyIcon);
+                  const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+                  const cancelRadius = isCoarse ? 28 : 18; // larger on touch for reliability
+                  const overCancelNow = distIcon <= cancelRadius;
+                  if (overCancelNow !== isOverCancelRef.current) {
+                    isOverCancelRef.current = overCancelNow;
+                    setIsOverCancel(overCancelNow);
+                  }
+                  if (overCancelNow && lockedStepsRef.current !== 0) {
+                    lockedStepsRef.current = 0;
+                    currentLockedStepsLocal = 0;
+                    setLockedSteps(0);
+                  }
 
                   const currentAngle = Math.atan2(containerMoveY - orbitAnchor.y, containerMoveX - orbitAnchor.x);
                   let deltaAngle = currentAngle - startAngle;
@@ -1113,7 +1136,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
 
                   // No external-ring; rotate among present neighbors only (always legal within grid)
 
-                  if (proposedStep !== 0) {
+                  if (proposedStep !== 0 && !overCancelNow) {
                     currentLockedStepsLocal += proposedStep;
                     setLockedSteps(currentLockedStepsLocal);
                     lockedStepsRef.current = currentLockedStepsLocal;
@@ -1129,8 +1152,35 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
 
                   if (operationInProgressRef.current) return;
 
+                  // Recompute over-cancel at end with a slightly larger radius for reliability
+                  const endRect = container.getBoundingClientRect();
+                  let endClientX: number;
+                  let endClientY: number;
+                  if ('changedTouches' in endE && endE.changedTouches && endE.changedTouches.length > 0) {
+                    endClientX = endE.changedTouches[0].clientX;
+                    endClientY = endE.changedTouches[0].clientY;
+                  } else if ('touches' in endE && endE.touches && endE.touches.length > 0) {
+                    endClientX = endE.touches[0].clientX;
+                    endClientY = endE.touches[0].clientY;
+                  } else {
+                    endClientX = (endE as MouseEvent).clientX;
+                    endClientY = (endE as MouseEvent).clientY;
+                  }
+                  const endX = endClientX - endRect.left;
+                  const endY = endClientY - endRect.top;
+                  const endIconCX = orbitAnchor.x;
+                  const endIconCY = orbitAnchor.y - cellSize.h * 0.4;
+                  const endDx = endX - endIconCX;
+                  const endDy = endY - endIconCY;
+                  const endDist = Math.hypot(endDx, endDy);
+                  const endIsCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+                  const endCancelRadius = endIsCoarse ? 32 : 22; // slightly larger on release
+                  const endOverCancel = endDist <= endCancelRadius;
+                  isOverCancelRef.current = endOverCancel;
+                  setIsOverCancel(endOverCancel);
+
                   const steps = Math.abs(lockedStepsRef.current);
-                  if (steps >= 1) {
+                  if (steps >= 1 && !endOverCancel) {
                     operationInProgressRef.current = true;
                     
                     const direction = lockedStepsRef.current > 0 ? 'cw' : 'ccw';
@@ -1184,6 +1234,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                     console.log(`[ORBIT-DRAG] No rotation committed (lockedSteps: ${lockedStepsRef.current})`);
                   }
 
+                  setIsOverCancel(false);
+                  isOverCancelRef.current = false;
                   setCurrentDragAngle(0);
 
                   document.removeEventListener('mousemove', handleDragMove);
@@ -1211,15 +1263,15 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                         transform: 'translate(-50%, -50%)',
                         width: '24px',
                         height: '24px',
-                        background: 'rgba(59, 130, 246, 0.9)',
+                        background: isDragging ? (isOverCancel ? 'rgba(107, 114, 128, 0.95)' : 'rgba(59, 130, 246, 0.9)') : 'rgba(59, 130, 246, 0.9)',
                         borderRadius: '50%',
                         border: '2px solid white',
                         zIndex: 62,
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                        boxShadow: isDragging && isOverCancel ? '0 0 0 3px rgba(107,114,128,0.35)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '12px',
+                        fontSize: isDragging ? '14px' : '12px',
                         color: 'white',
                         fontWeight: 'bold',
                         userSelect: 'none',
@@ -1227,7 +1279,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       }}
                       title="Drag to rotate tiles around pivot"
                     >
-                      🔄
+                      {isDragging ? '×' : '🔄'}
                     </div>
                   )}
                   
@@ -1267,8 +1319,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               width: `${cellSize.w}px`,
                               height: `${cellSize.h}px`,
                               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                              background: 'rgba(34, 197, 94, 0.32)',
-                              border: '2px solid rgba(34, 197, 94, 0.85)',
+                              background: isOverCancel ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)',
+                              border: isOverCancel ? '2px solid rgba(156, 163, 175, 0.85)' : '2px solid rgba(34, 197, 94, 0.85)',
                               borderRadius: 8,
                               zIndex: 59,
                               display: 'flex',
@@ -1276,8 +1328,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               justifyContent: 'center',
                               fontSize: '1rem',
                               fontWeight: 'bold',
-                              color: 'rgba(34, 197, 94, 0.92)',
-                              boxShadow: '0 0 10px rgba(34, 197, 94, 0.3)'
+                              color: isOverCancel ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)',
+                              boxShadow: isOverCancel ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)'
                             }}
                           >
                             {cell.letter}
@@ -1306,10 +1358,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               transform: 'translate(-50%, -50%)',
                               width: '8px',
                               height: '8px',
-                              background: isNearSnap ? 'rgba(34, 197, 94, 0.8)' : 'rgba(156, 163, 175, 0.5)',
-                              borderRadius: '50%',
-                              zIndex: 57,
-                              boxShadow: isNearSnap ? '0 0 8px rgba(34, 197, 94, 0.35)' : 'none'
+                              background: isOverCancel ? 'rgba(156, 163, 175, 0.7)' : (isNearSnap ? 'rgba(34, 197, 94, 0.8)' : 'rgba(156, 163, 175, 0.5)'),
+                              borderRadius: '50%'
                             }}
                           />
                         );
