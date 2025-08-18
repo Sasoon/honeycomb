@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { areCellsAdjacent } from '../lib/tetrisGameUtils';
+import { haptics } from '../lib/haptics';
 import GameOverModal from '../components/GameOverModal';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
@@ -220,8 +221,6 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
 
 type Overlay = { id: string; letter: string; x: number; y: number; pulse: number; isFinal?: boolean; rX?: number; rY?: number };
 
-type MoveTarget = { cellId: string; x: number; y: number };
-
 type FxOverlay = { key: string; letter: string; x: number; y: number };
 
 // (no-op placeholder removed)
@@ -235,7 +234,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   const timersRef = useRef<number[]>([]);
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
-  const [moveTargets, setMoveTargets] = useState<MoveTarget[]>([]);
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentDragAngle, setCurrentDragAngle] = useState<number>(0);
@@ -270,7 +268,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     wordsThisRound,
     nextRows,
     previewLevel,
-    freeMoveAvailable,
     freeOrbitAvailable,
     initializeGame,
     selectTile,
@@ -281,7 +278,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     endPlayerPhase,
     resetGame,
     gridSize,
-    moveTileOneStep,
+    
     gravityMoves,
     floodPaths,
     tilesHiddenForAnimation: _unusedTiles,
@@ -303,7 +300,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
       setPreviousGrid(grid);
       lastPlayerGridRef.current = grid;
       // Reset contextual UI state at start of player phase
-      setMoveTargets([]);
       setOrbitAnchor(null);
       setFxOverlays([]);
     }
@@ -320,7 +316,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     }
   }, [phase, grid]);
 
-  // Compute contextual move targets and orbit anchor when exactly one tile is selected
+  // Compute orbit anchor when exactly one tile is selected
   useEffect(() => {
     if (phase !== 'player') return;
     const container = containerRef.current; if (!container) return;
@@ -332,23 +328,8 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
       // Orbit anchor at selected cell center
       const sCenter = centers.get(`${selectedCell.position.row},${selectedCell.position.col}`);
       setOrbitAnchor(sCenter ? { x: sCenter.x, y: sCenter.y } : null);
-      // Compute adjacent empty targets using the same adjacency logic as selection/scoring
-      const targets: MoveTarget[] = grid
-        .filter(c => c.id !== selectedCell.id && areCellsAdjacent(selectedCell, c))
-        .filter(c => !c.letter || !c.isPlaced)
-        .filter(c => {
-          // Must remain connected: at least one occupied neighbor other than the source
-          return grid.some(n => n.id !== selectedCell.id && n.letter && n.isPlaced && areCellsAdjacent(c, n));
-        })
-        .map(c => {
-          const ctr = centers.get(`${c.position.row},${c.position.col}`);
-          return ctr ? { cellId: c.id, x: ctr.x, y: ctr.y } : null;
-        })
-        .filter((t): t is MoveTarget => !!t);
-      setMoveTargets(targets);
     } else {
       // Hide contextual UI when multi-select or none
-      setMoveTargets([]);
       setOrbitAnchor(null);
     }
   }, [selectedTiles, grid, phase]);
@@ -733,60 +714,12 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   // Default selection for words
   const handleCellClick = useCallback((cell: HexCell) => {
     if (phase !== 'player') return;
+    haptics.select();
     selectTile(cell.id);
   }, [phase, selectTile]);
 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
-  const handleMoveTo = useCallback((sourceCellId: string, targetCellId: string) => {
-    if (operationInProgressRef.current) return;
-    operationInProgressRef.current = true;
-    
-    const container = containerRef.current; if (!container) {
-      operationInProgressRef.current = false;
-      return;
-    }
-    
-    const centers = mapCenters(container);
-    const source = grid.find(c => c.id === sourceCellId);
-    const target = grid.find(c => c.id === targetCellId);
-    if (!source || !target) {
-      operationInProgressRef.current = false;
-      return;
-    }
-    
-    const sCenter = centers.get(`${source.position.row},${source.position.col}`);
-    const tCenter = centers.get(`${target.position.row},${target.position.col}`);
-    if (!sCenter || !tCenter) {
-      operationInProgressRef.current = false;
-      return;
-    }
-
-    // Clear any existing overlays to prevent duplicates
-    setFxOverlays(prev => prev.filter(o => !o.key.includes(sourceCellId)));
-    
-    // Hide source letter during animation
-    setHiddenCellIds(prev => Array.from(new Set([...prev, sourceCellId])));
-
-    // Spawn overlay at source and animate to target
-    const ovKey = `mvfx-${sourceCellId}-${targetCellId}-${Date.now()}`;
-    setFxOverlays(prev => [...prev, { key: ovKey, letter: source.letter, x: sCenter.x, y: sCenter.y }]);
-    
-    // Animate
-    const t = window.setTimeout(() => {
-      setFxOverlays(prev => prev.map(o => o.key === ovKey ? { ...o, x: tCenter.x, y: tCenter.y } : o));
-    }, 50);
-    timersRef.current.push(t);
-
-    // Commit move shortly after
-    const commitT = window.setTimeout(() => {
-      moveTileOneStep(sourceCellId, targetCellId);
-      setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
-      setHiddenCellIds(prev => prev.filter(id => id !== sourceCellId));
-      operationInProgressRef.current = false;
-    }, 140);
-    timersRef.current.push(commitT);
-  }, [grid, moveTileOneStep]);
-
+  
 
   const handleRestart = () => {
     // Stop any ongoing animations
@@ -945,28 +878,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               </AnimatePresence>
             </div>
 
-            {/* Contextual interactive elements (move targets, orbit) - hide during drag */}
-            {phase === 'player' && selectedSingle && !isDragging && freeMoveAvailable && moveTargets.map(t => (
-              <div
-                key={`mv-${t.cellId}`}
-                onClick={() => handleMoveTo(selectedSingle.cellId, t.cellId)}
-                title="Move here"
-                className="shadow-inner"
-                style={{
-                  position: 'absolute',
-                  left: t.x,
-                  top: t.y,
-                  transform: 'translate(-50%, -50%)',
-                  width: `${cellSize.w}px`,
-                  height: `${cellSize.h}px`,
-                  clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                  background: 'rgba(0,0,0,0.18)',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  zIndex: 60
-                }}
-              />
-            ))}
+            {/* Contextual move targets removed for now */}
 
             {/* Subtle hex selection outline around pivot - always show when tile selected */}
             {phase === 'player' && selectedSingle && orbitAnchor && (
@@ -987,6 +899,36 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 }}
               />
             )}
+
+            {/* QoL: subtle highlight of adjacent tiles around the selected pivot */}
+            {phase === 'player' && selectedSingle && orbitAnchor && freeOrbitAvailable && !isDragging && (() => {
+              const container = containerRef.current; if (!container) return null;
+              const centers = mapCenters(container);
+              const pivot = grid.find(c => c.id === selectedSingle.cellId); if (!pivot) return null;
+              const neighbors = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced);
+              return neighbors.map(n => {
+                const ctr = centers.get(`${n.position.row},${n.position.col}`);
+                if (!ctr) return null;
+                return (
+                  <div
+                    key={`adj-${n.id}`}
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: ctr.x,
+                      top: ctr.y,
+                      transform: 'translate(-50%, -50%)',
+                      width: `${cellSize.w}px`,
+                      height: `${cellSize.h}px`,
+                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                      borderRadius: 8,
+                      zIndex: 57,
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      boxShadow: '0 0 10px rgba(59, 130, 246, 0.20), inset 0 0 0 1px rgba(59, 130, 246, 0.15)'
+                    }}
+                  />
+                );
+              });
+            })()}
 
             {phase === 'player' && selectedSingle && orbitAnchor && freeOrbitAvailable && (() => {
               // Arc Dragger UI for orbit controls
@@ -1140,6 +1082,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                     currentLockedStepsLocal += proposedStep;
                     setLockedSteps(currentLockedStepsLocal);
                     lockedStepsRef.current = currentLockedStepsLocal;
+                    haptics.tick();
                   }
 
                   // Drive soft angle for UI feedback (handle rotation)
@@ -1228,6 +1171,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       currentWord: '', 
                       freeOrbitAvailable: false 
                     });
+                    haptics.success();
                     
                     operationInProgressRef.current = false;
                   } else {

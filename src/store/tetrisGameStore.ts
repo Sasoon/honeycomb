@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
 import { generateDropLettersSmart, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, checkTetrisGameOver } from '../lib/tetrisGameUtils';
+import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 
@@ -192,7 +193,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     selectedTiles: [],
                     currentWord: '',
                     wordsThisRound: [],
-                    freeMoveAvailable: true,
+                    freeMoveAvailable: false,
                     freeOrbitAvailable: true,
                 });
             },
@@ -209,7 +210,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
-                    freeMoveAvailable: true,
+                    freeMoveAvailable: false,
                     freeOrbitAvailable: true,
                     tilesHiddenForAnimation: [],
                 });
@@ -322,7 +323,21 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     const lastSelectedCell = state.grid.find(c => c.id === lastSelectedId);
 
                     if (!lastSelectedCell || !areCellsAdjacent(cell, lastSelectedCell)) {
-                        // Not adjacent, don't allow selection
+                        // If only one tile is selected, auto-switch selection to the newly clicked tile
+                        if (state.selectedTiles.length === 1) {
+                            const newSelected = [{
+                                cellId,
+                                letter: cell.letter,
+                                position: 0
+                            }];
+                            set({
+                                selectedTiles: newSelected,
+                                currentWord: cell.letter,
+                                isWordValid: false
+                            });
+                            return;
+                        }
+                        // Not adjacent, don't allow extending multi-selection
                         toastService.error('Must select adjacent tiles!');
                         return;
                     }
@@ -467,6 +482,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 set(updates);
                 toastService.success(`+${wordScore} points!`);
+                haptics.success();
 
                 // If no gravity moves, end the round immediately to trigger flood
                 if (moveSources.size === 0) {
@@ -477,51 +493,11 @@ export const useTetrisGameStore = create<TetrisGameState>()(
             },
 
             // New: move one tile to an adjacent empty cell, then end round
-            moveTileOneStep: (sourceCellId: string, targetCellId: string) => {
+            moveTileOneStep: (_sourceCellId: string, _targetCellId: string) => {
                 const state = get();
                 if (state.phase !== 'player') return;
-
-                const source = state.grid.find(c => c.id === sourceCellId);
-                const target = state.grid.find(c => c.id === targetCellId);
-                if (!source || !target) return;
-
-                if (!source.letter || !source.isPlaced) {
-                    toastService.error('Select a tile with a letter');
-                    return;
-                }
-                if (target.letter || target.isPlaced) {
-                    toastService.error('Target must be empty');
-                    return;
-                }
-                if (!areCellsAdjacent(source, target)) {
-                    toastService.error('Must move to an adjacent cell');
-                    return;
-                }
-                // Connected constraint: target must have at least one occupied neighbor excluding source
-                const hasConnectedNeighbor = get().grid.some(n => n.id !== source.id && n.letter && n.isPlaced && areCellsAdjacent(target, n));
-                if (!hasConnectedNeighbor) {
-                    toastService.error('Move must stay connected');
-                    return;
-                }
-
-                const newGrid = state.grid.map(cell => {
-                    if (cell.id === source.id) {
-                        return { ...cell, letter: '', isPlaced: false };
-                    }
-                    if (cell.id === target.id) {
-                        return { ...cell, letter: source.letter, isPlaced: true };
-                    }
-                    return cell;
-                });
-
-                // If free move is available, consume it and stay in player phase; otherwise block
-                if (state.freeMoveAvailable) {
-                    set({ grid: newGrid, selectedTiles: [], currentWord: '', freeMoveAvailable: false });
-                    toastService.success('Free move used');
-                } else {
-                    toastService.error('Move already used this turn');
-                    return;
-                }
+                toastService.error('Move power is disabled');
+                return;
             },
 
             // New: orbit rotate the 6 neighbors around a pivot, then end round
