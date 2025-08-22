@@ -1386,7 +1386,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               const tilesWithLockButtons = grid.filter(cell => 
                 cell.letter && 
                 cell.isPlaced && 
-                (selectedTiles.some(s => s.cellId === cell.id) || lockedTiles.includes(cell.id))
+                (selectedTiles.some(s => s.cellId === cell.id) || lockedTiles?.includes(cell.id))
               );
 
               return (
@@ -1395,7 +1395,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                     const center = centers.get(`${cell.position.row},${cell.position.col}`);
                     if (!center) return null;
                     
-                    const isLocked = lockedTiles.includes(cell.id);
+                    const isLocked = lockedTiles?.includes(cell.id) || false;
                     
                     return (
                       <div

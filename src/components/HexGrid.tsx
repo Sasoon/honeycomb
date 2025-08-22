@@ -119,9 +119,9 @@ const HexGrid = ({
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
   isTetrisVariant = false,
-  lockMode = false,
-  lockedTiles = [],
-  onTileLockToggle,
+  lockMode: _lockMode = false,
+  lockedTiles: _lockedTiles = [],
+  // onTileLockToggle,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
   // State for the animated tile (piston movement only) - disabled in tetris variant
@@ -360,7 +360,7 @@ const HexGrid = ({
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
     const isPistonTarget = cell.id === pistonAnimationTargetId;
-    const isLocked = Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false;
+    const isLocked = Array.isArray(_lockedTiles) ? _lockedTiles.includes(cell.id) : false;
     
     if (!isTetrisVariant && cell.isPistonTarget) {
       // Highlight the cell targeted by a piston (highest priority) - only in base game
@@ -455,7 +455,7 @@ const HexGrid = ({
                     containerClass={cellStyles(cell).container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
-                    isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
+                    isLocked={Array.isArray(_lockedTiles) ? _lockedTiles.includes(cell.id) : false}
                     // drag handlers removed
                   />
                 </div>

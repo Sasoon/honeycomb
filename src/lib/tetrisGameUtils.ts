@@ -184,7 +184,7 @@ export function computeReachableAir(grid: HexCell[]): Set<string> {
 export function placeStartingTiles(
     grid: HexCell[],
     letters: string[],
-    gridSize: number
+    _gridSize: number
 ): HexCell[] {
     const newGrid = grid.map(cell => ({ ...cell }));
     
