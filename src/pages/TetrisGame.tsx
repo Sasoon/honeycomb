@@ -1382,11 +1382,21 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               if (!container) return null;
               const centers = mapCenters(container);
               
-              // Get tiles that should show lock buttons (selected tiles + locked tiles)
+              // Get tiles that should show lock buttons
+              // - Show icons on locked/selected tiles 
+              // - Exception: if multiple tiles selected, show icon only on first selected tile
+              const isMultipleSelected = selectedTiles.length > 1;
+              const firstSelectedTileId = isMultipleSelected ? selectedTiles[0].cellId : null;
+              
               const tilesWithLockButtons = grid.filter(cell => 
                 cell.letter && 
                 cell.isPlaced && 
-                (selectedTiles.some(s => s.cellId === cell.id) || lockedTiles?.includes(cell.id))
+                (isMultipleSelected ? 
+                  // Multiple selected: show icon only on first selected tile
+                  cell.id === firstSelectedTileId :
+                  // Single/no selection: show icons on all locked tiles and all selected tiles
+                  (lockedTiles?.includes(cell.id) || selectedTiles.some(s => s.cellId === cell.id))
+                )
               );
 
               return (

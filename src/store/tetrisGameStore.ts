@@ -557,10 +557,19 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const isClickedCellLocked = currentLockedTiles.includes(cellId);
                 
                 if (isClickedCellLocked) {
-                    // If clicked cell is locked, unlock it
-                    const newLockedTiles = currentLockedTiles.filter(id => id !== cellId);
+                    // If clicked cell is locked, unlock all selected tiles (or just the clicked one if none selected)
+                    const tilesToUnlock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
+                    
+                    // Only unlock valid locked tiles
+                    const validTilesToUnlock = tilesToUnlock.filter(tileId => {
+                        return currentLockedTiles.includes(tileId);
+                    });
+                    
+                    const newLockedTiles = currentLockedTiles.filter(id => !validTilesToUnlock.includes(id));
                     set({ lockedTiles: newLockedTiles });
-                    toastService.success('Tile unlocked');
+                    
+                    const count = validTilesToUnlock.length;
+                    toastService.success(`${count} tile${count > 1 ? 's' : ''} unlocked`);
                 } else {
                     // If clicked cell is not locked, lock all selected tiles (including the clicked one if selected)
                     const tilesToLock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
@@ -573,12 +582,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     
                     const newLockedTiles = [...new Set([...currentLockedTiles, ...validTilesToLock])];
                     set({ lockedTiles: newLockedTiles });
-                    
-                    // Clear selection after locking
-                    set({ 
-                        selectedTiles: [],
-                        currentWord: ''
-                    });
                     
                     const count = validTilesToLock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);
