@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLettersSmart, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, checkTetrisGameOver } from '../lib/tetrisGameUtils';
+import { generateDropLettersSmart, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, checkTetrisGameOver, placeStartingTiles } from '../lib/tetrisGameUtils';
 import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
@@ -109,7 +109,6 @@ interface TetrisGameState {
     cancelPowerCard: () => void;
 
     // Lock mode actions
-    toggleLockMode: () => void;
     toggleTileLock: (cellId: string) => void;
 
     // Utility
@@ -121,7 +120,7 @@ const initialState: Omit<TetrisGameState,
     'setGameState' | 'initializeGame' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'activatePowerCard' | 'cancelPowerCard' | 'toggleLockMode' | 'toggleTileLock' | 'checkGameOver'
+    'activatePowerCard' | 'cancelPowerCard' | 'toggleTileLock' | 'checkGameOver'
 > = {
     gameInitialized: false,
     phase: 'player',
@@ -176,13 +175,9 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     initialLetters.push(generateRandomLetter());
                 }
 
-                // First settle any pre-placed tiles to the bottom
-                const { newGrid: settledGrid } = clearTilesAndApplyGravity(initialGrid, []);
-
-                // Apply the initial letters as if they were falling from the top
-                // This ensures they end up at the bottom with proper physics
-                const result = applyFallingTiles(settledGrid, initialLetters, gridSize);
-                const tilesWithLetters = result.newGrid;
+                // Place starting tiles with simple gravity (not flood logic)
+                // This ensures they always end up at the bottom
+                const tilesWithLetters = placeStartingTiles(initialGrid, initialLetters, gridSize);
 
                 const startingPowerCards = generateStartingPowerCards();
 
@@ -550,34 +545,44 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 });
             },
 
-            toggleLockMode: () => {
-                const state = get();
-                set({
-                    lockMode: !state.lockMode
-                });
-            },
 
             toggleTileLock: (cellId: string) => {
                 const state = get();
-                if (!state.lockMode) return; // Only works in lock mode
                 
-                const cell = state.grid.find(c => c.id === cellId);
-                if (!cell || !cell.letter || !cell.isPlaced) return; // Only lock placed tiles
+                const clickedCell = state.grid.find(c => c.id === cellId);
+                if (!clickedCell || !clickedCell.letter || !clickedCell.isPlaced) return; // Only lock placed tiles
                 
-                const currentLocked = Array.isArray(state.lockedTiles) ? state.lockedTiles : [];
-                let newLockedTiles: string[];
+                const currentLockedTiles = Array.isArray(state.lockedTiles) ? state.lockedTiles : [];
+                const selectedTileIds = state.selectedTiles.map(t => t.cellId);
+                const isClickedCellLocked = currentLockedTiles.includes(cellId);
                 
-                if (currentLocked.includes(cellId)) {
-                    newLockedTiles = currentLocked.filter(id => id !== cellId);
+                if (isClickedCellLocked) {
+                    // If clicked cell is locked, unlock it
+                    const newLockedTiles = currentLockedTiles.filter(id => id !== cellId);
+                    set({ lockedTiles: newLockedTiles });
                     toastService.success('Tile unlocked');
                 } else {
-                    newLockedTiles = [...currentLocked, cellId];
-                    toastService.success('Tile locked');
+                    // If clicked cell is not locked, lock all selected tiles (including the clicked one if selected)
+                    const tilesToLock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
+                    
+                    // Only lock valid placed tiles
+                    const validTilesToLock = tilesToLock.filter(tileId => {
+                        const cell = state.grid.find(c => c.id === tileId);
+                        return cell && cell.letter && cell.isPlaced;
+                    });
+                    
+                    const newLockedTiles = [...new Set([...currentLockedTiles, ...validTilesToLock])];
+                    set({ lockedTiles: newLockedTiles });
+                    
+                    // Clear selection after locking
+                    set({ 
+                        selectedTiles: [],
+                        currentWord: ''
+                    });
+                    
+                    const count = validTilesToLock.length;
+                    toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);
                 }
-                
-                set({
-                    lockedTiles: newLockedTiles
-                });
             },
 
             checkGameOver: () => {

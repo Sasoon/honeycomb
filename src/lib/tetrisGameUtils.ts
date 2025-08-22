@@ -180,6 +180,33 @@ export function computeReachableAir(grid: HexCell[]): Set<string> {
     return air;
 }
 
+// Place starting tiles with simple gravity (for game initialization)
+export function placeStartingTiles(
+    grid: HexCell[],
+    letters: string[],
+    gridSize: number
+): HexCell[] {
+    const newGrid = grid.map(cell => ({ ...cell }));
+    
+    // Find top row cells
+    const topRowCells = newGrid.filter(cell => cell.position.row === 0);
+    
+    // Place letters at top row first
+    letters.forEach((letter, index) => {
+        if (index < topRowCells.length) {
+            const cell = topRowCells[index];
+            cell.letter = letter;
+            cell.isPlaced = true;
+            (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
+        }
+    });
+    
+    // Apply simple gravity to let them fall to bottom
+    const { newGrid: settledGrid } = clearTilesAndApplyGravity(newGrid, []);
+    
+    return settledGrid;
+}
+
 // Apply falling letters to the grid with contiguous path flood logic
 export function applyFallingTiles(
     grid: HexCell[],
@@ -391,6 +418,39 @@ function processFloodWave(
         );
     };
 
+    // Helper function to find the maximum depth reachable from a position
+    const findMaxDepthFromPosition = (
+        startCell: HexCell, 
+        grid: HexCell[], 
+        occupied: Set<string>, 
+        visited: Set<string>
+    ): number => {
+        const tempVisited = new Set([...visited, startCell.id]);
+
+        const exploreDepth = (cell: HexCell, currentVisited: Set<string>): number => {
+            let deepestRow = cell.position.row;
+
+            // Look for cells directly below and diagonally below
+            const nextCandidates = grid.filter(nextCell =>
+                nextCell.position.row === cell.position.row + 1 &&
+                areCellsAdjacent(cell, nextCell) &&
+                !nextCell.letter &&
+                !occupied.has(nextCell.id) &&
+                !currentVisited.has(nextCell.id)
+            );
+
+            for (const candidate of nextCandidates) {
+                const newVisited = new Set([...currentVisited, candidate.id]);
+                const candidateDepth = exploreDepth(candidate, newVisited);
+                deepestRow = Math.max(deepestRow, candidateDepth);
+            }
+
+            return deepestRow;
+        };
+
+        return exploreDepth(startCell, tempVisited);
+    };
+
     // Find contiguous path for a single tile with preference for deepest positions
     const findFloodPath = (startCell: HexCell): { path: HexCell[]; finalCell: HexCell | null } => {
         const path: HexCell[] = [startCell];
@@ -402,36 +462,34 @@ function processFloodWave(
         }
 
         while (true) {
-            // Prefer straight down first, then diagonal
-            const straightDown = grid.filter(cell =>
+            // Only look for downward movement (straight down or diagonal down)
+            const downwardCells = grid.filter(cell =>
                 cell.position.row === currentCell.position.row + 1 &&
-                Math.abs(cell.position.col - currentCell.position.col) < 0.1 &&
                 areCellsAdjacent(currentCell, cell) &&
                 !cell.letter &&
                 !waveOccupied.has(cell.id) &&
                 !visitedIds.has(cell.id)
             );
 
-            const diagonalCandidates = grid.filter(cell =>
-                cell.position.row === currentCell.position.row + 1 &&
-                areCellsAdjacent(currentCell, cell) &&
-                Math.abs(cell.position.col - currentCell.position.col) > 0.1 &&
-                !cell.letter &&
-                !waveOccupied.has(cell.id) &&
-                !visitedIds.has(cell.id)
+            // Prefer straight down first, then diagonal down
+            const straightDown = downwardCells.filter(cell =>
+                Math.abs(cell.position.col - currentCell.position.col) < 0.1
             );
 
-            // Always prefer straight down if available
+            const diagonalDown = downwardCells.filter(cell =>
+                Math.abs(cell.position.col - currentCell.position.col) > 0.1
+            );
+
+            // Choose next cell with downward-only movement
             let nextCell: HexCell | null = null;
             if (straightDown.length > 0) {
                 nextCell = straightDown[0];
-            } else if (diagonalCandidates.length > 0) {
-                // If no straight down, use diagonal but prefer the one that leads to deeper positions
-                nextCell = diagonalCandidates.sort((a, b) => {
-                    // Prefer positions that have more empty space below them
-                    const aSpaceBelow = grid.filter(c => c.position.row > a.position.row && !c.letter).length;
-                    const bSpaceBelow = grid.filter(c => c.position.row > b.position.row && !c.letter).length;
-                    return bSpaceBelow - aSpaceBelow;
+            } else if (diagonalDown.length > 0) {
+                // If no straight down, prefer diagonal down that leads to deepest position
+                nextCell = diagonalDown.sort((a, b) => {
+                    const aMaxDepth = findMaxDepthFromPosition(a, grid, waveOccupied, visitedIds);
+                    const bMaxDepth = findMaxDepthFromPosition(b, grid, waveOccupied, visitedIds);
+                    return bMaxDepth - aMaxDepth; // Prefer deeper positions
                 })[0];
             }
 
@@ -713,4 +771,4 @@ export function areCellsAdjacent(cell1: HexCell, cell2: HexCell): boolean {
     // But we need to be more precise based on actual grid layout
 
     return Math.abs(colDiff) <= 1;
-} 
+}

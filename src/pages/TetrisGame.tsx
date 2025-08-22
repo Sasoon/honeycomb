@@ -272,7 +272,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     freeOrbitsAvailable,
     lockMode,
     lockedTiles,
-    toggleLockMode,
     toggleTileLock,
     initializeGame,
     selectTile,
@@ -1377,6 +1376,67 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               );
             })()}
 
+            {/* Lock button overlays */}
+            {phase === 'player' && (() => {
+              const container = containerRef.current;
+              if (!container) return null;
+              const centers = mapCenters(container);
+              
+              // Get tiles that should show lock buttons (selected tiles + locked tiles)
+              const tilesWithLockButtons = grid.filter(cell => 
+                cell.letter && 
+                cell.isPlaced && 
+                (selectedTiles.some(s => s.cellId === cell.id) || lockedTiles.includes(cell.id))
+              );
+
+              return (
+                <>
+                  {tilesWithLockButtons.map(cell => {
+                    const center = centers.get(`${cell.position.row},${cell.position.col}`);
+                    if (!center) return null;
+                    
+                    const isLocked = lockedTiles.includes(cell.id);
+                    
+                    return (
+                      <div
+                        key={`lock-${cell.id}`}
+                        className="absolute cursor-pointer"
+                        style={{
+                          left: center.x,
+                          top: center.y + cellSize.h * 0.4, // Bottom position (inverted from orbit)
+                          transform: 'translate(-50%, -50%)',
+                          width: '24px',
+                          height: '24px',
+                          background: isLocked ? 'rgba(239, 68, 68, 0.9)' : 'rgba(34, 197, 94, 0.9)', // Red for locked, green for unlocked
+                          borderRadius: '50%',
+                          border: '2px solid white',
+                          zIndex: 62,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          userSelect: 'none',
+                          touchAction: 'none'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTileLock(cell.id);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        title={isLocked ? "Unlock this tile" : "Lock selected tiles"}
+                      >
+                        {isLocked ? '🔓' : '🔒'}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
+
             {/* Grid */}
             <div className={`grid-container flex justify-center mt-12 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
               <HexGrid
@@ -1430,16 +1490,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               {phase === 'player' && (
                 <>
                   <button onClick={() => submitWord()} disabled={currentWord.length < 3} className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Submit Word</button>
-                  <button 
-                    onClick={toggleLockMode} 
-                    className={`py-2 px-4 font-semibold rounded-md transition-colors ${
-                      lockMode 
-                        ? 'bg-orange-500 hover:bg-orange-600 text-white' 
-                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                    }`}
-                  >
-                    🔒 Lock Mode {lockMode ? 'ON' : 'OFF'}
-                  </button>
                   <button onClick={() => endPlayerPhase()} className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-md transition-colors">End Turn</button>
                   <div className="py-2 px-3 bg-gray-100 text-gray-700 font-medium rounded-md">
                     Orbits: {freeOrbitsAvailable || 0}

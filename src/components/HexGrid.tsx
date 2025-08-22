@@ -33,9 +33,9 @@ export interface HexGridProps {
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
   hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
-  lockMode?: boolean; // Whether lock mode is active
+  lockMode?: boolean; // Whether lock mode is active - deprecated, keeping for compatibility
   lockedTiles?: string[]; // Array of locked tile IDs
-  onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle
+  onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle - deprecated, now handled in overlay
 }
 
 // Interface for the animated tile (either piston or undo)
@@ -451,10 +451,7 @@ const HexGrid = ({
                 <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
                   <CellView
                     cell={cell}
-                    onClick={lockMode && onTileLockToggle ? 
-                      (cell) => onTileLockToggle(cell.id) : 
-                      onCellClick
-                    }
+                    onClick={onCellClick}
                     containerClass={cellStyles(cell).container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
