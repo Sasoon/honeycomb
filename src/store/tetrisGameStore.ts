@@ -227,33 +227,28 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const state = get();
                 const newRound = state.round + 1;
 
-                // 1. Determine tilesPerDrop for THIS round first
-                let currentTilesPerDrop = state.tilesPerDrop;
-                if (newRound % 3 === 0) {
-                    currentTilesPerDrop = Math.min(state.tilesPerDrop + 1, 6);
-                    console.log(`[STORE] Round ${newRound}: Incrementing tiles from ${state.tilesPerDrop} to ${currentTilesPerDrop}`);
-                }
+                // Always use 3 tiles per drop (consistent)
+                const currentTilesPerDrop = 3;
 
-                // 2. Generate flood tiles for this round using the correct count
+                // Generate flood tiles for this round
                 const rewardCreative = (!state.freeMoveAvailable) || (!state.freeOrbitAvailable);
                 const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative);
 
-                // If the preview was generated with old count but we need more tiles, add them
-                const actualTilesNeeded = currentTilesPerDrop;
+                // Ensure we have exactly 3 tiles
                 let actualFallingLetters = fallingLetters;
-                if (fallingLetters.length < actualTilesNeeded) {
-                    const additionalTiles = generateDropLettersSmart(actualTilesNeeded - fallingLetters.length, state.grid, rewardCreative);
+                if (fallingLetters.length < currentTilesPerDrop) {
+                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rewardCreative);
                     actualFallingLetters = [...fallingLetters, ...additionalTiles];
-                    console.log(`[STORE] Expanded falling letters from ${fallingLetters.length} to ${actualFallingLetters.length}`);
+                } else if (fallingLetters.length > currentTilesPerDrop) {
+                    actualFallingLetters = fallingLetters.slice(0, currentTilesPerDrop);
                 }
 
-                console.log(`[STORE] Round ${newRound}: Processing ${actualFallingLetters.length} falling tiles (target: ${currentTilesPerDrop})`);
+                console.log(`[STORE] Round ${newRound}: Processing ${actualFallingLetters.length} falling tiles (consistent 3 per flood)`);
 
-
-                // 3. Apply the flood to the grid
+                // Apply the flood to the grid
                 const { newGrid, finalPaths } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
 
-                // 4. Loss detection — only when the top row is fully blocked
+                // Loss detection — only when the top row is fully blocked
                 if (checkTetrisGameOver(newGrid)) {
                     const totalCells = newGrid.length;
                     const filledCells = newGrid.filter(c => c.letter && c.isPlaced).length;
@@ -264,18 +259,18 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     return;
                 }
 
-                // 5. Generate fresh previews for the upcoming turns
-                let nextDrop1 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
-                const nextDrop2 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
+                // Generate fresh previews for the upcoming turns (always 3)
+                let nextDrop1 = generateDropLettersSmart(3, newGrid, false);
+                const nextDrop2 = generateDropLettersSmart(3, newGrid, false);
 
-                // 6. Set the new state all at once, including hidden tiles for animation
+                // Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid
                     .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
                     .map(cell => cell.id);
 
                 set({
                     round: newRound,
-                    tilesPerDrop: currentTilesPerDrop,
+                    tilesPerDrop: 3, // Always 3
                     phase: 'flood',
                     grid: newGrid,
                     wordsThisRound: [],
