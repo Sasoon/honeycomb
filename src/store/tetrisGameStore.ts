@@ -566,7 +566,11 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     });
                     
                     const newLockedTiles = currentLockedTiles.filter(id => !validTilesToUnlock.includes(id));
-                    set({ lockedTiles: newLockedTiles });
+                    set({ 
+                        lockedTiles: newLockedTiles,
+                        selectedTiles: [],
+                        currentWord: ''
+                    });
                     
                     const count = validTilesToUnlock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} unlocked`);
@@ -581,7 +585,11 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     });
                     
                     const newLockedTiles = [...new Set([...currentLockedTiles, ...validTilesToLock])];
-                    set({ lockedTiles: newLockedTiles });
+                    set({ 
+                        lockedTiles: newLockedTiles,
+                        selectedTiles: [],
+                        currentWord: ''
+                    });
                     
                     const count = validTilesToLock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);
