@@ -528,7 +528,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
             },
 
             // Note: Orbit logic is implemented in TetrisGame.tsx drag handler
-            orbitPivot: (pivotCellId: string, direction: 'cw' | 'ccw' = 'cw') => {
+            orbitPivot: (_pivotCellId: string, _direction: 'cw' | 'ccw' = 'cw') => {
                 // This function exists for interface compatibility but orbit is handled in UI
                 console.log('[ORBIT-STORE] This function is not used - orbit handled in UI');
             },

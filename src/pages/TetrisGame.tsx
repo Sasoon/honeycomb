@@ -276,7 +276,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     toggleTileLock,
     initializeGame,
     selectTile,
-    clearSelection,
     submitWord,
     endRound,
     startPlayerPhase,
@@ -739,11 +738,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     initializeGame();
   };
   
-  const toggleDebugMode = () => {
-    const current = localStorage.getItem('tetrisDebugAnim') === '1';
-    localStorage.setItem('tetrisDebugAnim', current ? '0' : '1');
-    console.log(`[DEBUG] Flood animation debug ${current ? 'DISABLED' : 'ENABLED'}`);
-  };
 
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
