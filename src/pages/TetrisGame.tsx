@@ -6,6 +6,7 @@ import { useTetrisGameStore } from '../store/tetrisGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { areCellsAdjacent } from '../lib/tetrisGameUtils';
 import { haptics } from '../lib/haptics';
+import toastService from '../lib/toastService';
 import GameOverModal from '../components/GameOverModal';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
@@ -268,7 +269,11 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
     wordsThisRound,
     nextRows,
     previewLevel,
-    freeOrbitAvailable,
+    freeOrbitsAvailable,
+    lockMode,
+    lockedTiles,
+    toggleLockMode,
+    toggleTileLock,
     initializeGame,
     selectTile,
     clearSelection,
@@ -891,9 +896,9 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                   width: `${cellSize.w}px`,
                   height: `${cellSize.h}px`,
                   clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                  border: `2px solid ${freeOrbitAvailable ? 'rgba(59, 130, 246, 0.6)' : 'rgba(156, 163, 175, 0.4)'}`,
+                  border: `2px solid ${(freeOrbitsAvailable || 0) > 0 ? 'rgba(59, 130, 246, 0.6)' : 'rgba(156, 163, 175, 0.4)'}`,
                   zIndex: 58,
-                  boxShadow: freeOrbitAvailable 
+                  boxShadow: (freeOrbitsAvailable || 0) > 0 
                     ? '0 2px 4px rgba(59, 130, 246, 0.3), inset 0 0 0 1px rgba(59, 130, 246, 0.2)' 
                     : '0 1px 2px rgba(0, 0, 0, 0.1)'
                 }}
@@ -901,7 +906,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
             )}
 
             {/* QoL: subtle highlight of adjacent tiles around the selected pivot */}
-            {phase === 'player' && selectedSingle && orbitAnchor && freeOrbitAvailable && !isDragging && (() => {
+            {phase === 'player' && selectedSingle && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && !isDragging && (() => {
               const container = containerRef.current; if (!container) return null;
               const centers = mapCenters(container);
               const pivot = grid.find(c => c.id === selectedSingle.cellId); if (!pivot) return null;
@@ -930,7 +935,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               });
             })()}
 
-            {phase === 'player' && selectedSingle && orbitAnchor && freeOrbitAvailable && (() => {
+            {phase === 'player' && selectedSingle && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && (() => {
               // Arc Dragger UI for orbit controls
               const container = containerRef.current;
               if (!container) return null;
@@ -993,7 +998,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               if (adjacentTiles.length < 1) return null;
 
               const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-                if (!freeOrbitAvailable) return;
+                if (!freeOrbitsAvailable || freeOrbitsAvailable <= 0) return;
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -1144,18 +1149,59 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       return;
                     }
 
-                    let finalLetters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
+                    // Get current locked tiles
+                    const currentState = useTetrisGameStore.getState();
+                    const lockedTileIds = Array.isArray(currentState.lockedTiles) ? currentState.lockedTiles : [];
+                    console.log('[ORBIT-UI] Locked tiles:', lockedTileIds);
+
+                    // Extract current state: letters and lock status  
+                    const neighborStates = neighbors.map(n => ({
+                      cell: n,
+                      letter: n.letter && n.isPlaced ? n.letter : '',
+                      isLocked: lockedTileIds.includes(n.id)
+                    }));
+
+                    // Only rotate letters from unlocked tiles
+                    const unlockedLetters = neighborStates
+                      .filter(state => !state.isLocked)
+                      .map(state => state.letter);
+
+                    console.log('[ORBIT-UI] Unlocked letters to rotate:', unlockedLetters);
+
+                    if (unlockedLetters.length < 2) {
+                      toastService.error('Not enough unlocked neighbors to orbit');
+                      operationInProgressRef.current = false;
+                      return;
+                    }
+
+                    // Rotate unlocked letters
+                    let rotatedLetters = [...unlockedLetters];
                     for (let i = 0; i < steps; i++) {
-                      console.log(`[ORBIT-DRAG] Applying step ${i + 1}/${steps} ${direction}`);
+                      console.log(`[ORBIT-UI] Applying step ${i + 1}/${steps} ${direction}`);
                       if (direction === 'cw') {
-                        finalLetters = [finalLetters[finalLetters.length - 1], ...finalLetters.slice(0, finalLetters.length - 1)];
+                        rotatedLetters = [rotatedLetters[rotatedLetters.length - 1], ...rotatedLetters.slice(0, rotatedLetters.length - 1)];
                       } else {
-                        finalLetters = [...finalLetters.slice(1), finalLetters[0]];
+                        rotatedLetters = [...rotatedLetters.slice(1), rotatedLetters[0]];
                       }
                     }
 
+                    // Distribute rotated letters back to unlocked positions
+                    let rotatedIndex = 0;
                     const neighborIdToNewLetter = new Map<string, string>();
-                    neighbors.forEach((n, idx) => neighborIdToNewLetter.set(n.id, finalLetters[idx]));
+                    
+                    neighborStates.forEach(({ cell, isLocked, letter }) => {
+                      if (isLocked) {
+                        // Locked tiles keep their current letter
+                        neighborIdToNewLetter.set(cell.id, letter);
+                        console.log(`[ORBIT-UI] Keeping locked tile ${cell.id}: ${letter}`);
+                      } else {
+                        // Unlocked tiles get the next rotated letter
+                        const newLetter = rotatedLetters[rotatedIndex];
+                        neighborIdToNewLetter.set(cell.id, newLetter);
+                        console.log(`[ORBIT-UI] Moving ${cell.id}: ${letter} → ${newLetter}`);
+                        rotatedIndex++;
+                      }
+                    });
 
                     currentGrid = currentGrid.map(cell => {
                       const finalLetter = neighborIdToNewLetter.get(cell.id);
@@ -1165,12 +1211,17 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                       return cell;
                     });
 
+                    // Decrement orbit count properly  
+                    const newOrbitsAvailable = Math.max(0, (currentState.freeOrbitsAvailable || 0) - 1);
+                    
                     useTetrisGameStore.setState({ 
                       grid: currentGrid, 
                       selectedTiles: [], 
                       currentWord: '', 
-                      freeOrbitAvailable: false 
+                      freeOrbitsAvailable: newOrbitsAvailable
                     });
+                    
+                    toastService.success(`Orbit used (${newOrbitsAvailable} remaining)`);
                     haptics.success();
                     
                     operationInProgressRef.current = false;
@@ -1196,7 +1247,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               
               return (
                 <>
-                  {freeOrbitAvailable && (
+                  {(freeOrbitsAvailable || 0) > 0 && (
                     <div
                       onMouseDown={handleDragStart}
                       onTouchStart={handleDragStart}
@@ -1234,19 +1285,33 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                         const plan = orbitPlanRef.current;
                         let drawX = center.x - cellSize.w / 2;
                         let drawY = center.y - cellSize.h / 2;
-                        if (plan) {
+                        
+                        // Check if this tile is locked
+                        const currentState = useTetrisGameStore.getState();
+                        const lockedTileIds = Array.isArray(currentState.lockedTiles) ? currentState.lockedTiles : [];
+                        const isLocked = lockedTileIds.includes(cell.id);
+                        
+                        // Only move unlocked tiles during preview
+                        if (plan && !isLocked) {
                           const presentIdx = plan.neighborIdToPresentIndex.get(cell.id);
                           if (presentIdx !== undefined && plan.orderedNeighbors.length > 0) {
-                            const n = plan.orderedNeighbors.length;
-                            const targetIdx = ((presentIdx + lockedStepsRef.current) % n + n) % n;
-                            const targetCell = plan.orderedNeighbors[targetIdx];
-                            const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
-                            if (targetCtr) {
-                              drawX = targetCtr.x - cellSize.w / 2;
-                              drawY = targetCtr.y - cellSize.h / 2;
+                            // Calculate position among ONLY unlocked tiles
+                            const unlockedNeighbors = plan.orderedNeighbors.filter(n => !lockedTileIds.includes(n.id));
+                            const unlockedPresentIdx = unlockedNeighbors.findIndex(n => n.id === cell.id);
+                            
+                            if (unlockedPresentIdx !== -1) {
+                              const unlockedCount = unlockedNeighbors.length;
+                              const targetUnlockedIdx = ((unlockedPresentIdx + lockedStepsRef.current) % unlockedCount + unlockedCount) % unlockedCount;
+                              const targetCell = unlockedNeighbors[targetUnlockedIdx];
+                              const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
+                              if (targetCtr) {
+                                drawX = targetCtr.x - cellSize.w / 2;
+                                drawY = targetCtr.y - cellSize.h / 2;
+                              }
                             }
                           }
                         }
+                        // If locked, drawX/drawY remain at original center position
 
                         // Snappy spring
                         return (
@@ -1254,7 +1319,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                             key={`preview-${cell.id}`}
                             className="absolute pointer-events-none"
                             initial={{ x: drawX, y: drawY, scale: 1, opacity: 1 }}
-                            animate={{ x: drawX, y: drawY, scale: 1.02, opacity: 1 }}
+                            animate={{ x: drawX, y: drawY, scale: isLocked ? 1.0 : 1.02, opacity: 1 }}
                             transition={{ type: 'spring', stiffness: 650, damping: 50, mass: 1.5 }}
                             style={{
                               position: 'absolute',
@@ -1263,8 +1328,12 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               width: `${cellSize.w}px`,
                               height: `${cellSize.h}px`,
                               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                              background: isOverCancel ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)',
-                              border: isOverCancel ? '2px solid rgba(156, 163, 175, 0.85)' : '2px solid rgba(34, 197, 94, 0.85)',
+                              background: isLocked 
+                                ? 'rgba(251, 146, 60, 0.3)' // Orange for locked tiles
+                                : isOverCancel ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)',
+                              border: isLocked
+                                ? '2px solid rgba(251, 146, 60, 0.8)' // Orange border for locked tiles
+                                : isOverCancel ? '2px solid rgba(156, 163, 175, 0.85)' : '2px solid rgba(34, 197, 94, 0.85)',
                               borderRadius: 8,
                               zIndex: 59,
                               display: 'flex',
@@ -1325,6 +1394,9 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                 placedTilesThisTurn={[]}
                 gridSize={gridSize}
                 isTetrisVariant={true}
+                lockMode={lockMode}
+                lockedTiles={lockedTiles}
+                onTileLockToggle={toggleTileLock}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,
                   ...(isDragging && selectedSingle ? 
@@ -1358,18 +1430,29 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               </div>
             )}
 
+
             {/* Actions */}
-            <div className="mt-6 flex gap-3 justify-center flex-wrap">
+            <div className="mt-6 flex gap-3 justify-center flex-wrap items-center">
               {phase === 'player' && (
                 <>
                   <button onClick={() => submitWord()} disabled={currentWord.length < 3} className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Submit Word</button>
-                  <button onClick={() => clearSelection()} disabled={selectedTiles.length === 0} className="py-2 px-4 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Clear</button>
+                  <button 
+                    onClick={toggleLockMode} 
+                    className={`py-2 px-4 font-semibold rounded-md transition-colors ${
+                      lockMode 
+                        ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                    }`}
+                  >
+                    🔒 Lock Mode {lockMode ? 'ON' : 'OFF'}
+                  </button>
                   <button onClick={() => endPlayerPhase()} className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-md transition-colors">End Turn</button>
+                  <div className="py-2 px-3 bg-gray-100 text-gray-700 font-medium rounded-md">
+                    Orbits: {freeOrbitsAvailable || 0}
+                  </div>
                 </>
               )}
-              {/* Removed Start Playing button; auto-advance to player phase after flood */}
-              <button onClick={handleRestart} className="py-2 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md transition-colors">Restart Game</button>
-              <button onClick={toggleDebugMode} className="py-1 px-2 bg-purple-500 hover:bg-purple-600 text-white text-sm rounded-md transition-colors">Debug</button>
+              <button onClick={handleRestart} className="py-2 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md transition-colors">Restart</button>
             </div>
           </div>
         </div>

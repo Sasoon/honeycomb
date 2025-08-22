@@ -51,7 +51,11 @@ interface TetrisGameState {
     tilesHiddenForAnimation?: string[]; // Tiles that should be hidden during animation
     // Free utility actions
     freeMoveAvailable?: boolean;
-    freeOrbitAvailable?: boolean;
+    freeOrbitsAvailable?: number; // Changed from boolean to number (2 per turn)
+    
+    // Lock mode state
+    lockMode?: boolean; // Whether lock mode is active
+    lockedTiles?: string[]; // Array of locked tile IDs
 
     // Falling tiles mechanics
     nextRows: string[][]; // Letters for upcoming rows
@@ -104,6 +108,10 @@ interface TetrisGameState {
     activatePowerCard: (cardId: string) => void;
     cancelPowerCard: () => void;
 
+    // Lock mode actions
+    toggleLockMode: () => void;
+    toggleTileLock: (cellId: string) => void;
+
     // Utility
     checkGameOver: () => boolean;
 }
@@ -113,7 +121,7 @@ const initialState: Omit<TetrisGameState,
     'setGameState' | 'initializeGame' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'activatePowerCard' | 'cancelPowerCard' | 'checkGameOver'
+    'activatePowerCard' | 'cancelPowerCard' | 'toggleLockMode' | 'toggleTileLock' | 'checkGameOver'
 > = {
     gameInitialized: false,
     phase: 'player',
@@ -142,6 +150,8 @@ const initialState: Omit<TetrisGameState,
     slowModeRounds: 0,
     previewLevel: 1,
     tilesHiddenForAnimation: [],
+    lockMode: false,
+    lockedTiles: [],
 
     lastSaved: Date.now(),
 };
@@ -176,9 +186,10 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 const startingPowerCards = generateStartingPowerCards();
 
-                // Generate first drop preview based on current tilesPerDrop (default 3)
-                const firstDrop = generateDropLettersSmart(3, tilesWithLetters, false);
-                const secondDrop = generateDropLettersSmart(3, tilesWithLetters, false);
+                // Generate first drop preview (starts at 3 tiles for round 1)
+                const initialTilesPerDrop = 3;
+                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false);
+                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false);
 
                 set({
                     gameInitialized: true,
@@ -189,12 +200,14 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     gridSize: gridSize,
                     powerCards: startingPowerCards,
                     nextRows: [firstDrop, secondDrop],
-                    tilesPerDrop: 3,
+                    tilesPerDrop: initialTilesPerDrop,
                     selectedTiles: [],
                     currentWord: '',
                     wordsThisRound: [],
                     freeMoveAvailable: false,
-                    freeOrbitAvailable: true,
+                    freeOrbitsAvailable: 2, // 2 orbits per turn
+                    lockMode: false,
+                    lockedTiles: [],
                 });
             },
 
@@ -206,12 +219,14 @@ export const useTetrisGameStore = create<TetrisGameState>()(
             },
 
             startPlayerPhase: () => {
+                console.log('[STORE] Starting player phase with 2 orbits');
                 set({
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
                     freeMoveAvailable: false,
-                    freeOrbitAvailable: true,
+                    freeOrbitsAvailable: 2, // Reset to 2 orbits per turn
+                    // Note: lockMode and lockedTiles are cleared at endRound start
                     tilesHiddenForAnimation: [],
                 });
             },
@@ -227,11 +242,28 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const state = get();
                 const newRound = state.round + 1;
 
-                // Always use 3 tiles per drop (consistent)
-                const currentTilesPerDrop = 3;
+                // Clear lock mode and locked tiles immediately before flood starts
+                // This ensures visual indicators disappear before flood animation
+                set({
+                    lockMode: false,
+                    lockedTiles: [],
+                });
+
+                // Progressive difficulty: +1 tile every 4 rounds (balanced for new lock/orbit powers)
+                let currentTilesPerDrop = 3;
+                if (newRound >= 12) {
+                    currentTilesPerDrop = 6; // Cap at 6 tiles
+                } else if (newRound >= 8) {
+                    currentTilesPerDrop = 5; // Round 8-11: 5 tiles
+                } else if (newRound >= 4) {
+                    currentTilesPerDrop = 4; // Round 4-7: 4 tiles  
+                }
+                // Round 1-3: 3 tiles (default)
+                
+                console.log(`[STORE] Round ${newRound}: ${currentTilesPerDrop} tiles per drop`);
 
                 // Generate flood tiles for this round
-                const rewardCreative = (!state.freeMoveAvailable) || (!state.freeOrbitAvailable);
+                const rewardCreative = (!state.freeMoveAvailable) || ((state.freeOrbitsAvailable || 0) <= 0);
                 const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative);
 
                 // Ensure we have exactly 3 tiles
@@ -259,9 +291,9 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     return;
                 }
 
-                // Generate fresh previews for the upcoming turns (always 3)
-                let nextDrop1 = generateDropLettersSmart(3, newGrid, false);
-                const nextDrop2 = generateDropLettersSmart(3, newGrid, false);
+                // Generate fresh previews for the upcoming turns using correct tile count
+                let nextDrop1 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
+                const nextDrop2 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
 
                 // Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid
@@ -270,7 +302,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 set({
                     round: newRound,
-                    tilesPerDrop: 3, // Always 3
+                    tilesPerDrop: currentTilesPerDrop, // Progressive difficulty
                     phase: 'flood',
                     grid: newGrid,
                     wordsThisRound: [],
@@ -495,51 +527,10 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 return;
             },
 
-            // New: orbit rotate the 6 neighbors around a pivot, then end round
+            // Note: Orbit logic is implemented in TetrisGame.tsx drag handler
             orbitPivot: (pivotCellId: string, direction: 'cw' | 'ccw' = 'cw') => {
-                const state = get();
-                if (state.phase !== 'player') return;
-                const pivot = state.grid.find(c => c.id === pivotCellId);
-                if (!pivot) return;
-
-                const p = pivot.position;
-                // Build neighbors by adjacency (distance 1)
-                const neighborCandidates = state.grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
-                // Compute centers in grid coordinates for angular order (use row/col as coarse plane)
-                const neighbors = neighborCandidates
-                    .map(n => ({ n, angle: Math.atan2(n.position.row - p.row, n.position.col - p.col) }))
-                    .sort((a, b) => a.angle - b.angle)
-                    .map(x => x.n);
-
-                if (neighbors.length < 2) {
-                    toastService.error('Not enough neighbors to orbit');
-                    return;
-                }
-
-                const letters = neighbors.map(n => (n.letter && n.isPlaced ? n.letter : ''));
-                const rotated = direction === 'cw'
-                    ? [letters[letters.length - 1], ...letters.slice(0, letters.length - 1)]
-                    : [...letters.slice(1), letters[0]];
-
-                const neighborIdToNewLetter = new Map<string, string>();
-                neighbors.forEach((n, idx) => neighborIdToNewLetter.set(n.id, rotated[idx]));
-
-                const newGrid = state.grid.map(cell => {
-                    const newLetter = neighborIdToNewLetter.get(cell.id);
-                    if (newLetter !== undefined) {
-                        return { ...cell, letter: newLetter, isPlaced: newLetter !== '' };
-                    }
-                    return cell;
-                });
-
-                // If free orbit is available, consume it and stay in player phase; otherwise block
-                if (state.freeOrbitAvailable) {
-                    set({ grid: newGrid, selectedTiles: [], currentWord: '', freeOrbitAvailable: false });
-                    toastService.success('Free orbit used');
-                } else {
-                    toastService.error('Orbit already used this turn');
-                    return;
-                }
+                // This function exists for interface compatibility but orbit is handled in UI
+                console.log('[ORBIT-STORE] This function is not used - orbit handled in UI');
             },
 
             activatePowerCard: (cardId: string) => {
@@ -556,6 +547,36 @@ export const useTetrisGameStore = create<TetrisGameState>()(
             cancelPowerCard: () => {
                 set({
                     activePowerCard: null
+                });
+            },
+
+            toggleLockMode: () => {
+                const state = get();
+                set({
+                    lockMode: !state.lockMode
+                });
+            },
+
+            toggleTileLock: (cellId: string) => {
+                const state = get();
+                if (!state.lockMode) return; // Only works in lock mode
+                
+                const cell = state.grid.find(c => c.id === cellId);
+                if (!cell || !cell.letter || !cell.isPlaced) return; // Only lock placed tiles
+                
+                const currentLocked = Array.isArray(state.lockedTiles) ? state.lockedTiles : [];
+                let newLockedTiles: string[];
+                
+                if (currentLocked.includes(cellId)) {
+                    newLockedTiles = currentLocked.filter(id => id !== cellId);
+                    toastService.success('Tile unlocked');
+                } else {
+                    newLockedTiles = [...currentLocked, cellId];
+                    toastService.success('Tile locked');
+                }
+                
+                set({
+                    lockedTiles: newLockedTiles
                 });
             },
 

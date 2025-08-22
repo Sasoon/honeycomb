@@ -33,6 +33,9 @@ export interface HexGridProps {
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
   hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
+  lockMode?: boolean; // Whether lock mode is active
+  lockedTiles?: string[]; // Array of locked tile IDs
+  onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle
 }
 
 // Interface for the animated tile (either piston or undo)
@@ -51,6 +54,7 @@ const CellView = memo(function CellView({
   containerClass,
   setRef,
   showLetter,
+  isLocked,
   // drag handlers removed
 }: {
   cell: HexCell;
@@ -58,6 +62,7 @@ const CellView = memo(function CellView({
   containerClass: string;
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
+  isLocked?: boolean;
   // drag handlers removed
 }) {
   return (
@@ -95,6 +100,11 @@ const CellView = memo(function CellView({
             </span>
           </div>
         )}
+        {isLocked && (
+          <div className="lock-indicator" style={{ position: 'absolute', top: '-4px', left: '-4px' }}>
+            <span style={{ fontSize: '0.8rem' }}>🔒</span>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -109,6 +119,9 @@ const HexGrid = ({
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
   isTetrisVariant = false,
+  lockMode = false,
+  lockedTiles = [],
+  onTileLockToggle,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
   // State for the animated tile (piston movement only) - disabled in tetris variant
@@ -347,6 +360,7 @@ const HexGrid = ({
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
     const isPistonTarget = cell.id === pistonAnimationTargetId;
+    const isLocked = Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false;
     
     if (!isTetrisVariant && cell.isPistonTarget) {
       // Highlight the cell targeted by a piston (highest priority) - only in base game
@@ -398,6 +412,12 @@ const HexGrid = ({
       extraClasses += ' piston-target-impact';
     }
 
+    // Apply locked tile styling
+    if (isLocked && !cell.isSelected) {
+      border = border || 'hex-border-locked';
+      extraClasses += ' shadow-md';
+    }
+
     return {
       container: `${bgColor} ${textColor} ${border} ${extraClasses}`,
     };
@@ -431,10 +451,14 @@ const HexGrid = ({
                 <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
                   <CellView
                     cell={cell}
-                    onClick={onCellClick}
+                    onClick={lockMode && onTileLockToggle ? 
+                      (cell) => onTileLockToggle(cell.id) : 
+                      onCellClick
+                    }
                     containerClass={cellStyles(cell).container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
+                    isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
                     // drag handlers removed
                   />
                 </div>
