@@ -1384,16 +1384,16 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               
               // Get tiles that should show lock buttons
               // - Show icons on locked/selected tiles 
-              // - Exception: if multiple tiles selected, show icon only on first selected tile
+              // - Exception: if multiple tiles selected, show icon only on last selected tile
               const isMultipleSelected = selectedTiles.length > 1;
-              const firstSelectedTileId = isMultipleSelected ? selectedTiles[0].cellId : null;
+              const lastSelectedTileId = isMultipleSelected ? selectedTiles[selectedTiles.length - 1].cellId : null;
               
               const tilesWithLockButtons = grid.filter(cell => 
                 cell.letter && 
                 cell.isPlaced && 
                 (isMultipleSelected ? 
-                  // Multiple selected: show icon only on first selected tile
-                  cell.id === firstSelectedTileId :
+                  // Multiple selected: show icon only on last selected tile
+                  cell.id === lastSelectedTileId :
                   // Single/no selection: show icons on all locked tiles and all selected tiles
                   (lockedTiles?.includes(cell.id) || selectedTiles.some(s => s.cellId === cell.id))
                 )
