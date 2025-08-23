@@ -512,7 +512,9 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     selectedTiles: [],
                     currentWord: '',
                     gravityMoves: moveSources,
-                    phase: moveSources.size > 0 ? 'gravitySettle' : 'flood', // Await animation if moves occurred
+                    // Only set gravitySettle phase if there are moves to animate
+                    // Otherwise stay in player phase and let endRound() handle flood transition
+                    ...(moveSources.size > 0 ? { phase: 'gravitySettle' } : {}),
                 };
 
                 // Add power card if earned
