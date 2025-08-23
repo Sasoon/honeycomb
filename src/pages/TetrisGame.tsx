@@ -935,7 +935,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
         </div>
 
         {/* Main content */}
-        <div className="flex-1 h-full overflow-hidden">
+        <div className="flex-1 h-full overflow-hidden flex flex-col">
           {/* Mobile Game Controls */}
           <TetrisMobileGameControls
             score={score}
@@ -948,7 +948,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
             previewLevel={previewLevel}
           />
 
-          <div ref={containerRef} className="w-full h-full flex flex-col items-center justify-center relative p-2 max-h-screen">
+          <div ref={containerRef} className="flex-1 w-full flex flex-col items-center justify-center relative px-2">
             {/* Falling overlays */}
             <div className="pointer-events-none absolute inset-0 z-40">
               <AnimatePresence>

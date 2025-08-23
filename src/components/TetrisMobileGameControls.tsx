@@ -31,8 +31,8 @@ const TetrisMobileGameControls = ({
         className="bg-white shadow-md border-b border-amber-100 p-4 transition-all"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex flex-wrap justify-between items-center gap-y-2">
-          <div className="flex flex-wrap space-x-2 items-center">
+        <div className="flex justify-between items-center">
+          <div className="flex space-x-2 items-center">
             {/* Next Drop Preview */}
             {previewLevel > 0 && nextRows.length > 0 && (
               <div className="flex items-center gap-2 bg-gray-50 rounded-full px-3 py-1">
@@ -49,7 +49,7 @@ const TetrisMobileGameControls = ({
           </div>
           
           {/* Game Stats */}
-          <div className="flex flex-wrap space-x-3 text-md items-center">
+          <div className="flex space-x-2 text-sm items-center">
             <div>
               <span className="text-gray-500">Score:</span> {score}
             </div>
