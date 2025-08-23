@@ -21,7 +21,7 @@ const LetterTile: React.FC<LetterTileProps> = ({
         fontSize: '1.5rem',
         lineHeight: '2rem',
         fontWeight: 700,
-        transition: 'all 0.2s ease'
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
       }}
     >
       {letter}

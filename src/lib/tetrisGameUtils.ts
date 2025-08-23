@@ -526,12 +526,11 @@ function processFloodWave(
         return { path, finalCell: currentCell };
     };
 
-    // Single-pass attempt: try to place each letter at any viable entry
+    // Single-pass attempt: try to place each letter at any viable entry (deterministic left-to-right order)
     for (const letter of waveLetters) {
         let placed = false;
-        const startIdx = Math.floor(Math.random() * entryPoints.length);
         for (let k = 0; k < entryPoints.length && !placed; k++) {
-            const ep = entryPoints[(startIdx + k) % entryPoints.length];
+            const ep = entryPoints[k];
             if (waveOccupied.has(ep.id) || (ep.letter && ep.isPlaced)) continue;
 
             const { path, finalCell } = findFloodPath(ep);

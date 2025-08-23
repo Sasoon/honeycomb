@@ -286,9 +286,33 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     return;
                 }
 
-                // Generate fresh previews for the upcoming turns using correct tile count
-                let nextDrop1 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
-                const nextDrop2 = generateDropLettersSmart(currentTilesPerDrop, newGrid, false);
+                // Generate fresh previews for the upcoming turns using correct tile count for each future round
+                // nextDrop1 will be used for (newRound + 1), nextDrop2 will be used for (newRound + 2)
+                const nextRound1 = newRound + 1;
+                const nextRound2 = newRound + 2;
+                
+                // Calculate tile count for next round
+                let tilesForNextRound1 = 3;
+                if (nextRound1 >= 12) {
+                    tilesForNextRound1 = 6;
+                } else if (nextRound1 >= 8) {
+                    tilesForNextRound1 = 5;
+                } else if (nextRound1 >= 4) {
+                    tilesForNextRound1 = 4;
+                }
+                
+                // Calculate tile count for round after next
+                let tilesForNextRound2 = 3;
+                if (nextRound2 >= 12) {
+                    tilesForNextRound2 = 6;
+                } else if (nextRound2 >= 8) {
+                    tilesForNextRound2 = 5;
+                } else if (nextRound2 >= 4) {
+                    tilesForNextRound2 = 4;
+                }
+
+                let nextDrop1 = generateDropLettersSmart(tilesForNextRound1, newGrid, false);
+                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false);
 
                 // Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid

@@ -1306,6 +1306,11 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                         }
                         // If locked, drawX/drawY remain at original center position
 
+                        // Get appropriate colors for the border stroke
+                        const borderColor = isLocked
+                          ? '%23FB923C' // Orange for locked tiles (URL encoded #FB923C)
+                          : isOverCancel ? '%239CA3AF' : '%2322C55E'; // Gray or green
+
                         // Snappy spring
                         return (
                           <motion.div
@@ -1324,10 +1329,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               background: isLocked 
                                 ? 'rgba(251, 146, 60, 0.3)' // Orange for locked tiles
                                 : isOverCancel ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)',
-                              border: isLocked
-                                ? '2px solid rgba(251, 146, 60, 0.8)' // Orange border for locked tiles
-                                : isOverCancel ? '2px solid rgba(156, 163, 175, 0.85)' : '2px solid rgba(34, 197, 94, 0.85)',
-                              borderRadius: 8,
                               zIndex: 59,
                               display: 'flex',
                               alignItems: 'center',
@@ -1338,6 +1339,18 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                               boxShadow: isOverCancel ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)'
                             }}
                           >
+                            {/* SVG hexagonal border overlay */}
+                            <div
+                              className="absolute inset-0 pointer-events-none"
+                              style={{
+                                backgroundImage: `url("data:image/svg+xml,%3csvg width='100%25' height='115.47%25' viewBox='0 0 100 115.47' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3e%3cpath d='M 50 0 L 100 28.87 L 100 86.60 L 50 115.47 L 0 86.60 L 0 28.87 Z' fill='none' stroke='${borderColor}' stroke-width='2'/%3e%3c/svg%3e")`,
+                                backgroundSize: '100% 100%',
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'center',
+                                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                                zIndex: 10
+                              }}
+                            />
                             {cell.letter}
                           </motion.div>
                         );
@@ -1447,8 +1460,33 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               );
             })()}
 
+            {/* Next Drop Preview */}
+            {previewLevel > 0 && nextRows.length > 0 && (
+              <div className="flex justify-center mb-4">
+                <div className="inline-flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-full border border-gray-200">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Next</span>
+                  <div className="flex gap-1.5">
+                    {nextRows[0]?.map((letter, idx) => (
+                      <div key={idx} className="w-6 h-6 bg-white rounded border border-gray-300 flex items-center justify-center text-xs font-semibold text-gray-700 shadow-sm">
+                        {letter}
+                      </div>
+                    ))}
+                  </div>
+                  {previewLevel > 1 && nextRows[1] && (
+                    <div className="flex gap-1 opacity-40">
+                      {nextRows[1]?.map((letter, idx) => (
+                        <div key={idx} className="w-5 h-5 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
+                          {letter}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Grid */}
-            <div className={`grid-container flex justify-center mt-12 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
+            <div className={`grid-container flex justify-center mt-8 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
               <HexGrid
                 cells={grid.map(c => ({ ...c, isSelected: selectedTiles.some(t => t.cellId === c.id) }))}
                 onCellClick={handleCellClick}
@@ -1471,28 +1509,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               />
             </div>
 
-            {/* Preview rows */}
-            {previewLevel > 0 && nextRows.length > 0 && (
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <h3 className="text-sm font-semibold text-gray-600 mb-2">Next Drop</h3>
-                <div className="flex justify-center gap-2">
-                  {nextRows[0]?.map((letter, idx) => (
-                    <div key={idx} className="w-10 h-10 bg-gray-300 rounded border border-black flex items-center justify-center font-bold">
-                      {letter}
-                    </div>
-                  ))}
-                </div>
-                {previewLevel > 1 && nextRows[1] && (
-                  <div className="flex justify-center gap-2 mt-2 opacity-50">
-                    {nextRows[1]?.map((letter, idx) => (
-                      <div key={idx} className="w-8 h-8 bg-gray-200 rounded border border-black flex items-center justify-center font-bold text-sm">
-                        {letter}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
 
             {/* Actions */}
