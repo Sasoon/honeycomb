@@ -1259,7 +1259,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: isDragging ? '14px' : '12px',
+                        fontSize: isDragging ? '14px' : '15px',
                         color: 'white',
                         fontWeight: 'bold',
                         userSelect: 'none',
