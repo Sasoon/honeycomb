@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useState, lazy, Suspense } from 'react';
 
 import Header from './components/Header.tsx';
@@ -9,8 +9,9 @@ const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
 const Stats = lazy(() => import('./pages/Stats.tsx'));
 const HowToPlay = lazy(() => import('./pages/HowToPlay.tsx'));
 
-function App() {
+function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const location = useLocation();
   
   const toggleSidebar = () => {
     setIsSidebarOpen(prev => !prev);
@@ -19,37 +20,48 @@ function App() {
   const openMenu = () => setIsSidebarOpen(true);
   const closeMenu = () => setIsSidebarOpen(false);
   
+  // Hide footer on tetris game for full SPA experience
+  const showFooter = location.pathname !== '/tetris';
+  
   return (
-    <Router>
-      <div className="min-h-screen flex flex-col">
-        <Header toggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
-        <main className="flex-1 w-full mx-auto">
-          <Suspense fallback={<div className="p-4">Loading…</div>}>
-            <Routes>
-              <Route path="/" element={
-                <Game 
-                  isSidebarOpen={isSidebarOpen} 
-                  openMenu={openMenu}
-                  closeMenu={closeMenu}
-                />
-              } />
-              <Route path="/tetris" element={
-                <TetrisGame 
-                  isSidebarOpen={isSidebarOpen} 
-                  openMenu={openMenu}
-                  closeMenu={closeMenu}
-                />
-              } />
-              <Route path="/daily" element={<DailyChallenge />} />
-              <Route path="/stats" element={<Stats />} />
-              <Route path="/how-to-play" element={<HowToPlay />} />
-            </Routes>
-          </Suspense>
-        </main>
+    <div className="h-screen flex flex-col">
+      <Header toggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+      <main className="flex-1 w-full mx-auto flex flex-col">
+        <Suspense fallback={<div className="p-4">Loading…</div>}>
+          <Routes>
+            <Route path="/" element={
+              <Game 
+                isSidebarOpen={isSidebarOpen} 
+                openMenu={openMenu}
+                closeMenu={closeMenu}
+              />
+            } />
+            <Route path="/tetris" element={
+              <TetrisGame 
+                isSidebarOpen={isSidebarOpen} 
+                openMenu={openMenu}
+                closeMenu={closeMenu}
+              />
+            } />
+            <Route path="/daily" element={<DailyChallenge />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/how-to-play" element={<HowToPlay />} />
+          </Routes>
+        </Suspense>
+      </main>
+      {showFooter && (
         <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
           © {new Date().getFullYear()} Honeycomb - A Word-Building Puzzle Game
         </footer>
-      </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }

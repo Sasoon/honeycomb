@@ -815,8 +815,8 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
-    <div className="game-container min-h-screen bg-amber-50">
-      <div className="flex flex-col md:flex-row">
+    <div className="game-container flex-1 bg-amber-50 overflow-hidden">
+      <div className="flex flex-col md:flex-row h-full">
         {/* Tetris Game Sidebar */}
         <div 
           ref={sidebarRef}
@@ -824,8 +824,8 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
             ${isSidebarOpen ? 'w-64 md:w-72' : 'w-0 md:w-72'} 
             bg-white shadow-md z-30 
             ${isSidebarOpen ? 'fixed' : 'fixed md:relative'} 
-            top-0 left-0 mt-16 md:mt-0
-            md:sticky md:top-16 md:h-[calc(100vh-4rem)] h-[calc(100vh-4rem)] flex flex-col overflow-hidden`}
+            top-0 left-0 md:top-0
+            h-full flex flex-col overflow-hidden`}
         >
           {/* Sidebar content */}
           <div className={`${isSidebarOpen ? 'flex' : 'hidden md:flex'} flex-col h-full py-4 px-3 overflow-y-auto`}>
@@ -935,7 +935,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
         </div>
 
         {/* Main content */}
-        <div className="flex-1">
+        <div className="flex-1 h-full overflow-hidden">
           {/* Mobile Game Controls */}
           <TetrisMobileGameControls
             score={score}
@@ -948,7 +948,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
             previewLevel={previewLevel}
           />
 
-          <div ref={containerRef} className="max-w-4xl mx-auto relative">
+          <div ref={containerRef} className="w-full h-full flex flex-col items-center justify-center relative p-2 max-h-screen">
             {/* Falling overlays */}
             <div className="pointer-events-none absolute inset-0 z-40">
               <AnimatePresence>
@@ -1633,7 +1633,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
 
 
             {/* Grid */}
-            <div className={`grid-container flex justify-center mt-8 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
+            <div className={`grid-container flex justify-center relative z-10 ${phase === 'flood' ? 'flood-phase' : ''} flex-shrink-0`}>
               <HexGrid
                 cells={grid.map(c => ({ ...c, isSelected: selectedTiles.some(t => t.cellId === c.id) }))}
                 onCellClick={handleCellClick}
@@ -1657,19 +1657,19 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
             </div>
 
             {/* Actions */}
-            <div className="mt-6 flex gap-3 justify-center flex-wrap items-center">
+            <div className="mt-2 flex gap-2 justify-center flex-wrap items-center flex-shrink-0">
               {phase === 'player' && (
                 <>
                   <button 
                     onClick={() => submitWord()} 
                     disabled={currentWord.length < 3} 
-                    className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors"
+                    className="py-1.5 px-3 text-sm bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-medium rounded transition-colors"
                   >
                     Submit Word
                   </button>
                   <button 
                     onClick={() => endPlayerPhase()} 
-                    className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-md transition-colors"
+                    className="py-1.5 px-3 text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium rounded transition-colors"
                   >
                     End Turn
                   </button>
@@ -1677,7 +1677,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
               )}
               <button 
                 onClick={handleRestart} 
-                className="py-2 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md transition-colors"
+                className="py-1.5 px-3 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded transition-colors"
               >
                 Restart
               </button>
