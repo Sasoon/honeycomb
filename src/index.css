@@ -24,6 +24,9 @@ body {
 .letter-tile,
 .game-button,
 .power-card,
+.cursor-grab,
+.cursor-grabbing,
+[title*="Drag to rotate tiles around pivot"],
 button {
   -webkit-user-select: none;
   -moz-user-select: none;
