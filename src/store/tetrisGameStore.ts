@@ -219,6 +219,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
+                    // Don't reset wordsThisRound here - keep accumulating words
                     freeMoveAvailable: false,
                     freeOrbitsAvailable: 2, // Reset to 2 orbits per turn
                     // Note: lockMode and lockedTiles are cleared at endRound start
@@ -324,7 +325,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     tilesPerDrop: currentTilesPerDrop, // Progressive difficulty
                     phase: 'flood',
                     grid: newGrid,
-                    wordsThisRound: [],
+                    // Don't reset wordsThisRound - keep all words from entire game
                     nextRows: [nextDrop1, nextDrop2],
                     selectedTiles: [],
                     currentWord: '',
@@ -469,22 +470,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     return;
                 }
 
-                // Calculate board fullness
-                const totalCells = state.grid.length;
-                const filledCells = state.grid.filter(cell => cell.letter && cell.isPlaced).length;
-                const boardFullness = filledCells / totalCells;
-
-                // Dynamic word limit: 1 normally, 2 if board is >50% full
-                const wordLimit = boardFullness > 0.5 ? 2 : 1;
-
-                if (state.wordsThisRound.length >= wordLimit) {
-                    if (wordLimit === 1) {
-                        toastService.error(`Only 1 word allowed per turn!`);
-                    } else {
-                        toastService.error(`Board is over 50% full - maximum 2 words allowed!`);
-                    }
-                    return;
-                }
+                // No word limit in Tetris mode - players can submit multiple words per turn
 
                 // Clear the tiles and apply gravity
                 const tilesToClear = state.selectedTiles.map(t => t.cellId);
@@ -532,12 +518,13 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 toastService.success(`+${wordScore} points!`);
                 haptics.success();
 
-                // If no gravity moves, end the round immediately to trigger flood
+                // Always end round after word submission (original simple logic)
                 if (moveSources.size === 0) {
                     setTimeout(() => {
                         get().endRound();
                     }, 250);
                 }
+                // If there are gravity moves, endRound will be called after gravity settles
             },
 
             // New: move one tile to an adjacent empty cell, then end round

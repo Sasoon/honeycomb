@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { playSound } from '../lib/sound';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +9,7 @@ import { areCellsAdjacent } from '../lib/tetrisGameUtils';
 import { haptics } from '../lib/haptics';
 import toastService from '../lib/toastService';
 import GameOverModal from '../components/GameOverModal';
+import TetrisMobileGameControls from '../components/TetrisMobileGameControls';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
 // Flood animation timing constants
@@ -226,8 +228,9 @@ type FxOverlay = { key: string; letter: string; x: number; y: number };
 
 // (no-op placeholder removed)
 
-const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; }) => {
+const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const [previousGrid, setPreviousGrid] = useState<typeof grid>([]);
   const lastPlayerGridRef = useRef<typeof previousGrid>([]);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
@@ -288,6 +291,77 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   } = useTetrisGameStore();
 
   useEffect(() => { if (!gameInitialized) initializeGame(); }, [gameInitialized, initializeGame]);
+  
+  // Handle clicking outside the sidebar to close it on mobile
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      // Only do this on mobile screens
+      if (window.innerWidth < 768) {
+        // Get the header element
+        const headerElement = document.querySelector('header');
+        
+        // Skip if click is in the header (where the X button is)
+        if (headerElement && headerElement.contains(event.target as Node)) {
+          return;
+        }
+        
+        if (
+          sidebarRef.current && 
+          isSidebarOpen && 
+          !sidebarRef.current.contains(event.target as Node) &&
+          closeMenu
+        ) {
+          closeMenu();
+        }
+      }
+    }
+
+    // Attach the event listener
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      // Clean up the event listener
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSidebarOpen, closeMenu]);
+
+  // Handle touch swipes for mobile sidebar
+  useEffect(() => {
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+    };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      touchEndX = e.touches[0].clientX;
+    };
+    
+    const handleTouchEnd = () => {
+      // Swipe right to open sidebar
+      if (touchEndX - touchStartX > 100 && !isSidebarOpen && openMenu) {
+        openMenu();
+      }
+      // Swipe left to close sidebar
+      else if (touchStartX - touchEndX > 100 && isSidebarOpen && closeMenu) {
+        closeMenu();
+      }
+    };
+    
+    const mainContentElement = containerRef.current;
+    if (mainContentElement && window.innerWidth < 768) {
+      mainContentElement.addEventListener('touchstart', handleTouchStart, { passive: true } as AddEventListenerOptions);
+      mainContentElement.addEventListener('touchmove', handleTouchMove, { passive: true } as AddEventListenerOptions);
+      mainContentElement.addEventListener('touchend', handleTouchEnd, { passive: true } as AddEventListenerOptions);
+      
+      return () => {
+        mainContentElement.removeEventListener('touchstart', handleTouchStart as any);
+        mainContentElement.removeEventListener('touchmove', handleTouchMove as any);
+        mainContentElement.removeEventListener('touchend', handleTouchEnd as any);
+      };
+    }
+  }, [isSidebarOpen, openMenu, closeMenu]);
+
   useEffect(() => {
     // CRITICAL FIX: If entering flood phase, immediately hide any newly placed tiles
     // This prevents the flash by hiding tiles SYNCHRONOUSLY before they can render
@@ -743,40 +817,137 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
   return (
     <div className="game-container min-h-screen bg-amber-50">
       <div className="flex flex-col md:flex-row">
-        {/* Sidebar */}
-        <AnimatePresence>
-          {isSidebarOpen && (
-            <motion.div
-              initial={{ x: -300 }}
-              animate={{ x: 0 }}
-              exit={{ x: -300 }}
-              transition={{ type: 'spring', bounce: 0.25 }}
-              className="fixed md:relative z-50 w-72 h-full bg-white shadow-xl"
-            >
-              <div className="p-6 space-y-6">
-                <div className="bg-amber-50 rounded-lg p-4">
-                  <h2 className="text-2xl font-bold text-amber-900 mb-2">Round {round}</h2>
-                  <div className="text-amber-700">
-                    <p className="text-lg">Score: {score}</p>
-                    <p>Words: {wordsThisRound.length}</p>
-                  </div>
+        {/* Tetris Game Sidebar */}
+        <div 
+          ref={sidebarRef}
+          className={`game-sidebar transition-all duration-300 ease-in-out 
+            ${isSidebarOpen ? 'w-64 md:w-72' : 'w-0 md:w-72'} 
+            bg-white shadow-md z-30 
+            ${isSidebarOpen ? 'fixed' : 'fixed md:relative'} 
+            top-0 left-0 mt-16 md:mt-0
+            md:sticky md:top-16 md:h-[calc(100vh-4rem)] h-[calc(100vh-4rem)] flex flex-col overflow-hidden`}
+        >
+          {/* Sidebar content */}
+          <div className={`${isSidebarOpen ? 'flex' : 'hidden md:flex'} flex-col h-full py-4 px-3 overflow-y-auto`}>
+            {/* Mobile navigation menu */}
+            <div className="block md:hidden">
+              <nav className="flex flex-col space-y-2">
+                <Link to="/" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
+                  Classic Mode
+                </Link>
+                <Link to="/daily" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
+                  Daily
+                </Link>
+                <Link to="/stats" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
+                  Stats
+                </Link>
+                <Link to="/how-to-play" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
+                  How to Play
+                </Link>
+              </nav>
+              <div className="border-t border-amber-200 my-4"></div>
+            </div>
+            
+            {/* Desktop game info */}
+            <div className="hidden md:block">
+             
+              {/* Game stats */}
+              <div className="flex justify-between mb-4 md:mb-6">
+                <div>
+                  <div className="text-sm text-gray-600">Score</div>
+                  <div className="text-2xl font-bold">{score}</div>
                 </div>
-                {currentWord && (
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-1">Current Word</h3>
-                    <p className="text-2xl font-mono tracking-wider">{currentWord}</p>
-                  </div>
-                )}
-                <div className={`text-center p-3 rounded-lg font-semibold ${phase === 'flood' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                  {phase === 'flood' ? '⬇️ Tiles Dropping' : '✏️ Your Turn'}
+                <div>
+                  <div className="text-sm text-gray-600">Round</div>
+                  <div className="text-2xl font-bold">{round}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Orbits</div>
+                  <div className="text-lg font-bold text-amber-700">{freeOrbitsAvailable || 0}</div>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+                            {/* Next Drop Preview */}
+              {previewLevel > 0 && nextRows.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                  <div className="text-sm font-medium text-gray-700 mb-2">Next Drop:</div>
+                  <div className="flex gap-1.5 mb-2">
+                    {nextRows[0]?.map((letter, idx) => (
+                      <div key={idx} className="w-6 h-6 bg-white rounded border border-gray-300 flex items-center justify-center text-xs font-semibold text-gray-700 shadow-sm">
+                        {letter}
+                      </div>
+                    ))}
+                  </div>
+                  {previewLevel > 1 && nextRows[1] && (
+                    <div className="flex gap-1 opacity-40">
+                      {nextRows[1]?.map((letter, idx) => (
+                        <div key={idx} className="w-5 h-5 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
+                          {letter}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+
+              {/* Current word display */}
+              {currentWord && (
+                <div className="bg-blue-50 rounded-lg p-4 mb-4">
+                  <h3 className="font-semibold text-blue-900 mb-1">Current Word</h3>
+                  <p className="text-2xl font-mono tracking-wider">{currentWord}</p>
+                </div>
+              )}
+
+              {/* Words Submitted */}
+              <div className="bg-green-50 rounded-lg p-3 mb-4">
+                <div className="text-sm font-medium text-green-800 mb-2">Words This Game ({wordsThisRound.length}):</div>
+                {wordsThisRound.length > 0 ? (
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {wordsThisRound.slice(-6).reverse().map((word, idx) => (
+                      <div key={idx} className="text-sm text-green-700 font-mono">
+                        {word}
+                      </div>
+                    ))}
+                    {wordsThisRound.length > 6 && (
+                      <div className="text-xs text-green-600 italic">...and {wordsThisRound.length - 6} more</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-green-600 italic">No words submitted yet</div>
+                )}
+              </div>
+              
+              {/* Game instructions */}
+              <div className="mt-auto">
+                <details className="bg-amber-50 p-3 rounded-lg">
+                  <summary className="font-semibold text-amber-900 cursor-pointer">Quick Tips</summary>
+                  <ul className="list-disc list-inside text-sm space-y-1 mt-2 pl-2">
+                    <li>Tiles fall automatically each round</li>
+                    <li>Use orbit to rearrange letters (2 per turn)</li>
+                    <li>Lock tiles to prevent them moving</li>
+                    <li>Form words to clear space and score points</li>
+                  </ul>
+                </details>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Main content */}
-        <div className="flex-1 p-4 md:p-8">
+        <div className="flex-1">
+          {/* Mobile Game Controls */}
+          <TetrisMobileGameControls
+            score={score}
+            round={round}
+            wordsThisRound={wordsThisRound.length}
+            wordsThisRoundList={wordsThisRound}
+            currentWord={currentWord}
+            freeOrbitsAvailable={freeOrbitsAvailable || 0}
+            nextRows={nextRows}
+            previewLevel={previewLevel}
+          />
+
           <div ref={containerRef} className="max-w-4xl mx-auto relative">
             {/* Falling overlays */}
             <div className="pointer-events-none absolute inset-0 z-40">
@@ -1460,30 +1631,6 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               );
             })()}
 
-            {/* Next Drop Preview */}
-            {previewLevel > 0 && nextRows.length > 0 && (
-              <div className="flex justify-center mb-4">
-                <div className="next-drop-preview inline-flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-full border border-gray-200">
-                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Next</span>
-                  <div className="flex gap-1.5">
-                    {nextRows[0]?.map((letter, idx) => (
-                      <div key={idx} className="w-6 h-6 bg-white rounded border border-gray-300 flex items-center justify-center text-xs font-semibold text-gray-700 shadow-sm">
-                        {letter}
-                      </div>
-                    ))}
-                  </div>
-                  {previewLevel > 1 && nextRows[1] && (
-                    <div className="flex gap-1 opacity-40">
-                      {nextRows[1]?.map((letter, idx) => (
-                        <div key={idx} className="w-5 h-5 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
-                          {letter}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Grid */}
             <div className={`grid-container flex justify-center mt-8 relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}>
@@ -1509,21 +1656,33 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
               />
             </div>
 
-
-
             {/* Actions */}
             <div className="mt-6 flex gap-3 justify-center flex-wrap items-center">
               {phase === 'player' && (
                 <>
-                  <button onClick={() => submitWord()} disabled={currentWord.length < 3} className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors">Submit Word</button>
-                  <button onClick={() => endPlayerPhase()} className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-md transition-colors">End Turn</button>
-                  <div className="py-2 px-3 bg-gray-100 text-gray-700 font-medium rounded-md">
-                    Orbits: {freeOrbitsAvailable || 0}
-                  </div>
+                  <button 
+                    onClick={() => submitWord()} 
+                    disabled={currentWord.length < 3} 
+                    className="py-2 px-4 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-semibold rounded-md transition-colors"
+                  >
+                    Submit Word
+                  </button>
+                  <button 
+                    onClick={() => endPlayerPhase()} 
+                    className="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-md transition-colors"
+                  >
+                    End Turn
+                  </button>
                 </>
               )}
-              <button onClick={handleRestart} className="py-2 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md transition-colors">Restart</button>
+              <button 
+                onClick={handleRestart} 
+                className="py-2 px-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-md transition-colors"
+              >
+                Restart
+              </button>
             </div>
+
           </div>
         </div>
       </div>
@@ -1537,6 +1696,7 @@ const TetrisGame = ({ isSidebarOpen }: { isSidebarOpen: boolean; openMenu?: () =
         boardPercent={Math.round((grid.filter(c => c.letter && c.isPlaced).length / Math.max(1, grid.length)) * 100)}
         onRestart={handleRestart}
       />
+
     </div>
   );
 };
