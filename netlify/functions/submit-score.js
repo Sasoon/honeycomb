@@ -84,13 +84,15 @@ export const handler = async (event, context) => {
       submittedAt: timestamp
     };
     
-    // Initialize stores with explicit site ID for production
+    // Initialize stores with explicit site ID and token for production
     const siteID = context.site?.id || process.env.NETLIFY_SITE_ID || 'a1b92087-b54c-4d15-8194-e44eb6c57e27';
-    console.log('Site ID for blobs:', siteID, 'Context site:', context.site, 'Available env vars:', Object.keys(process.env).filter(key => key.includes('NETLIFY')));
+    const token = process.env.NETLIFY_FUNCTIONS_TOKEN;
+    console.log('Blob config - Site ID:', siteID, 'Token available:', !!token);
     
     const dailyStore = getStore({
       name: 'leaderboard-daily',
       siteID: siteID,
+      token: token,
       consistency: 'strong'
     });
     
@@ -122,6 +124,7 @@ export const handler = async (event, context) => {
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
       siteID: siteID,
+      token: token,
       consistency: 'strong'
     });
     
@@ -137,7 +140,7 @@ export const handler = async (event, context) => {
     }
 
     // Get player's rank in daily leaderboard
-    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, siteID);
+    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, siteID, token);
 
     return {
       statusCode: 200,
@@ -177,7 +180,7 @@ function sanitizePlayerName(name) {
 }
 
 // Get player's rank in daily leaderboard
-async function getDailyRank(isLocal, date, playerScore, siteId) {
+async function getDailyRank(isLocal, date, playerScore, siteId, token) {
   try {
     const scores = [];
     const keyPrefix = isLocal ? 'dev_' : '';
@@ -186,6 +189,7 @@ async function getDailyRank(isLocal, date, playerScore, siteId) {
     const store = getStore({
       name: 'leaderboard-daily',
       siteID: siteId,
+      token: token,
       consistency: 'strong'
     });
     
