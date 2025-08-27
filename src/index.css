@@ -273,7 +273,7 @@ button {
   background-color: #FF9800;
 }
 
-/* Add a pulsing glow effect for piston adjacent cells */
+/* Add a pulsing glow effect for adjacent cells */
 .pulse-glow {
   animation: pulse-animation 1.5s infinite;
 }
@@ -290,114 +290,14 @@ button {
   }
 }
 
-/* Special style for piston tile */
-.piston-tile, .wild-tile {
+/* Special style for wild tile */
+.wild-tile {
   background: linear-gradient(135deg, #9333ea, #6366f1);
   color: white;
   transform: rotate(0deg);
   transition: transform 0.3s ease;
 }
 
-.piston-tile:hover {
-  transform: rotate(90deg);
-}
-
-/* Styles for piston animation */
-.piston-animated-tile {
-  position: fixed;
-  pointer-events: none;
-  z-index: 100;
-  will-change: transform, opacity;
-}
-
-.piston-animated-tile::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(147, 51, 234, 0.2);
-  transform: translate(-50%, -50%);
-  z-index: -1;
-  animation: piston-pulse 0.5s ease-out;
-  animation-delay: 0s; /* Start immediately */
-}
-
-.piston-animated-tile::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 20px;
-  background: linear-gradient(90deg, rgba(147, 51, 234, 0), rgba(147, 51, 234, 0.3), rgba(147, 51, 234, 0));
-  transform: translate(-50%, -50%) rotate(var(--trail-angle, 0deg));
-  z-index: -1;
-  opacity: 0.7;
-  filter: blur(4px);
-  animation: piston-trail 0.5s ease-out;
-  animation-delay: 0s; /* Start immediately */
-}
-
-@keyframes piston-pulse {
-  0% {
-    transform: translate(-50%, -50%) scale(0);
-    opacity: 0.7;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(2);
-    opacity: 0;
-  }
-}
-
-@keyframes piston-trail {
-  0% {
-    opacity: 0;
-    width: 0;
-  }
-  50% {
-    opacity: 0.7;
-    width: 100%;
-  }
-  100% {
-    opacity: 0;
-    width: 100%;
-  }
-}
-
-/* Piston target impact animation */
-.piston-target-impact {
-  position: relative;
-}
-
-.piston-target-impact::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: 9999px;
-  background: transparent;
-  border: 3px solid rgba(147, 51, 234, 0.4);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  animation: piston-impact 0.5s ease-out forwards;
-  animation-delay: 0s; /* Start immediately */
-  z-index: 5;
-}
-
-@keyframes piston-impact {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.8;
-  }
-  50% {
-    opacity: 0.6;
-  }
-  100% {
-    transform: scale(1.2);
-    opacity: 0;
-  }
-}
 
 /* Enhance the tile placement animation */
 @keyframes squashStretch {
