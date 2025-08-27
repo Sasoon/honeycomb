@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 
-export const handler = async (event, context) => {
+export default async function handler(event, context) {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
@@ -27,12 +27,8 @@ export const handler = async (event, context) => {
     let deletedCount = 0;
 
     // Clear daily leaderboard dev entries
-    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID || 'a1b92087-b54c-4d15-8194-e44eb6c57e27';
-    const token = process.env.NETLIFY_FUNCTIONS_TOKEN;
     const dailyStore = getStore({
       name: 'leaderboard-daily',
-      siteID: siteID,
-      token: token,
       consistency: 'strong'
     });
 
@@ -50,8 +46,6 @@ export const handler = async (event, context) => {
     // Clear all-time leaderboard dev entries
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
-      siteID: siteID,
-      token: token,
       consistency: 'strong'
     });
 
@@ -88,4 +82,4 @@ export const handler = async (event, context) => {
       })
     };
   }
-};
+}

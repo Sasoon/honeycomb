@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 
-export const handler = async (event, context) => {
+export default async function handler(event, context) {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
@@ -84,13 +84,9 @@ export const handler = async (event, context) => {
       submittedAt: timestamp
     };
     
-    // Initialize stores with explicit site ID - try without token first
-    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID || 'a1b92087-b54c-4d15-8194-e44eb6c57e27';
-    console.log('Blob config - Site ID:', siteID);
-    
+    // Initialize stores - Functions v2 provides automatic configuration
     const dailyStore = getStore({
       name: 'leaderboard-daily',
-      siteID: siteID,
       consistency: 'strong'
     });
     
@@ -121,7 +117,6 @@ export const handler = async (event, context) => {
     // Update all-time leaderboard if this is a new personal best
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
-      siteID: siteID,
       consistency: 'strong'
     });
     
@@ -137,7 +132,7 @@ export const handler = async (event, context) => {
     }
 
     // Get player's rank in daily leaderboard
-    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, siteID);
+    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score);
 
     return {
       statusCode: 200,
@@ -177,7 +172,7 @@ function sanitizePlayerName(name) {
 }
 
 // Get player's rank in daily leaderboard
-async function getDailyRank(isLocal, date, playerScore, siteId) {
+async function getDailyRank(isLocal, date, playerScore) {
   try {
     const scores = [];
     const keyPrefix = isLocal ? 'dev_' : '';
@@ -185,7 +180,6 @@ async function getDailyRank(isLocal, date, playerScore, siteId) {
     // Get scores from Netlify Blobs
     const store = getStore({
       name: 'leaderboard-daily',
-      siteID: siteId,
       consistency: 'strong'
     });
     

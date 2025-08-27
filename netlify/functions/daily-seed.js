@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 
-export const handler = async (event, context) => {
+export default async function handler(event, context) {
   try {
     // Get today's date in YYYY-MM-DD format
     const today = new Date();
@@ -81,7 +81,7 @@ export const handler = async (event, context) => {
       })
     };
   }
-};
+}
 
 // Simple hash function to convert string to numeric seed
 function hashString(str) {
