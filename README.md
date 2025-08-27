@@ -1,13 +1,16 @@
-# Honeycomb
+# Honeycomb Tetris
 
-A word game with hexagonal tiles. Build words, score points, and strategically place letters on the board.
+A Tetris-style word game with falling letter tiles. Form words to clear tiles from the board in this fast-paced puzzle variant.
 
 ## Features
 
-- Hexagonal grid for a unique word-building experience
-- Two-phase gameplay: place tiles, then form words
-- Score words based on length, adjacency, and special bonuses
-- Mobile-responsive design with touch support
+- Tetris-style falling tiles with letter blocks
+- Form words to clear tiles and score points  
+- Flood mechanics with cascading tile placement
+- Mobile-responsive design with touch controls
+- Orbit mechanic for rotating tiles around a pivot
+- Lock mode to prevent tiles from moving
+- Progressive difficulty with increasing tile counts
 
 ## Getting Started
 

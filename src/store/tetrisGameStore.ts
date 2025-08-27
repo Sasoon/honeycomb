@@ -6,6 +6,7 @@ import { generateDropLettersSmart, generateStartingPowerCards, areCellsAdjacent,
 import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
+import { createSeededRNG, SeededRNG } from '../lib/seededRNG';
 
 // Power card types
 export type PowerCardType =
@@ -81,12 +82,20 @@ interface TetrisGameState {
     slowModeRounds: number; // Rounds remaining with slower drops
     previewLevel: number; // 1 = see next row, 2 = see next 2 rows
 
+    // Daily Challenge mode
+    isDailyChallenge: boolean;
+    dailySeed?: number;
+    dailyDate?: string;
+    challengeStartTime?: number;
+    seededRNG?: SeededRNG;
+
     // Persistence
     lastSaved: number;
 
     // Actions
     setGameState: (state: Partial<TetrisGameState>) => void;
     initializeGame: () => void;
+    initializeDailyChallenge: (seed: number, gameState: any, date: string) => void;
     resetGame: () => void;
 
     // Game flow actions
@@ -117,7 +126,7 @@ interface TetrisGameState {
 
 // Initial state
 const initialState: Omit<TetrisGameState,
-    'setGameState' | 'initializeGame' | 'resetGame' |
+    'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
     'activatePowerCard' | 'cancelPowerCard' | 'toggleTileLock' | 'checkGameOver'
@@ -152,6 +161,9 @@ const initialState: Omit<TetrisGameState,
     lockMode: false,
     lockedTiles: [],
 
+    // Daily Challenge mode
+    isDailyChallenge: false,
+
     lastSaved: Date.now(),
 };
 
@@ -164,6 +176,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
             setGameState: (state) => set((prev) => ({ ...prev, ...state })),
 
             initializeGame: () => {
+                const state = get();
                 const gridSize = 5; // Default grid size
                 const initialGrid = generateInitialGrid(gridSize);
 
@@ -183,8 +196,8 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 // Generate first drop preview (starts at 3 tiles for round 1)
                 const initialTilesPerDrop = 3;
-                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false);
-                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false);
+                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, state.seededRNG);
+                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, state.seededRNG);
 
                 set({
                     gameInitialized: true,
@@ -203,6 +216,60 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     freeOrbitsAvailable: 2, // 2 orbits per turn
                     lockMode: false,
                     lockedTiles: [],
+                });
+            },
+
+            initializeDailyChallenge: (seed: number, gameState: any, date: string) => {
+                const gridSize = 5;
+                const initialGrid = generateInitialGrid(gridSize);
+                const seededRNG = createSeededRNG(seed);
+                
+                // Use the pre-generated starting letters from the API
+                const startingLetters = gameState.startingLetters || [];
+                
+                // Place starting tiles with deterministic positioning
+                const tilesWithLetters = placeStartingTiles(initialGrid, startingLetters, gridSize);
+                
+                // Generate power cards deterministically (optional: could disable for daily challenge)
+                const startingPowerCards = generateStartingPowerCards();
+                
+                // Use pre-generated drops from API
+                const firstDrop = gameState.firstDrop || [];
+                const secondDrop = gameState.secondDrop || [];
+                
+                // Set the RNG state for future generations
+                seededRNG.setState(gameState.rngState);
+                
+                set({
+                    gameInitialized: true,
+                    phase: 'player',
+                    round: 1,
+                    score: 0,
+                    grid: tilesWithLetters,
+                    gridSize: gridSize,
+                    powerCards: startingPowerCards,
+                    nextRows: [firstDrop, secondDrop],
+                    tilesPerDrop: 3, // Start with 3 tiles
+                    selectedTiles: [],
+                    currentWord: '',
+                    wordsThisRound: [],
+                    freeMoveAvailable: false,
+                    freeOrbitsAvailable: 2,
+                    lockMode: false,
+                    lockedTiles: [],
+                    
+                    // Daily challenge specific
+                    isDailyChallenge: true,
+                    dailySeed: seed,
+                    dailyDate: date,
+                    challengeStartTime: Date.now(),
+                    seededRNG: seededRNG,
+                    
+                    // Reset stats
+                    totalWords: 0,
+                    tilesCleared: 0,
+                    longestWord: '',
+                    biggestCombo: 0,
                 });
             },
 
@@ -260,12 +327,12 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 // Generate flood tiles for this round
                 const rewardCreative = (!state.freeMoveAvailable) || ((state.freeOrbitsAvailable || 0) <= 0);
-                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative);
+                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative, state.seededRNG);
 
                 // Ensure we have exactly 3 tiles
                 let actualFallingLetters = fallingLetters;
                 if (fallingLetters.length < currentTilesPerDrop) {
-                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rewardCreative);
+                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rewardCreative, state.seededRNG);
                     actualFallingLetters = [...fallingLetters, ...additionalTiles];
                 } else if (fallingLetters.length > currentTilesPerDrop) {
                     actualFallingLetters = fallingLetters.slice(0, currentTilesPerDrop);
@@ -312,8 +379,8 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     tilesForNextRound2 = 4;
                 }
 
-                let nextDrop1 = generateDropLettersSmart(tilesForNextRound1, newGrid, false);
-                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false);
+                let nextDrop1 = generateDropLettersSmart(tilesForNextRound1, newGrid, false, state.seededRNG);
+                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false, state.seededRNG);
 
                 // Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid

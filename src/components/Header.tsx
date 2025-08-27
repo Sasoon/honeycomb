@@ -17,8 +17,8 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-honeycomb p-4 sm:p-5 shadow-md sticky top-0 z-40">
-      <div className="container mx-auto">
+    <header className="bg-honeycomb py-4 px-3 shadow-md sticky top-0 z-40">
+      <div>
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
           <div className="flex items-center">
@@ -44,13 +44,13 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
             
             {/* Logo always visible */}
             <Link to="/" className="text-white text-2xl font-bold flex items-center">
-              🍯 <span className="hidden md:inline">Honeycomb</span>
+            <span className="hidden md:inline">Honeycomb Tetris</span>
             </Link>
           </div>
           
           {/* Center/Right - Navigation links only on desktop */}
           <div className="flex items-center">
-            <span className="text-white text-xl font-bold md:hidden">Honeycomb</span>
+            <span className="text-white text-xl font-bold md:hidden">Tetris</span>
             <nav className="hidden md:flex flex-wrap justify-center gap-2 ml-6">
               <Link 
                 to="/" 
@@ -58,7 +58,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                   ? 'bg-honeycomb-dark text-white' 
                   : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
-                Play
+                Tetris
               </Link>
               <Link 
                 to="/daily" 
@@ -66,15 +66,15 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                   ? 'bg-honeycomb-dark text-white' 
                   : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
-                Daily
+                Daily Challenge
               </Link>
               <Link 
-                to="/tetris" 
-                className={`${isActive('/tetris') 
+                to="/leaderboard" 
+                className={`${isActive('/leaderboard') 
                   ? 'bg-honeycomb-dark text-white' 
                   : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
               >
-                Tetris Mode
+                Leaderboard
               </Link>
               <Link 
                 to="/stats" 

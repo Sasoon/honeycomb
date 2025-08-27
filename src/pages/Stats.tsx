@@ -1,43 +1,43 @@
-import useGameStore from '../store/gameStore';
+import { useTetrisGameStore } from '../store/tetrisGameStore';
 
 const Stats = () => {
-  const stats = useGameStore(s => s.stats);
+  const { score, totalWords, round, longestWord, tilesCleared } = useTetrisGameStore();
   
   return (
     <div className="max-w-2xl mx-auto px-3 sm:px-4">
-      <h1 className="text-3xl font-bold text-center mb-6">Your Statistics</h1>
+      <h1 className="text-3xl font-bold text-center mb-6">Tetris Statistics</h1>
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Games Played" value={stats.gamesPlayed.toString()} />
-        <StatCard label="Words Formed" value={stats.wordsFormed.toString()} />
-        <StatCard label="Total Score" value={stats.totalScore.toString()} />
-        <StatCard label="Best Word" value={stats.bestWord || '—'} subvalue={stats.bestWordScore ? `${stats.bestWordScore} pts` : undefined} />
+        <StatCard label="Current Score" value={score.toString()} />
+        <StatCard label="Words Found" value={totalWords.toString()} />
+        <StatCard label="Round" value={round.toString()} />
+        <StatCard label="Longest Word" value={longestWord || '—'} />
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Game Performance</h2>
+        <h2 className="text-xl font-semibold mb-4">Game Progress</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-semibold text-gray-700 mb-2">Average Turns per Win</h3>
+            <h3 className="font-semibold text-gray-700 mb-2">Tiles Cleared</h3>
             <div className="flex items-center">
-              <div className="text-4xl font-bold text-honeycomb-dark">{stats.averageTurns}</div>
-              <div className="ml-2 text-sm text-gray-600">turns</div>
+              <div className="text-4xl font-bold text-honeycomb-dark">{tilesCleared}</div>
+              <div className="ml-2 text-sm text-gray-600">tiles</div>
             </div>
           </div>
           <div>
-            <h3 className="font-semibold text-gray-700 mb-2">Fewest Turns to Win</h3>
+            <h3 className="font-semibold text-gray-700 mb-2">Current Round</h3>
             <div className="flex items-center">
-              <div className="text-4xl font-bold text-green-600">{stats.fewestTurns}</div>
-              <div className="ml-2 text-sm text-gray-600">turns</div>
+              <div className="text-4xl font-bold text-green-600">{round}</div>
+              <div className="ml-2 text-sm text-gray-600">rounds</div>
             </div>
           </div>
         </div>
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold mb-4">Last Played</h2>
+        <h2 className="text-xl font-semibold mb-4">Game Info</h2>
         <div className="text-center p-4 text-gray-700">
-          {stats.lastPlayed ? stats.lastPlayed : '—'}
+          This shows your current Tetris game progress. Start a new game from the main page!
         </div>
       </div>
     </div>

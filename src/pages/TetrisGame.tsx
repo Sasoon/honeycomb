@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { playSound } from '../lib/sound';
+// Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
@@ -8,7 +8,7 @@ import HexGrid, { HexCell } from '../components/HexGrid';
 import { areCellsAdjacent } from '../lib/tetrisGameUtils';
 import { haptics } from '../lib/haptics';
 import toastService from '../lib/toastService';
-import GameOverModal from '../components/GameOverModal';
+import TetrisGameOverModal from '../components/TetrisGameOverModal';
 import TetrisMobileGameControls from '../components/TetrisMobileGameControls';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
@@ -270,6 +270,8 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
     currentWord,
     isWordValid,
     wordsThisRound,
+    totalWords,
+    longestWord,
     nextRows,
     previewLevel,
     freeOrbitsAvailable,
@@ -284,6 +286,11 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
     endPlayerPhase,
     resetGame,
     gridSize,
+    
+    // Daily challenge properties
+    isDailyChallenge,
+    dailyDate,
+    challengeStartTime,
     
     gravityMoves,
     floodPaths,
@@ -750,7 +757,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
                       ? { ...o, isFinal: true, pulse: o.pulse + 1, rX: 0, rY: 0 } 
                       : o
                 ));
-                playSound('land');
+                // playSound('land'); // Sound removed
                 if (navigator.vibrate) navigator.vibrate(10);
             }, finalBounceDelay);
             timersRef.current.push(bounceT);
@@ -1677,12 +1684,14 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
                   </button>
                 </>
               )}
-              <button 
-                onClick={handleRestart} 
-                className="py-1.5 px-3 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded transition-colors"
-              >
-                Restart
-              </button>
+              {!isDailyChallenge && (
+                <button 
+                  onClick={handleRestart} 
+                  className="py-1.5 px-3 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded transition-colors"
+                >
+                  Restart
+                </button>
+              )}
             </div>
 
           </div>
@@ -1691,12 +1700,16 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
       <Toaster position="bottom-center" />
 
       {/* Game Over Modal */}
-      <GameOverModal
+      <TetrisGameOverModal
         isOpen={phase === 'gameOver'}
         score={score}
-        words={wordsThisRound.length} // Assuming totalWords is not directly available here, using wordsThisRound.length
-        boardPercent={Math.round((grid.filter(c => c.letter && c.isPlaced).length / Math.max(1, grid.length)) * 100)}
+        totalWords={totalWords}
+        round={round}
+        longestWord={longestWord}
         onRestart={handleRestart}
+        isDailyChallenge={isDailyChallenge}
+        dailyDate={dailyDate}
+        challengeStartTime={challengeStartTime}
       />
 
     </div>

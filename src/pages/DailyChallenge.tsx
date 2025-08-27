@@ -1,8 +1,58 @@
 import { useState, useEffect } from 'react';
+import { useTetrisGameStore } from '../store/tetrisGameStore';
+import { useNavigate } from 'react-router-dom';
+
+interface DailySeedData {
+  date: string;
+  seed: number;
+  gameState: {
+    startingLetters: string[];
+    firstDrop: string[];
+    secondDrop: string[];
+    rngState: number;
+  };
+  createdAt: string;
+}
 
 const DailyChallenge = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [countdown, setCountdown] = useState('');
+  const [seedData, setSeedData] = useState<DailySeedData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  
+  const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useTetrisGameStore();
+  const navigate = useNavigate();
+  
+  // Load daily seed on component mount
+  useEffect(() => {
+    const loadDailySeed = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const response = await fetch('/api/daily-seed');
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load daily seed: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to load daily seed');
+        }
+        
+        setSeedData(result.data);
+      } catch (err) {
+        console.error('Error loading daily seed:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load daily challenge');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadDailySeed();
+  }, []);
   
   // Calculate time until next day's challenge
   useEffect(() => {
@@ -39,6 +89,19 @@ const DailyChallenge = () => {
     day: 'numeric',
   });
   
+  const handleStartChallenge = () => {
+    if (!seedData) return;
+    
+    // Initialize the daily challenge in the game store
+    initializeDailyChallenge(seedData.seed, seedData.gameState, seedData.date);
+    
+    // Navigate to the main game page
+    navigate('/');
+  };
+  
+  // Check if already playing today's challenge
+  const isPlayingToday = isDailyChallenge && dailyDate === seedData?.date;
+  
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4">
       <h1 className="text-3xl font-bold text-center mb-6">Daily Challenge</h1>
@@ -46,6 +109,17 @@ const DailyChallenge = () => {
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-honeycomb"></div>
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-red-700 mb-2">Failed to Load Challenge</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-md p-6">
@@ -71,8 +145,12 @@ const DailyChallenge = () => {
               </ul>
             </div>
             
-            <button className="w-full py-3 bg-honeycomb hover:bg-honeycomb-dark text-white font-semibold rounded-lg transition-colors">
-              Start Today's Challenge
+            <button 
+              onClick={handleStartChallenge}
+              disabled={!seedData}
+              className="w-full py-3 bg-honeycomb hover:bg-honeycomb-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+            >
+              {isPlayingToday ? 'Continue Today\'s Challenge' : 'Start Today\'s Challenge'}
             </button>
             
             <div>

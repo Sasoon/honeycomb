@@ -3,9 +3,9 @@ import { useState, lazy, Suspense } from 'react';
 
 import Header from './components/Header.tsx';
 
-const Game = lazy(() => import('./pages/Game.tsx'));
 const TetrisGame = lazy(() => import('./pages/TetrisGame.tsx'));
 const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
 const Stats = lazy(() => import('./pages/Stats.tsx'));
 const HowToPlay = lazy(() => import('./pages/HowToPlay.tsx'));
 
@@ -20,8 +20,8 @@ function AppContent() {
   const openMenu = () => setIsSidebarOpen(true);
   const closeMenu = () => setIsSidebarOpen(false);
   
-  // Hide footer on tetris game for full SPA experience
-  const showFooter = location.pathname !== '/tetris';
+  // Hide footer on main tetris game for full SPA experience
+  const showFooter = location.pathname !== '/';
   
   return (
     <div className="h-screen flex flex-col">
@@ -30,13 +30,6 @@ function AppContent() {
         <Suspense fallback={<div className="p-4">Loading…</div>}>
           <Routes>
             <Route path="/" element={
-              <Game 
-                isSidebarOpen={isSidebarOpen} 
-                openMenu={openMenu}
-                closeMenu={closeMenu}
-              />
-            } />
-            <Route path="/tetris" element={
               <TetrisGame 
                 isSidebarOpen={isSidebarOpen} 
                 openMenu={openMenu}
@@ -44,6 +37,7 @@ function AppContent() {
               />
             } />
             <Route path="/daily" element={<DailyChallenge />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/how-to-play" element={<HowToPlay />} />
           </Routes>
@@ -51,7 +45,7 @@ function AppContent() {
       </main>
       {showFooter && (
         <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
-          © {new Date().getFullYear()} Honeycomb - A Word-Building Puzzle Game
+          © {new Date().getFullYear()} Honeycomb Tetris - A Tetris-Style Word Game
         </footer>
       )}
     </div>

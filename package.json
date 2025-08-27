@@ -1,5 +1,5 @@
 {
-  "name": "honeycomb",
+  "name": "honeycomb-tetris",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -13,6 +13,7 @@
     "playwright:install": "playwright install --with-deps"
   },
   "dependencies": {
+    "@netlify/blobs": "^10.0.9",
     "canvas-confetti": "^1.9.3",
     "framer-motion": "^12.6.3",
     "matter-js": "^0.20.0",
@@ -27,13 +28,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@playwright/test": "^1.46.1",
     "@tailwindcss/typography": "^0.5.10",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
-    "@playwright/test": "^1.46.1",
     "autoprefixer": "^10.4.14",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",

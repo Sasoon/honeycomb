@@ -1,6 +1,5 @@
 import { nanoid } from 'nanoid';
 import { HexCell } from '../components/HexGrid';
-import { LetterTile } from '../components/PlayerHand';
 
 // Letter distribution based on common English frequency
 export const LETTER_FREQUENCY: { [key: string]: 'common' | 'medium' | 'uncommon' | 'rare' } = {
@@ -17,79 +16,7 @@ export const TARGET_SCORE = 100;
 // Max tiles that can be placed per turn
 export const MAX_PLACEMENT_TILES = 2;
 
-// Generate a new letter tile
-export const generateLetterTile = (letter: string): LetterTile => ({
-    id: nanoid(),
-    letter,
-    frequency: LETTER_FREQUENCY[letter] || 'common',
-    isSelected: false,
-    tileType: 'regular'
-});
-
-// Generate a piston tile
-export const generatePistonTile = (): LetterTile => ({
-    id: nanoid(),
-    letter: 'MOVE', // Changed from bidirectional arrow to a text label since we use SVG for display
-    frequency: 'rare',
-    isSelected: false,
-    tileType: 'piston'
-});
-
-// Generate a wild tile
-export const generateWildTile = (): LetterTile => ({
-    id: nanoid(),
-    letter: 'WILD',
-    frequency: 'rare',
-    isSelected: false,
-    tileType: 'wild'
-});
-
-// Generate the letter bag based on frequency
-export const generateLetterBag = (): LetterTile[] => {
-    const tiles: LetterTile[] = [];
-
-    // Reduced distribution to limit bag to approximately 20 tiles
-    // Old comment: Approximately 35-40 tiles total instead of 90+
-
-    // First, collect all possible letters
-    const allLetters = Object.entries(LETTER_FREQUENCY);
-
-    // Shuffle the letters to ensure randomness in selection
-    const shuffledLetters = allLetters.sort(() => Math.random() - 0.5);
-
-    // Select a subset of letters to include in this game's bag
-    // Prioritize including some vowels for playability
-    const vowels = shuffledLetters.filter(([letter]) =>
-        ['A', 'E', 'I', 'O', 'U'].includes(letter));
-
-    const consonants = shuffledLetters.filter(([letter]) =>
-        !['A', 'E', 'I', 'O', 'U'].includes(letter));
-
-    // Take 4-5 vowels and the rest consonants to reach ~18 letters
-    // (we'll add 2 wild tiles to reach 20 total)
-    const selectedVowels = vowels.slice(0, 4);
-    const selectedConsonants = consonants.slice(0, 14);
-
-    const selectedLetters = [...selectedVowels, ...selectedConsonants];
-
-    // Create exactly one tile for each selected letter
-    selectedLetters.forEach(([letter, frequency]) => {
-        tiles.push({
-            id: nanoid(),
-            letter,
-            frequency: frequency as 'common' | 'medium' | 'uncommon' | 'rare',
-            isSelected: false,
-            tileType: 'regular'
-        });
-    });
-
-    // Add 2 wild tiles to reach 20 total
-    tiles.push(generateWildTile());
-    tiles.push(generateWildTile());
-
-    // Shuffle the tiles
-    return tiles.sort(() => Math.random() - 0.5);
-};
+// Removed unused letter tile generation functions - now using Tetris variant
 
 // Generate the initial grid
 export const generateInitialGrid = (size: number): HexCell[] => {
@@ -278,18 +205,4 @@ export const calculateWordScore = (path: HexCell[], grid: HexCell[]): number => 
     return wordScore;
 };
 
-// Check if the game is over (board full or player out of cards)
-export const checkGameOver = (grid: HexCell[], letterBag: LetterTile[], playerHand: LetterTile[] = []): boolean => {
-    // Count empty cells on the grid
-    if (!grid || !letterBag) return false; // Safety check
-
-    // Ensure we're working with arrays
-    const safeGrid = Array.isArray(grid) ? grid : [];
-    const safeLetterBag = Array.isArray(letterBag) ? letterBag : [];
-    const safePlayerHand = Array.isArray(playerHand) ? playerHand : [];
-
-    const emptyCellCount = safeGrid.filter(cell => cell && !cell.letter).length;
-
-    // Game is over if no more empty cells OR if player is out of cards (empty hand and bag)
-    return emptyCellCount === 0 || (safeLetterBag.length === 0 && safePlayerHand.length === 0);
-}; 
+// Game over logic moved to Tetris store - this was for classic game 

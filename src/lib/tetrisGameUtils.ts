@@ -1,5 +1,6 @@
 import { HexCell } from '../components/HexGrid';
 import { PowerCard } from '../store/tetrisGameStore';
+import { SeededRNG } from './seededRNG';
 
 // Letter frequency for Tetris drops (weighted towards common letters)
 const LETTER_WEIGHTS = {
@@ -88,12 +89,12 @@ function boardContainsLetter(grid: HexCell[], letter: string): boolean {
     return grid.some(c => c.letter === letter && c.isPlaced);
 }
 
-function weightedSample(weights: Record<string, number>, count: number): string[] {
+function weightedSample(weights: Record<string, number>, count: number, seededRNG?: SeededRNG): string[] {
     const result: string[] = [];
     const letters = Object.keys(weights);
     for (let i = 0; i < count; i++) {
         const total = letters.reduce((sum, l) => sum + weights[l], 0);
-        let r = Math.random() * total;
+        let r = (seededRNG ? seededRNG.next() : Math.random()) * total;
         for (const l of letters) {
             r -= weights[l];
             if (r <= 0) { result.push(l); break; }
@@ -103,7 +104,7 @@ function weightedSample(weights: Record<string, number>, count: number): string[
 }
 
 // Public smart generator
-export function generateDropLettersSmart(count: number, grid: HexCell[], rewardCreative = false): string[] {
+export function generateDropLettersSmart(count: number, grid: HexCell[], rewardCreative = false, seededRNG?: SeededRNG): string[] {
     // 1. Copy baseline
     const weights: Record<string, number> = { ...LETTER_WEIGHTS };
 
@@ -134,7 +135,7 @@ export function generateDropLettersSmart(count: number, grid: HexCell[], rewardC
         boostLetters(weights, ['Y', 'K', 'H', 'B', 'M', 'P'], 1.8);
     }
 
-    return weightedSample(weights, count);
+    return weightedSample(weights, count, seededRNG);
 }
 // === End dynamic letter generation ===============================================
 
