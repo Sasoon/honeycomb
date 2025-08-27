@@ -8,6 +8,7 @@ export default async function handler(event, context) {
     const dateString = today.toISOString().split('T')[0];
     
     let seedData;
+    let store; // Declare store in broader scope
     
     // Check if we're in local development (no siteID means local)
     const isLocal = !context.site?.id;
@@ -18,11 +19,7 @@ export default async function handler(event, context) {
       seedData = null; // Force generation
     } else {
       // Use Netlify Blobs in production
-      const store = getStore({
-        name: 'daily-challenges',
-        siteID: context.site.id,
-        consistency: 'strong'
-      });
+      store = getStore('daily-challenges');
 
       try {
         const existingSeed = await store.get(dateString, { type: 'json' });
@@ -48,38 +45,42 @@ export default async function handler(event, context) {
         createdAt: new Date().toISOString()
       };
       
-      if (!isLocal) {
+      if (!isLocal && store) {
         // Store in Netlify Blobs (production only)
         await store.set(dateString, JSON.stringify(seedData));
       }
       // Local development doesn't persist seed data
     }
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
-      },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: true,
         data: seedData
-      })
-    };
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+        }
+      }
+    );
 
   } catch (error) {
     console.error('Error in daily-seed function:', error);
     
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: false,
         error: 'Failed to generate daily seed'
-      })
-    };
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   }
 }
 

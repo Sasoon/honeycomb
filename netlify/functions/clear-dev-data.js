@@ -3,34 +3,35 @@ import { getStore } from '@netlify/blobs';
 export default async function handler(event, context) {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: 'Method not allowed' })
-    };
+    return new Response(
+      JSON.stringify({ success: false, error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 
   // Only allow this endpoint to run in local development for safety
   const isLocal = !context.site?.id;
   if (!isLocal) {
-    return {
-      statusCode: 403,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+    return new Response(
+      JSON.stringify({ 
         success: false, 
         error: 'This endpoint is only available in local development' 
-      })
-    };
+      }),
+      {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 
   try {
     let deletedCount = 0;
 
     // Clear daily leaderboard dev entries
-    const dailyStore = getStore({
-      name: 'leaderboard-daily',
-      consistency: 'strong'
-    });
+    const dailyStore = getStore('leaderboard-daily');
 
     const dailyEntries = dailyStore.list({ prefix: 'dev_' });
     for await (const { key } of dailyEntries) {
@@ -44,10 +45,7 @@ export default async function handler(event, context) {
     }
 
     // Clear all-time leaderboard dev entries
-    const allTimeStore = getStore({
-      name: 'leaderboard-alltime',
-      consistency: 'strong'
-    });
+    const allTimeStore = getStore('leaderboard-alltime');
 
     const allTimeEntries = allTimeStore.list({ prefix: 'dev_' });
     for await (const { key } of allTimeEntries) {
@@ -60,26 +58,30 @@ export default async function handler(event, context) {
       }
     }
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: true,
         message: `Cleared ${deletedCount} development entries from leaderboards`,
         deletedCount
-      })
-    };
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
 
   } catch (error) {
     console.error('Error clearing dev data:', error);
     
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: false,
         error: 'Failed to clear development data'
-      })
-    };
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 }

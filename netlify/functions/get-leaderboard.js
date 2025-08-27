@@ -6,14 +6,16 @@ export default async function handler(event, context) {
     
     // Validate type parameter
     if (!['daily', 'alltime'].includes(type)) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+      return new Response(
+        JSON.stringify({ 
           success: false, 
           error: 'Invalid type parameter. Must be "daily" or "alltime"' 
-        })
-      };
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const maxLimit = Math.min(parseInt(limit) || 20, 100); // Cap at 100 entries
@@ -29,14 +31,16 @@ export default async function handler(event, context) {
   } catch (error) {
     console.error('Error in get-leaderboard function:', error);
     
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: false,
         error: 'Failed to fetch leaderboard'
-      })
-    };
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 };
 
@@ -48,10 +52,7 @@ async function getDailyLeaderboard(isLocal, context, limit) {
     const keyPrefix = isLocal ? 'dev_' : '';
     
     // Get scores from Netlify Blobs
-    const store = getStore({
-      name: 'leaderboard-daily',
-      consistency: 'strong'
-    });
+    const store = getStore('leaderboard-daily');
 
     const entries = store.list({ prefix: `${keyPrefix}${today}_` });
     
@@ -84,20 +85,22 @@ async function getDailyLeaderboard(isLocal, context, limit) {
     rank: index + 1
   }));
 
-  return {
-    statusCode: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=60' // Cache for 1 minute
-    },
-    body: JSON.stringify({
+  return new Response(
+    JSON.stringify({
       success: true,
       type: 'daily',
       date: today,
       leaderboard: rankedScores,
       totalEntries: scores.length
-    })
-  };
+    }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=60' // Cache for 1 minute
+      }
+    }
+  );
 }
 
 async function getAllTimeLeaderboard(isLocal, context, limit) {
@@ -107,10 +110,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
     const keyPrefix = isLocal ? 'dev_' : '';
     
     // Get scores from Netlify Blobs
-    const store = getStore({
-      name: 'leaderboard-alltime',
-      consistency: 'strong'
-    });
+    const store = getStore('leaderboard-alltime');
 
     const entries = store.list({ prefix: keyPrefix });
     
@@ -143,17 +143,19 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
     rank: index + 1
   }));
 
-  return {
-    statusCode: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
-    },
-    body: JSON.stringify({
+  return new Response(
+    JSON.stringify({
       success: true,
       type: 'alltime',
       leaderboard: rankedScores,
       totalEntries: scores.length
-    })
-  };
+    }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
+      }
+    }
+  );
 }

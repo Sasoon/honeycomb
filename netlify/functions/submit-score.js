@@ -3,11 +3,13 @@ import { getStore } from '@netlify/blobs';
 export default async function handler(event, context) {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: 'Method not allowed' })
-    };
+    return new Response(
+      JSON.stringify({ success: false, error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 
   try {
@@ -15,27 +17,31 @@ export default async function handler(event, context) {
     
     // Validate required fields
     if (!playerName || score === undefined || !round || !date) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+      return new Response(
+        JSON.stringify({ 
           success: false, 
           error: 'Missing required fields: playerName, score, round, date' 
-        })
-      };
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Sanitize player name
     const sanitizedName = sanitizePlayerName(playerName);
     if (!sanitizedName) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+      return new Response(
+        JSON.stringify({ 
           success: false, 
           error: 'Invalid player name' 
-        })
-      };
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Get today's date string
@@ -43,26 +49,30 @@ export default async function handler(event, context) {
     
     // Validate that the submission is for today's challenge
     if (date !== today) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+      return new Response(
+        JSON.stringify({ 
           success: false, 
           error: 'Can only submit scores for today\'s challenge' 
-        })
-      };
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Basic score validation
     if (score < 0 || score > 10000 || round < 1 || round > 100) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+      return new Response(
+        JSON.stringify({ 
           success: false, 
           error: 'Invalid score or round values' 
-        })
-      };
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const isLocal = !context.site?.id;
@@ -85,10 +95,7 @@ export default async function handler(event, context) {
     };
     
     // Initialize stores - Functions v2 provides automatic configuration
-    const dailyStore = getStore({
-      name: 'leaderboard-daily',
-      consistency: 'strong'
-    });
+    const dailyStore = getStore('leaderboard-daily');
     
     let existingScore;
     try {
@@ -99,26 +106,25 @@ export default async function handler(event, context) {
 
     // Only update if new score is better
     if (existingScore && existingScore.score >= scoreEntry.score) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      return new Response(
+        JSON.stringify({
           success: true,
           message: 'Score not improved',
           existingScore: existingScore.score,
           newScore: scoreEntry.score
-        })
-      };
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Save to daily leaderboard
     await dailyStore.set(playerKey, JSON.stringify(scoreEntry));
 
     // Update all-time leaderboard if this is a new personal best
-    const allTimeStore = getStore({
-      name: 'leaderboard-alltime',
-      consistency: 'strong'
-    });
+    const allTimeStore = getStore('leaderboard-alltime');
     
     let allTimeBest;
     try {
@@ -134,28 +140,32 @@ export default async function handler(event, context) {
     // Get player's rank in daily leaderboard
     const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score);
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: true,
         scoreEntry,
         dailyRank,
         isPersonalBest: !allTimeBest || scoreEntry.score > allTimeBest.score
-      })
-    };
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
 
   } catch (error) {
     console.error('Error in submit-score function:', error);
     
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         success: false,
         error: 'Failed to submit score'
-      })
-    };
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 };
 
@@ -178,10 +188,7 @@ async function getDailyRank(isLocal, date, playerScore) {
     const keyPrefix = isLocal ? 'dev_' : '';
     
     // Get scores from Netlify Blobs
-    const store = getStore({
-      name: 'leaderboard-daily',
-      consistency: 'strong'
-    });
+    const store = getStore('leaderboard-daily');
     
     const entries = store.list({ prefix: `${keyPrefix}${date}_` });
     
