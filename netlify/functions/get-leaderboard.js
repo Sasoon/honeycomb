@@ -54,9 +54,10 @@ async function getDailyLeaderboard(isLocal, context, limit) {
     // Get scores from Netlify Blobs
     const store = getStore('leaderboard-daily');
 
-    const entries = store.list({ prefix: `${keyPrefix}${today}_` });
+    const entries = store.list({ prefix: `${keyPrefix}${today}_`, paginate: true });
     
-    for await (const { key } of entries) {
+    for await (const { blobs } of entries) {
+      for (const { key } of blobs) {
         try {
           const scoreData = await store.get(key, { type: 'json' });
           if (scoreData && scoreData.score !== undefined) {
@@ -67,6 +68,7 @@ async function getDailyLeaderboard(isLocal, context, limit) {
           // Skip invalid entries
         }
       }
+    }
   } catch (error) {
     console.error('Error listing daily scores:', error);
   }
@@ -112,9 +114,10 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
     // Get scores from Netlify Blobs
     const store = getStore('leaderboard-alltime');
 
-    const entries = store.list({ prefix: keyPrefix });
+    const entries = store.list({ prefix: keyPrefix, paginate: true });
     
-    for await (const { key } of entries) {
+    for await (const { blobs } of entries) {
+      for (const { key } of blobs) {
         try {
           const scoreData = await store.get(key, { type: 'json' });
           if (scoreData && scoreData.score !== undefined) {
@@ -125,6 +128,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
           // Skip invalid entries
         }
       }
+    }
   } catch (error) {
     console.error('Error listing all-time scores:', error);
   }

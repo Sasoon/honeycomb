@@ -190,9 +190,10 @@ async function getDailyRank(isLocal, date, playerScore) {
     // Get scores from Netlify Blobs
     const store = getStore('leaderboard-daily');
     
-    const entries = store.list({ prefix: `${keyPrefix}${date}_` });
+    const entries = store.list({ prefix: `${keyPrefix}${date}_`, paginate: true });
     
-    for await (const { key } of entries) {
+    for await (const { blobs } of entries) {
+      for (const { key } of blobs) {
         try {
           const scoreData = await store.get(key, { type: 'json' });
           if (scoreData && scoreData.score) {
@@ -202,6 +203,7 @@ async function getDailyRank(isLocal, date, playerScore) {
           // Skip invalid entries
         }
       }
+    }
     
     // Sort scores in descending order and find rank
     scores.sort((a, b) => b - a);

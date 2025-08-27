@@ -33,8 +33,9 @@ export default async function handler(event, context) {
     // Clear daily leaderboard dev entries
     const dailyStore = getStore('leaderboard-daily');
 
-    const dailyEntries = dailyStore.list({ prefix: 'dev_' });
-    for await (const { key } of dailyEntries) {
+    const dailyEntries = dailyStore.list({ prefix: 'dev_', paginate: true });
+    for await (const { blobs } of dailyEntries) {
+      for (const { key } of blobs) {
       try {
         await dailyStore.delete(key);
         deletedCount++;
@@ -42,19 +43,22 @@ export default async function handler(event, context) {
       } catch (error) {
         console.error(`Error deleting daily entry ${key}:`, error);
       }
+      }
     }
 
     // Clear all-time leaderboard dev entries
     const allTimeStore = getStore('leaderboard-alltime');
 
-    const allTimeEntries = allTimeStore.list({ prefix: 'dev_' });
-    for await (const { key } of allTimeEntries) {
+    const allTimeEntries = allTimeStore.list({ prefix: 'dev_', paginate: true });
+    for await (const { blobs } of allTimeEntries) {
+      for (const { key } of blobs) {
       try {
         await allTimeStore.delete(key);
         deletedCount++;
         console.log(`Deleted all-time entry: ${key}`);
       } catch (error) {
         console.error(`Error deleting all-time entry ${key}:`, error);
+      }
       }
     }
 
