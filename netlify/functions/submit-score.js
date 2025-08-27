@@ -1,5 +1,4 @@
 import { getStore } from '@netlify/blobs';
-import { localStorage } from './local-storage.js';
 
 export const handler = async (event, context) => {
   // Only allow POST requests
@@ -66,8 +65,13 @@ export const handler = async (event, context) => {
       };
     }
 
-    const playerKey = `${date}_${sanitizedName}`;
+    const isLocal = !context.site?.id;
     const timestamp = new Date().toISOString();
+    
+    // Add dev_ prefix for local development to keep test data separate
+    const keyPrefix = isLocal ? 'dev_' : '';
+    const playerKey = `${keyPrefix}${date}_${sanitizedName}`;
+    const allTimeKey = `${keyPrefix}${sanitizedName}`;
     
     const scoreEntry = {
       playerName: sanitizedName,
@@ -79,26 +83,18 @@ export const handler = async (event, context) => {
       date: date,
       submittedAt: timestamp
     };
-
-    const isLocal = !context.site?.id;
-    let existingScore;
     
-    if (isLocal) {
-      // Use file-based storage for development
-      existingScore = localStorage.getDailyScore(playerKey);
-    } else {
-      // Initialize stores for production
-      const dailyStore = getStore({
-        name: 'leaderboard-daily',
-        siteID: context.site.id,
-        consistency: 'strong'
-      });
-      
-      try {
-        existingScore = await dailyStore.get(playerKey, { type: 'json' });
-      } catch (error) {
-        // No existing score, which is fine
-      }
+    // Initialize stores (works for both local and production now that project is linked)
+    const dailyStore = getStore({
+      name: 'leaderboard-daily',
+      siteID: context.site.id,
+      consistency: 'strong'
+    });
+    
+    try {
+      existingScore = await dailyStore.get(playerKey, { type: 'json' });
+    } catch (error) {
+      // No existing score, which is fine
     }
 
     // Only update if new score is better
@@ -116,48 +112,24 @@ export const handler = async (event, context) => {
     }
 
     // Save to daily leaderboard
-    if (isLocal) {
-      localStorage.setDailyScore(playerKey, scoreEntry);
-    } else {
-      const dailyStore = getStore({
-        name: 'leaderboard-daily',
-        siteID: context.site.id,
-        consistency: 'strong'
-      });
-      await dailyStore.set(playerKey, JSON.stringify(scoreEntry));
-    }
+    await dailyStore.set(playerKey, JSON.stringify(scoreEntry));
 
     // Update all-time leaderboard if this is a new personal best
-    const allTimeKey = sanitizedName;
-    let allTimeBest;
+    const allTimeStore = getStore({
+      name: 'leaderboard-alltime',
+      siteID: context.site.id,
+      consistency: 'strong'
+    });
     
-    if (isLocal) {
-      allTimeBest = localStorage.getAllTimeScore(allTimeKey);
-    } else {
-      const allTimeStore = getStore({
-        name: 'leaderboard-alltime',
-        siteID: context.site.id,
-        consistency: 'strong'
-      });
-      
-      try {
-        allTimeBest = await allTimeStore.get(allTimeKey, { type: 'json' });
-      } catch (error) {
-        // No existing all-time score
-      }
+    let allTimeBest;
+    try {
+      allTimeBest = await allTimeStore.get(allTimeKey, { type: 'json' });
+    } catch (error) {
+      // No existing all-time score
     }
 
     if (!allTimeBest || scoreEntry.score > allTimeBest.score) {
-      if (isLocal) {
-        localStorage.setAllTimeScore(allTimeKey, scoreEntry);
-      } else {
-        const allTimeStore = getStore({
-          name: 'leaderboard-alltime',
-          siteID: context.site.id,
-          consistency: 'strong'
-        });
-        await allTimeStore.set(allTimeKey, JSON.stringify(scoreEntry));
-      }
+      await allTimeStore.set(allTimeKey, JSON.stringify(scoreEntry));
     }
 
     // Get player's rank in daily leaderboard
@@ -204,26 +176,18 @@ function sanitizePlayerName(name) {
 async function getDailyRank(isLocal, date, playerScore, siteId) {
   try {
     const scores = [];
+    const keyPrefix = isLocal ? 'dev_' : '';
     
-    if (isLocal) {
-      // Get scores from local file storage
-      const allDailyScores = localStorage.getAllDailyScores();
-      for (const [key, scoreData] of Object.entries(allDailyScores)) {
-        if (key.startsWith(`${date}_`) && scoreData && scoreData.score) {
-          scores.push(scoreData.score);
-        }
-      }
-    } else {
-      // Get scores from Netlify Blobs
-      const store = getStore({
-        name: 'leaderboard-daily',
-        siteID: siteId,
-        consistency: 'strong'
-      });
-      
-      const entries = store.list({ prefix: `${date}_` });
-      
-      for await (const { key } of entries) {
+    // Get scores from Netlify Blobs
+    const store = getStore({
+      name: 'leaderboard-daily',
+      siteID: siteId,
+      consistency: 'strong'
+    });
+    
+    const entries = store.list({ prefix: `${keyPrefix}${date}_` });
+    
+    for await (const { key } of entries) {
         try {
           const scoreData = await store.get(key, { type: 'json' });
           if (scoreData && scoreData.score) {
@@ -233,7 +197,6 @@ async function getDailyRank(isLocal, date, playerScore, siteId) {
           // Skip invalid entries
         }
       }
-    }
     
     // Sort scores in descending order and find rank
     scores.sort((a, b) => b - a);

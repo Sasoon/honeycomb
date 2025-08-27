@@ -2,31 +2,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLettersSmart, generateStartingPowerCards, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, checkPowerCardRewards, generateRandomLetter, placeStartingTiles } from '../lib/tetrisGameUtils';
+import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, generateRandomLetter, placeStartingTiles } from '../lib/tetrisGameUtils';
 import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 import { createSeededRNG, SeededRNG } from '../lib/seededRNG';
 
-// Power card types
-export type PowerCardType =
-    | 'bomb'      // Clear 3x3 area
-    | 'rotate'    // Rotate 3x3 section
-    | 'gravity'   // Pull all letters down
-    | 'wildcard'  // Turn any tile into any letter
-    | 'slow'      // Next 3 drops are smaller
-    | 'laser'     // Remove one column
-    | 'preview'   // See next 2 rows instead of 1
-    | 'excavate'  // Remove any 3 tiles
-    | 'transmute' // Change 1 letter
-    | 'bridge';   // Connect non-adjacent tiles for one word
-
-export interface PowerCard {
-    id: string;
-    type: PowerCardType;
-    name: string;
-    description: string;
-}
 
 // Game phases
 export type GamePhase = 'flood' | 'player' | 'gameOver' | 'gravitySettle';
@@ -67,8 +48,6 @@ interface TetrisGameState {
     selectedTiles: SelectedTile[];
     currentWord: string;
     isWordValid: boolean;
-    powerCards: PowerCard[];
-    activePowerCard: PowerCard | null;
 
     // Game progression
     wordsThisRound: string[];
@@ -113,10 +92,6 @@ interface TetrisGameState {
     moveTileOneStep: (sourceCellId: string, targetCellId: string) => void;
     orbitPivot: (pivotCellId: string, direction?: 'cw' | 'ccw') => void;
 
-    // Power card actions
-    activatePowerCard: (cardId: string) => void;
-    cancelPowerCard: () => void;
-
     // Lock mode actions
     toggleTileLock: (cellId: string) => void;
 
@@ -129,7 +104,7 @@ const initialState: Omit<TetrisGameState,
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'activatePowerCard' | 'cancelPowerCard' | 'toggleTileLock' | 'checkGameOver'
+    'toggleTileLock' | 'checkGameOver'
 > = {
     gameInitialized: false,
     phase: 'player',
@@ -145,8 +120,6 @@ const initialState: Omit<TetrisGameState,
     selectedTiles: [],
     currentWord: '',
     isWordValid: false,
-    powerCards: [],
-    activePowerCard: null,
 
     wordsThisRound: [],
     totalWords: 0,
@@ -192,7 +165,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 // This ensures they always end up at the bottom
                 const tilesWithLetters = placeStartingTiles(initialGrid, initialLetters, gridSize);
 
-                const startingPowerCards = generateStartingPowerCards();
 
                 // Generate first drop preview (starts at 3 tiles for round 1)
                 const initialTilesPerDrop = 3;
@@ -206,7 +178,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     score: 0,
                     grid: tilesWithLetters,
                     gridSize: gridSize,
-                    powerCards: startingPowerCards,
                     nextRows: [firstDrop, secondDrop],
                     tilesPerDrop: initialTilesPerDrop,
                     selectedTiles: [],
@@ -231,7 +202,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const tilesWithLetters = placeStartingTiles(initialGrid, startingLetters, gridSize);
                 
                 // Generate power cards deterministically (optional: could disable for daily challenge)
-                const startingPowerCards = generateStartingPowerCards();
                 
                 // Use pre-generated drops from API
                 const firstDrop = gameState.firstDrop || [];
@@ -247,7 +217,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     score: 0,
                     grid: tilesWithLetters,
                     gridSize: gridSize,
-                    powerCards: startingPowerCards,
                     nextRows: [firstDrop, secondDrop],
                     tilesPerDrop: 3, // Start with 3 tiles
                     selectedTiles: [],
@@ -548,12 +517,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 const isCombo = state.wordsThisRound.length > 0; // Simple combo: any word after the first
                 const wordScore = calculateTetrisScore(baseScore, state.round, tilesCleared, isCombo);
 
-                // Check for power card rewards
-                const newPowerCard = checkPowerCardRewards(
-                    state.currentWord.length,
-                    tilesCleared,
-                    state.wordsThisRound.length + 1
-                );
 
                 // Update state
                 const updates: Partial<TetrisGameState> = {
@@ -570,11 +533,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                     ...(moveSources.size > 0 ? { phase: 'gravitySettle' } : {}),
                 };
 
-                // Add power card if earned
-                if (newPowerCard) {
-                    updates.powerCards = [...state.powerCards, newPowerCard];
-                    toastService.success(`Earned ${newPowerCard.name}!`);
-                }
 
                 // Update longest word
                 if (state.currentWord.length > state.longestWord.length) {
@@ -608,22 +566,6 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 console.log('[ORBIT-STORE] This function is not used - orbit handled in UI');
             },
 
-            activatePowerCard: (cardId: string) => {
-                const state = get();
-                const card = state.powerCards.find(c => c.id === cardId);
-
-                if (!card) return;
-
-                set({
-                    activePowerCard: card
-                });
-            },
-
-            cancelPowerCard: () => {
-                set({
-                    activePowerCard: null
-                });
-            },
 
 
             toggleTileLock: (cellId: string) => {

@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "playwright:install": "playwright install --with-deps"
+    "playwright:install": "playwright install --with-deps",
+    "blobs:list-daily": "netlify blobs:list leaderboard-daily --prefix dev_",
+    "blobs:list-alltime": "netlify blobs:list leaderboard-alltime --prefix dev_",
+    "blobs:clear-dev": "curl -X POST http://localhost:8888/.netlify/functions/clear-dev-data"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.9",

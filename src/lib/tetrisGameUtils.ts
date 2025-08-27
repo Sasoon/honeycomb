@@ -1,5 +1,4 @@
 import { HexCell } from '../components/HexGrid';
-import { PowerCard } from '../store/tetrisGameStore';
 import { SeededRNG } from './seededRNG';
 
 // Letter frequency for Tetris drops (weighted towards common letters)
@@ -648,70 +647,6 @@ export function clearTilesAndApplyGravity(
     return { newGrid, tilesCleared, moveSources };
 }
 
-// Generate starting power cards
-export function generateStartingPowerCards(): PowerCard[] {
-    const starterCards: PowerCard[] = [
-        {
-            id: 'starter-bomb',
-            type: 'bomb',
-            name: '💣 Bomb',
-            description: 'Clear a 3x3 area'
-        },
-        {
-            id: 'starter-gravity',
-            type: 'gravity',
-            name: '⬇️ Gravity',
-            description: 'Pull all tiles down'
-        },
-        {
-            id: 'starter-wildcard',
-            type: 'wildcard',
-            name: '🃏 Wildcard',
-            description: 'Change any letter'
-        }
-    ];
-
-    return starterCards;
-}
-
-// Award power cards based on achievements
-export function checkPowerCardRewards(
-    wordLength: number,
-    tilesCleared: number,
-    combo: number
-): PowerCard | null {
-    // Long word bonus
-    if (wordLength >= 7) {
-        return {
-            id: `reward-${Date.now()}`,
-            type: 'laser',
-            name: '⚡ Laser',
-            description: 'Clear entire column'
-        };
-    }
-
-    // Big clear bonus
-    if (tilesCleared >= 10) {
-        return {
-            id: `reward-${Date.now()}`,
-            type: 'slow',
-            name: '🐌 Slow',
-            description: 'Smaller drops for 3 rounds'
-        };
-    }
-
-    // Combo bonus
-    if (combo >= 3) {
-        return {
-            id: `reward-${Date.now()}`,
-            type: 'preview',
-            name: '👁️ Preview',
-            description: 'See 2 rows ahead'
-        };
-    }
-
-    return null;
-}
 
 // Calculate score for a word with bonuses
 export function calculateTetrisScore(

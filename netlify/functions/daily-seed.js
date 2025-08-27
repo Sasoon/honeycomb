@@ -1,5 +1,4 @@
 import { getStore } from '@netlify/blobs';
-import { localStorage } from './local-storage.js';
 
 export const handler = async (event, context) => {
   try {
@@ -14,8 +13,9 @@ export const handler = async (event, context) => {
     const isLocal = !context.site?.id;
     
     if (isLocal) {
-      // Use file-based storage for local development
-      seedData = localStorage.getDailySeed(dateString);
+      // For local development, generate seed on each request
+      // Frontend will handle localStorage directly
+      seedData = null; // Force generation
     } else {
       // Use Netlify Blobs in production
       const store = getStore({
@@ -48,13 +48,11 @@ export const handler = async (event, context) => {
         createdAt: new Date().toISOString()
       };
       
-      if (isLocal) {
-        // Store in local file
-        localStorage.setDailySeed(dateString, seedData);
-      } else {
-        // Store in Netlify Blobs
+      if (!isLocal) {
+        // Store in Netlify Blobs (production only)
         await store.set(dateString, JSON.stringify(seedData));
       }
+      // Local development doesn't persist seed data
     }
 
     return {

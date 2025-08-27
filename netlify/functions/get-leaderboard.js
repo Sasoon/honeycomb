@@ -1,5 +1,4 @@
 import { getStore } from '@netlify/blobs';
-import { localStorage } from './local-storage.js';
 
 export const handler = async (event, context) => {
   try {
@@ -46,25 +45,18 @@ async function getDailyLeaderboard(isLocal, context, limit) {
   const scores = [];
 
   try {
-    if (isLocal) {
-      // Get scores from local file storage
-      const allDailyScores = localStorage.getAllDailyScores();
-      for (const [key, scoreData] of Object.entries(allDailyScores)) {
-        if (key.startsWith(`${today}_`) && scoreData && scoreData.score !== undefined) {
-          scores.push(scoreData);
-        }
-      }
-    } else {
-      // Get scores from Netlify Blobs
-      const store = getStore({
-        name: 'leaderboard-daily',
-        siteID: context.site.id,
-        consistency: 'strong'
-      });
+    const keyPrefix = isLocal ? 'dev_' : '';
+    
+    // Get scores from Netlify Blobs
+    const store = getStore({
+      name: 'leaderboard-daily',
+      siteID: context.site.id,
+      consistency: 'strong'
+    });
 
-      const entries = store.list({ prefix: `${today}_` });
-      
-      for await (const { key } of entries) {
+    const entries = store.list({ prefix: `${keyPrefix}${today}_` });
+    
+    for await (const { key } of entries) {
         try {
           const scoreData = await store.get(key, { type: 'json' });
           if (scoreData && scoreData.score !== undefined) {
@@ -75,7 +67,6 @@ async function getDailyLeaderboard(isLocal, context, limit) {
           // Skip invalid entries
         }
       }
-    }
   } catch (error) {
     console.error('Error listing daily scores:', error);
   }
@@ -114,25 +105,18 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
   const scores = [];
 
   try {
-    if (isLocal) {
-      // Get scores from local file storage
-      const allTimeScores = localStorage.getAllAllTimeScores();
-      for (const [key, scoreData] of Object.entries(allTimeScores)) {
-        if (scoreData && scoreData.score !== undefined) {
-          scores.push(scoreData);
-        }
-      }
-    } else {
-      // Get scores from Netlify Blobs
-      const store = getStore({
-        name: 'leaderboard-alltime',
-        siteID: context.site.id,
-        consistency: 'strong'
-      });
+    const keyPrefix = isLocal ? 'dev_' : '';
+    
+    // Get scores from Netlify Blobs
+    const store = getStore({
+      name: 'leaderboard-alltime',
+      siteID: context.site.id,
+      consistency: 'strong'
+    });
 
-      const entries = store.list();
-      
-      for await (const { key } of entries) {
+    const entries = store.list({ prefix: keyPrefix });
+    
+    for await (const { key } of entries) {
         try {
           const scoreData = await store.get(key, { type: 'json' });
           if (scoreData && scoreData.score !== undefined) {
@@ -143,7 +127,6 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
           // Skip invalid entries
         }
       }
-    }
   } catch (error) {
     console.error('Error listing all-time scores:', error);
   }
