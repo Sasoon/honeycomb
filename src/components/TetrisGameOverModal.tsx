@@ -33,8 +33,9 @@ const TetrisGameOverModal = ({
     message?: string;
     rank?: { rank: number; totalPlayers: number };
   } | null>(null);
+  const [hasAlreadySubmitted, setHasAlreadySubmitted] = useState(false);
 
-  // Load saved player name from localStorage and mark daily challenge as completed
+  // Load saved player name, check submission status, and mark daily challenge as completed
   useEffect(() => {
     if (isDailyChallenge && dailyDate) {
       const savedName = localStorage.getItem('honeycomb-player-name');
@@ -42,10 +43,33 @@ const TetrisGameOverModal = ({
         setPlayerName(savedName);
       }
       
+      // Check if score has already been submitted for this date
+      const submissionKey = `honeycomb-daily-submitted-${dailyDate}`;
+      const existingSubmission = localStorage.getItem(submissionKey);
+      if (existingSubmission) {
+        const submissionData = JSON.parse(existingSubmission);
+        setHasAlreadySubmitted(true);
+        setSubmissionResult({
+          success: true,
+          message: 'Score already submitted!',
+          rank: submissionData.rank
+        });
+      }
+      
       // Mark today's daily challenge as completed
       localStorage.setItem(`honeycomb-daily-completed-${dailyDate}`, 'true');
+      
+      // Store the completion data for modal persistence
+      const completionData = {
+        score,
+        totalWords,
+        round,
+        longestWord,
+        completedAt: new Date().toISOString()
+      };
+      localStorage.setItem(`honeycomb-daily-completion-${dailyDate}`, JSON.stringify(completionData));
     }
-  }, [isDailyChallenge, dailyDate]);
+  }, [isDailyChallenge, dailyDate, score, totalWords, round, longestWord]);
 
   const handleSubmitScore = async () => {
     if (!playerName.trim() || !isDailyChallenge || !dailyDate) return;
@@ -85,11 +109,19 @@ const TetrisGameOverModal = ({
         throw new Error(result.error || 'Failed to submit score');
       }
       
-      setSubmissionResult({
+      const submissionData = {
         success: true,
         message: result.isPersonalBest ? 'New personal best!' : 'Score submitted!',
         rank: result.dailyRank
-      });
+      };
+      
+      setSubmissionResult(submissionData);
+      setHasAlreadySubmitted(true);
+      
+      // Store submission data to prevent duplicate submissions
+      if (dailyDate) {
+        localStorage.setItem(`honeycomb-daily-submitted-${dailyDate}`, JSON.stringify(submissionData));
+      }
       
     } catch (error) {
       console.error('Error submitting score:', error);
@@ -165,7 +197,7 @@ const TetrisGameOverModal = ({
               </div>
 
               {/* Daily Challenge Submission */}
-              {isDailyChallenge && !submissionResult && (
+              {isDailyChallenge && !hasAlreadySubmitted && (
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Submit to Daily Leaderboard</h3>
                   <input
@@ -212,43 +244,45 @@ const TetrisGameOverModal = ({
               {/* Action Buttons */}
               <div className="flex gap-3">
                 {isDailyChallenge ? (
-                  <a
-                    href="/daily"
-                    className="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  >
-                    Back to Daily Challenge
-                  </a>
+                  // For daily challenge, only show Share and Leaderboard buttons
+                  <>
+                    <button
+                      onClick={handleShare}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    >
+                      Share Stats
+                    </button>
+                    <a
+                      href="/leaderboard"
+                      className="flex-1 text-center bg-honeycomb hover:bg-honeycomb-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-honeycomb"
+                    >
+                      View Leaderboard
+                    </a>
+                  </>
                 ) : (
-                  <button
-                    onClick={onRestart}
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  >
-                    Play Again
-                  </button>
+                  // For regular games, show Play Again and Share
+                  <>
+                    <button
+                      onClick={onRestart}
+                      className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    >
+                      Play Again
+                    </button>
+                    <button
+                      onClick={handleShare}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    >
+                      Share Stats
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={handleShare}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                  Share Stats
-                </button>
               </div>
-              
-              {/* Additional Actions for Daily Challenge */}
-              {isDailyChallenge && submissionResult?.success && (
-                <div className="mt-3">
-                  <a
-                    href="/leaderboard"
-                    className="block w-full text-center py-2 px-4 bg-honeycomb-light text-honeycomb hover:bg-honeycomb hover:text-white rounded-lg transition-colors"
-                  >
-                    View Full Leaderboard
-                  </a>
-                </div>
-              )}
               
               <p className="text-xs text-gray-400 mt-4">
                 {isDailyChallenge 
-                  ? 'Daily challenge complete! Submit your score above or return to the daily page.'
+                  ? hasAlreadySubmitted 
+                    ? 'Daily challenge complete! Come back tomorrow for a new challenge.'
+                    : 'Submit your score to compete on the leaderboard!'
                   : 'Tap outside or press Play Again to continue'
                 }
               </p>

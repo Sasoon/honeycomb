@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
 import { useNavigate } from 'react-router-dom';
+import TetrisGameOverModal from '../components/TetrisGameOverModal';
 
 interface DailySeedData {
   date: string;
@@ -20,6 +21,13 @@ const DailyChallenge = () => {
   const [seedData, setSeedData] = useState<DailySeedData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completionData, setCompletionData] = useState<{
+    score: number;
+    totalWords: number;
+    round: number;
+    longestWord: string;
+  } | null>(null);
   
   const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useTetrisGameStore();
   const navigate = useNavigate();
@@ -50,6 +58,17 @@ const DailyChallenge = () => {
         const completedKey = `honeycomb-daily-completed-${today}`;
         const hasCompleted = localStorage.getItem(completedKey) === 'true';
         setIsCompleted(hasCompleted);
+        
+        // Check for completion data to show modal
+        if (hasCompleted) {
+          const completionKey = `honeycomb-daily-completion-${today}`;
+          const storedCompletion = localStorage.getItem(completionKey);
+          if (storedCompletion) {
+            const completionInfo = JSON.parse(storedCompletion);
+            setCompletionData(completionInfo);
+            setShowCompletionModal(true);
+          }
+        }
       } catch (err) {
         console.error('Error loading daily seed:', err);
         setError(err instanceof Error ? err.message : 'Failed to load daily challenge');
@@ -106,12 +125,17 @@ const DailyChallenge = () => {
     navigate('/');
   };
   
+  const handleCloseModal = () => {
+    setShowCompletionModal(false);
+  };
+  
   // Check if already playing today's challenge
   const isPlayingToday = isDailyChallenge && dailyDate === seedData?.date;
   
   return (
-    <div className="max-w-4xl mx-auto px-3 sm:px-4">
-      <h1 className="text-3xl font-bold text-center mb-6">Daily Challenge</h1>
+    <>
+      <div className="max-w-4xl mx-auto px-3 sm:px-4">
+        <h1 className="text-3xl font-bold text-center mb-6">Daily Challenge</h1>
       
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
@@ -189,7 +213,22 @@ const DailyChallenge = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+      
+      {/* Completion Modal */}
+      {completionData && (
+        <TetrisGameOverModal
+          isOpen={showCompletionModal}
+          score={completionData.score}
+          totalWords={completionData.totalWords}
+          round={completionData.round}
+          longestWord={completionData.longestWord}
+          onRestart={handleCloseModal}
+          isDailyChallenge={true}
+          dailyDate={seedData?.date}
+        />
+      )}
+    </>
   );
 };
 
