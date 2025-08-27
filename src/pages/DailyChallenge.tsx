@@ -19,6 +19,7 @@ const DailyChallenge = () => {
   const [countdown, setCountdown] = useState('');
   const [seedData, setSeedData] = useState<DailySeedData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isCompleted, setIsCompleted] = useState(false);
   
   const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useTetrisGameStore();
   const navigate = useNavigate();
@@ -43,6 +44,12 @@ const DailyChallenge = () => {
         }
         
         setSeedData(result.data);
+        
+        // Check if today's challenge has already been completed
+        const today = new Date().toISOString().split('T')[0];
+        const completedKey = `honeycomb-daily-completed-${today}`;
+        const hasCompleted = localStorage.getItem(completedKey) === 'true';
+        setIsCompleted(hasCompleted);
       } catch (err) {
         console.error('Error loading daily seed:', err);
         setError(err instanceof Error ? err.message : 'Failed to load daily challenge');
@@ -90,7 +97,7 @@ const DailyChallenge = () => {
   });
   
   const handleStartChallenge = () => {
-    if (!seedData) return;
+    if (!seedData || isCompleted) return;
     
     // Initialize the daily challenge in the game store
     initializeDailyChallenge(seedData.seed, seedData.gameState, seedData.date);
@@ -147,11 +154,31 @@ const DailyChallenge = () => {
             
             <button 
               onClick={handleStartChallenge}
-              disabled={!seedData}
-              className="w-full py-3 bg-honeycomb hover:bg-honeycomb-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+              disabled={!seedData || isCompleted}
+              className={`w-full py-3 text-white font-semibold rounded-lg transition-colors ${
+                isCompleted 
+                  ? 'bg-green-500 cursor-not-allowed' 
+                  : 'bg-honeycomb hover:bg-honeycomb-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
+              }`}
             >
-              {isPlayingToday ? 'Continue Today\'s Challenge' : 'Start Today\'s Challenge'}
+              {isCompleted 
+                ? '✅ Challenge Completed!' 
+                : isPlayingToday 
+                  ? 'Continue Today\'s Challenge' 
+                  : 'Start Today\'s Challenge'}
             </button>
+            
+            {isCompleted && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                <p className="text-green-700 mb-2">🎉 Great job completing today's challenge!</p>
+                <a 
+                  href="/leaderboard" 
+                  className="inline-block px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  View Leaderboard
+                </a>
+              </div>
+            )}
             
             <div>
               <h2 className="font-semibold mb-2">Top Scores:</h2>

@@ -808,6 +808,12 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
   
 
   const handleRestart = () => {
+    // Prevent restart during daily challenges
+    if (isDailyChallenge) {
+      console.warn('Restart blocked: Daily challenge cannot be restarted');
+      return;
+    }
+    
     // Stop any ongoing animations
     timersRef.current.forEach(t => window.clearTimeout(t));
     timersRef.current = [];

@@ -91,6 +91,7 @@ export const handler = async (event, context) => {
       consistency: 'strong'
     });
     
+    let existingScore;
     try {
       existingScore = await dailyStore.get(playerKey, { type: 'json' });
     } catch (error) {

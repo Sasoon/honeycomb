@@ -34,15 +34,18 @@ const TetrisGameOverModal = ({
     rank?: { rank: number; totalPlayers: number };
   } | null>(null);
 
-  // Load saved player name from localStorage
+  // Load saved player name from localStorage and mark daily challenge as completed
   useEffect(() => {
-    if (isDailyChallenge) {
+    if (isDailyChallenge && dailyDate) {
       const savedName = localStorage.getItem('honeycomb-player-name');
       if (savedName) {
         setPlayerName(savedName);
       }
+      
+      // Mark today's daily challenge as completed
+      localStorage.setItem(`honeycomb-daily-completed-${dailyDate}`, 'true');
     }
-  }, [isDailyChallenge]);
+  }, [isDailyChallenge, dailyDate]);
 
   const handleSubmitScore = async () => {
     if (!playerName.trim() || !isDailyChallenge || !dailyDate) return;
