@@ -84,10 +84,13 @@ export const handler = async (event, context) => {
       submittedAt: timestamp
     };
     
-    // Initialize stores (works for both local and production now that project is linked)
+    // Initialize stores with explicit site ID for production
+    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID;
+    console.log('Site ID for blobs:', siteID, 'Context site:', context.site);
+    
     const dailyStore = getStore({
       name: 'leaderboard-daily',
-      siteID: context.site?.id,
+      siteID: siteID,
       consistency: 'strong'
     });
     
@@ -118,7 +121,7 @@ export const handler = async (event, context) => {
     // Update all-time leaderboard if this is a new personal best
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
-      siteID: context.site?.id,
+      siteID: siteID,
       consistency: 'strong'
     });
     
@@ -134,7 +137,7 @@ export const handler = async (event, context) => {
     }
 
     // Get player's rank in daily leaderboard
-    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, context.site?.id);
+    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, siteID);
 
     return {
       statusCode: 200,

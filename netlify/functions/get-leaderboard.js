@@ -48,9 +48,10 @@ async function getDailyLeaderboard(isLocal, context, limit) {
     const keyPrefix = isLocal ? 'dev_' : '';
     
     // Get scores from Netlify Blobs
+    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID;
     const store = getStore({
       name: 'leaderboard-daily',
-      siteID: context.site?.id,
+      siteID: siteID,
       consistency: 'strong'
     });
 
@@ -108,9 +109,10 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
     const keyPrefix = isLocal ? 'dev_' : '';
     
     // Get scores from Netlify Blobs
+    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID;
     const store = getStore({
       name: 'leaderboard-alltime',
-      siteID: context.site?.id,
+      siteID: siteID,
       consistency: 'strong'
     });
 
