@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
-import { useNavigate } from 'react-router-dom';
 import TetrisGameOverModal from '../components/TetrisGameOverModal';
+import TetrisGame from './TetrisGame';
 
 interface DailySeedData {
   date: string;
@@ -30,7 +30,7 @@ const DailyChallenge = () => {
   } | null>(null);
   
   const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useTetrisGameStore();
-  const navigate = useNavigate();
+  const [isPlayingChallenge, setIsPlayingChallenge] = useState(false);
   
   // Load daily seed on component mount
   useEffect(() => {
@@ -121,8 +121,12 @@ const DailyChallenge = () => {
     // Initialize the daily challenge in the game store
     initializeDailyChallenge(seedData.seed, seedData.gameState, seedData.date);
     
-    // Navigate to the main game page
-    navigate('/');
+    // Show the game view instead of navigating away
+    setIsPlayingChallenge(true);
+  };
+  
+  const handleBackToDailyPage = () => {
+    setIsPlayingChallenge(false);
   };
   
   const handleCloseModal = () => {
@@ -131,6 +135,18 @@ const DailyChallenge = () => {
   
   // Check if already playing today's challenge
   const isPlayingToday = isDailyChallenge && dailyDate === seedData?.date;
+  
+  // If playing the challenge, render the game
+  if (isPlayingChallenge || (isPlayingToday && !showCompletionModal)) {
+    return (
+      <TetrisGame
+        isSidebarOpen={false}
+        openMenu={() => {}}
+        closeMenu={() => {}}
+        onBackToDailyChallenge={handleBackToDailyPage}
+      />
+    );
+  }
   
   return (
     <>

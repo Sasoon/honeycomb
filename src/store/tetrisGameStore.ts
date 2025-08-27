@@ -246,6 +246,12 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 set({
                     ...initialState,
                     gameInitialized: true,
+                    // Explicitly clear daily challenge state
+                    isDailyChallenge: false,
+                    dailySeed: undefined,
+                    dailyDate: undefined,
+                    challengeStartTime: undefined,
+                    seededRNG: undefined,
                 });
             },
 

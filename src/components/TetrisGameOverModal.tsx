@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import toastService from '../lib/toastService';
 
 interface TetrisGameOverModalProps {
   isOpen: boolean;
@@ -135,20 +136,16 @@ const TetrisGameOverModal = ({
   };
 
   const handleShare = () => {
-    const shareText = `🎯 Honeycomb Tetris\n\nFinal Score: ${score}\nWords Found: ${totalWords}\nRounds Survived: ${round}\nLongest Word: ${longestWord}\n\nPlay at: ${window.location.origin}`;
+    const shareText = isDailyChallenge 
+      ? `🎯 Honeycomb Tetris - Daily Challenge\n\nScore: ${score}\nWords: ${totalWords}\nRounds: ${round}\nLongest: ${longestWord}\n\nPlay today's challenge: https://honeycomb-game.netlify.app/daily`
+      : `🎯 Honeycomb Tetris\n\nFinal Score: ${score}\nWords Found: ${totalWords}\nRounds Survived: ${round}\nLongest Word: ${longestWord}\n\nPlay at: ${window.location.origin}`;
     
-    if (navigator.share && navigator.canShare({ text: shareText })) {
-      navigator.share({
-        title: 'Honeycomb Tetris',
-        text: shareText
-      });
-    } else {
-      // Fallback to clipboard
-      navigator.clipboard.writeText(shareText).then(() => {
-        // Could show a toast here
-        console.log('Stats copied to clipboard!');
-      });
-    }
+    // Copy to clipboard only
+    navigator.clipboard.writeText(shareText).then(() => {
+      toastService.success('Stats copied to clipboard!');
+    }).catch(() => {
+      toastService.error('Failed to copy stats');
+    });
     
     if (onShare) onShare();
   };
@@ -160,7 +157,9 @@ const TetrisGameOverModal = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 ${
+            isDailyChallenge ? 'z-30' : 'z-50'
+          }`}
           onClick={(e) => e.target === e.currentTarget && !isDailyChallenge && onRestart()}
         >
           <motion.div

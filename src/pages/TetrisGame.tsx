@@ -228,7 +228,7 @@ type FxOverlay = { key: string; letter: string; x: number; y: number };
 
 // (no-op placeholder removed)
 
-const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; }) => {
+const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; onBackToDailyChallenge?: () => void; }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [previousGrid, setPreviousGrid] = useState<typeof grid>([]);
@@ -297,7 +297,16 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
     tilesHiddenForAnimation: _unusedTiles,
   } = useTetrisGameStore();
 
-  useEffect(() => { if (!gameInitialized) initializeGame(); }, [gameInitialized, initializeGame]);
+  useEffect(() => { 
+    if (!gameInitialized) {
+      // If we're not in daily challenge mode but have daily challenge state, clear it
+      if (!onBackToDailyChallenge && isDailyChallenge) {
+        resetGame();
+      } else {
+        initializeGame();
+      }
+    }
+  }, [gameInitialized, initializeGame, resetGame, isDailyChallenge, onBackToDailyChallenge]);
   
   // Handle clicking outside the sidebar to close it on mobile
   useEffect(() => {
@@ -1712,7 +1721,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
         totalWords={totalWords}
         round={round}
         longestWord={longestWord}
-        onRestart={handleRestart}
+        onRestart={isDailyChallenge && onBackToDailyChallenge ? onBackToDailyChallenge : handleRestart}
         isDailyChallenge={isDailyChallenge}
         dailyDate={dailyDate}
         challengeStartTime={challengeStartTime}
