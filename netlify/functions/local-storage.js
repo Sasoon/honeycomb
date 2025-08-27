@@ -1,79 +1,44 @@
-// Simple file-based storage for local development
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+// Simple in-memory storage for local development
+// In production, Netlify Blobs will be used instead
 
-const LOCAL_STORAGE_DIR = '.local-storage';
-const DAILY_SCORES_FILE = join(LOCAL_STORAGE_DIR, 'daily-scores.json');
-const ALLTIME_SCORES_FILE = join(LOCAL_STORAGE_DIR, 'alltime-scores.json');
-const DAILY_SEEDS_FILE = join(LOCAL_STORAGE_DIR, 'daily-seeds.json');
-
-// Ensure storage directory exists
-if (!existsSync(LOCAL_STORAGE_DIR)) {
-  mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });
-}
-
-function readJsonFile(filePath) {
-  try {
-    if (existsSync(filePath)) {
-      const data = readFileSync(filePath, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error(`Error reading ${filePath}:`, error);
-  }
-  return {};
-}
-
-function writeJsonFile(filePath, data) {
-  try {
-    writeFileSync(filePath, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error(`Error writing ${filePath}:`, error);
-  }
-}
+// In-memory storage objects
+const dailyScores = {};
+const allTimeScores = {};
+const dailySeeds = {};
 
 export const localStorage = {
   // Daily scores
   getDailyScore(key) {
-    const scores = readJsonFile(DAILY_SCORES_FILE);
-    return scores[key];
+    return dailyScores[key];
   },
   
   setDailyScore(key, value) {
-    const scores = readJsonFile(DAILY_SCORES_FILE);
-    scores[key] = value;
-    writeJsonFile(DAILY_SCORES_FILE, scores);
+    dailyScores[key] = value;
   },
   
   getAllDailyScores() {
-    return readJsonFile(DAILY_SCORES_FILE);
+    return { ...dailyScores };
   },
   
   // All-time scores
   getAllTimeScore(key) {
-    const scores = readJsonFile(ALLTIME_SCORES_FILE);
-    return scores[key];
+    return allTimeScores[key];
   },
   
   setAllTimeScore(key, value) {
-    const scores = readJsonFile(ALLTIME_SCORES_FILE);
-    scores[key] = value;
-    writeJsonFile(ALLTIME_SCORES_FILE, scores);
+    allTimeScores[key] = value;
   },
   
   getAllAllTimeScores() {
-    return readJsonFile(ALLTIME_SCORES_FILE);
+    return { ...allTimeScores };
   },
   
   // Daily seeds
   getDailySeed(key) {
-    const seeds = readJsonFile(DAILY_SEEDS_FILE);
-    return seeds[key];
+    return dailySeeds[key];
   },
   
   setDailySeed(key, value) {
-    const seeds = readJsonFile(DAILY_SEEDS_FILE);
-    seeds[key] = value;
-    writeJsonFile(DAILY_SEEDS_FILE, seeds);
+    dailySeeds[key] = value;
   }
 };
