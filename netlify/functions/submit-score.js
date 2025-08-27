@@ -85,8 +85,8 @@ export const handler = async (event, context) => {
     };
     
     // Initialize stores with explicit site ID for production
-    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID;
-    console.log('Site ID for blobs:', siteID, 'Context site:', context.site);
+    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID || 'a1b92087-b54c-4d15-8194-e44eb6c57e27';
+    console.log('Site ID for blobs:', siteID, 'Context site:', context.site, 'Available env vars:', Object.keys(process.env).filter(key => key.includes('NETLIFY')));
     
     const dailyStore = getStore({
       name: 'leaderboard-daily',
