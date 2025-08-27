@@ -633,6 +633,32 @@ export const useTetrisGameStore = create<TetrisGameState>()(
         {
             name: 'honeycomb-tetris-game',
             skipHydration: false,
+            partialize: (state) => {
+                // Don't persist daily challenge game state or game over phase
+                if (state.isDailyChallenge) {
+                    // For daily challenges, only persist basic settings, not game state
+                    return {
+                        gameInitialized: false, // Force fresh start for daily challenges
+                        phase: 'player',
+                        grid: [],
+                        score: 0,
+                        round: 1,
+                        totalWords: 0,
+                        longestWord: '',
+                        isDailyChallenge: false, // Don't persist daily mode
+                        lastSaved: state.lastSaved,
+                    };
+                }
+                
+                // For regular games, persist everything except problematic fields
+                const { phase, isDailyChallenge, dailySeed, dailyDate, challengeStartTime, seededRNG, ...regularGameState } = state;
+                
+                return {
+                    ...regularGameState,
+                    phase: 'player', // Always start regular games in player phase, not gameOver
+                    isDailyChallenge: false, // Never persist daily challenge mode
+                };
+            },
         }
     )
 ); 

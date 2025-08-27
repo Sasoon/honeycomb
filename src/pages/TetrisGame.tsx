@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -229,6 +229,7 @@ type FxOverlay = { key: string; letter: string; x: number; y: number };
 // (no-op placeholder removed)
 
 const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; onBackToDailyChallenge?: () => void; }) => {
+  const location = useLocation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [previousGrid, setPreviousGrid] = useState<typeof grid>([]);
@@ -285,6 +286,7 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge
     startPlayerPhase,
     endPlayerPhase,
     resetGame,
+    setGameState,
     gridSize,
     
     // Daily challenge properties
@@ -299,14 +301,20 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge
 
   useEffect(() => { 
     if (!gameInitialized) {
-      // If we're not in daily challenge mode but have daily challenge state, clear it
-      if (!onBackToDailyChallenge && isDailyChallenge) {
-        resetGame();
-      } else {
-        initializeGame();
-      }
+      initializeGame();
     }
-  }, [gameInitialized, initializeGame, resetGame, isDailyChallenge, onBackToDailyChallenge]);
+  }, [gameInitialized, initializeGame]);
+  
+  // Clear daily challenge state when navigating to regular game (runtime fix)
+  useEffect(() => {
+    if (location.pathname === '/' && !onBackToDailyChallenge && isDailyChallenge) {
+      console.log('Resetting game state on navigation to / from daily challenge');
+      // Reset entire game state to start fresh regular game
+      resetGame();
+      // Initialize a new regular game after reset
+      setTimeout(() => initializeGame(), 0);
+    }
+  }, [location.pathname, onBackToDailyChallenge, isDailyChallenge, resetGame, initializeGame]);
   
   // Handle clicking outside the sidebar to close it on mobile
   useEffect(() => {
