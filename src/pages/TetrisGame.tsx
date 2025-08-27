@@ -286,7 +286,6 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge
     startPlayerPhase,
     endPlayerPhase,
     resetGame,
-    setGameState,
     gridSize,
     
     // Daily challenge properties
