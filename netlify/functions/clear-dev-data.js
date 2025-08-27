@@ -29,7 +29,7 @@ export const handler = async (event, context) => {
     // Clear daily leaderboard dev entries
     const dailyStore = getStore({
       name: 'leaderboard-daily',
-      siteID: context.site.id,
+      siteID: context.site?.id,
       consistency: 'strong'
     });
 
@@ -47,7 +47,7 @@ export const handler = async (event, context) => {
     // Clear all-time leaderboard dev entries
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
-      siteID: context.site.id,
+      siteID: context.site?.id,
       consistency: 'strong'
     });
 

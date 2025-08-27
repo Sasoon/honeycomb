@@ -87,7 +87,7 @@ export const handler = async (event, context) => {
     // Initialize stores (works for both local and production now that project is linked)
     const dailyStore = getStore({
       name: 'leaderboard-daily',
-      siteID: context.site.id,
+      siteID: context.site?.id,
       consistency: 'strong'
     });
     
@@ -117,7 +117,7 @@ export const handler = async (event, context) => {
     // Update all-time leaderboard if this is a new personal best
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
-      siteID: context.site.id,
+      siteID: context.site?.id,
       consistency: 'strong'
     });
     

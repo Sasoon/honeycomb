@@ -50,7 +50,7 @@ async function getDailyLeaderboard(isLocal, context, limit) {
     // Get scores from Netlify Blobs
     const store = getStore({
       name: 'leaderboard-daily',
-      siteID: context.site.id,
+      siteID: context.site?.id,
       consistency: 'strong'
     });
 
@@ -110,7 +110,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
     // Get scores from Netlify Blobs
     const store = getStore({
       name: 'leaderboard-alltime',
-      siteID: context.site.id,
+      siteID: context.site?.id,
       consistency: 'strong'
     });
 
