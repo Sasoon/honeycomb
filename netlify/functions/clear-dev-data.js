@@ -1,8 +1,8 @@
 import { getStore } from '@netlify/blobs';
 
-export default async function handler(event, context) {
+export default async function handler(request, context) {
   // Only allow POST requests
-  if (event.httpMethod !== 'POST') {
+  if (request.method !== 'POST') {
     return new Response(
       JSON.stringify({ success: false, error: 'Method not allowed' }),
       {

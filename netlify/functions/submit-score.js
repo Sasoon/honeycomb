@@ -1,8 +1,8 @@
 import { getStore } from '@netlify/blobs';
 
-export default async function handler(event, context) {
+export default async function handler(request, context) {
   // Only allow POST requests
-  if (event.httpMethod !== 'POST') {
+  if (request.method !== 'POST') {
     return new Response(
       JSON.stringify({ success: false, error: 'Method not allowed' }),
       {
@@ -13,7 +13,7 @@ export default async function handler(event, context) {
   }
 
   try {
-    const { playerName, score, round, totalWords, longestWord, timeSpent, date } = JSON.parse(event.body);
+    const { playerName, score, round, totalWords, longestWord, timeSpent, date } = await request.json();
     
     // Validate required fields
     if (!playerName || score === undefined || !round || !date) {

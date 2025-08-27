@@ -1,8 +1,10 @@
 import { getStore } from '@netlify/blobs';
 
-export default async function handler(event, context) {
+export default async function handler(request, context) {
   try {
-    const { type = 'daily', limit = 20 } = event.queryStringParameters || {};
+    const url = new URL(request.url);
+    const type = url.searchParams.get('type') || 'daily';
+    const limit = parseInt(url.searchParams.get('limit') || '20');
     
     // Validate type parameter
     if (!['daily', 'alltime'].includes(type)) {
@@ -18,7 +20,7 @@ export default async function handler(event, context) {
       );
     }
 
-    const maxLimit = Math.min(parseInt(limit) || 20, 100); // Cap at 100 entries
+    const maxLimit = Math.min(limit, 100); // Cap at 100 entries
     
     const isLocal = !context.site?.id;
     
