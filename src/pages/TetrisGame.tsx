@@ -512,6 +512,8 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu }: { isSidebarOpen: boo
           .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
           .sort((a, b) => (a.position.row - b.position.row) || (a.position.col - b.position.col));
         
+        console.log('[FLOOD-DEBUG] Flood phase started. Newly filled tiles:', newlyFilled.length);
+        
         // Prevent flash by ensuring tiles are hidden immediately when flood phase starts
         if (newlyFilled.length > 0) {
           setHiddenCellIds(newlyFilled.map(c => c.id));
