@@ -320,13 +320,32 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 
                 console.log(`[STORE] Flood complete: ${placedCount} tiles placed out of ${actualFallingLetters.length} attempted`);
 
-                // Game over only if tiles couldn't be placed (more realistic condition)
-                if (unplacedLetters.length > 0) {
+                // Game over only if tiles couldn't be placed AND top row is actually full
+                const topRowCells = newGrid.filter(cell => cell.position.row === 0);
+                const topRowFull = topRowCells.every(cell => cell.letter && cell.isPlaced);
+                
+                if (unplacedLetters.length > 0 && topRowFull) {
                     const words = state.totalWords;
                     const points = state.score;
+                    
+                    // DEBUG: Log game state when game over occurs
+                    console.log(`[DEBUG] GAME OVER triggered at round ${newRound}`);
+                    console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
+                    console.log(`[DEBUG] Attempted to place:`, actualFallingLetters);
+                    console.log(`[DEBUG] Successfully placed:`, placedCount);
+                    console.log(`[DEBUG] Total tiles on grid:`, newGrid.filter(cell => cell.letter && cell.isPlaced).length);
+                    console.log(`[DEBUG] Empty cells available:`, newGrid.filter(cell => !cell.letter).length);
+                    console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length);
+                    console.log(`[DEBUG] Top row full:`, topRowFull);
+                    
                     toastService.error(`Game Over — No space for ${unplacedLetters.length} tiles! Score: ${points}, Words: ${words}`);
                     set({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
                     return;
+                } else if (unplacedLetters.length > 0) {
+                    // DEBUG: Log when tiles fail to place but game continues (top row not full)
+                    console.log(`[DEBUG] ${unplacedLetters.length} tiles failed to place, but top row not full - continuing game`);
+                    console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
+                    console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length, '/ 3');
                 }
 
                 // Generate fresh previews for the upcoming turns using correct tile count for each future round

@@ -560,6 +560,10 @@ function processFloodWave(
             placed = true;
         }
         if (!placed) {
+            // DEBUG: Log why letter couldn't be placed
+            console.log(`[DEBUG] Letter '${letter}' failed to place - no valid flood paths found`);
+            console.log(`[DEBUG] Available entry points:`, entryPoints.length);
+            console.log(`[DEBUG] Entry points occupied:`, entryPoints.filter(ep => waveOccupied.has(ep.id) || (ep.letter && ep.isPlaced)).length);
             failedLetters.push(letter);
         }
     }
