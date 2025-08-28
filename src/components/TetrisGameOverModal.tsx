@@ -263,7 +263,7 @@ const TetrisGameOverModal = ({
                       Share Stats
                     </button>
                     <a
-                      href="/leaderboard"
+                      href={`/leaderboard?t=${Date.now()}`}
                       className="flex-1 text-center bg-honeycomb hover:bg-honeycomb-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-honeycomb"
                     >
                       View Leaderboard
