@@ -48,13 +48,16 @@ export default async function handler(event, context) {
             continue;
           }
           
-          // Delete if not today's date
-          if (dateFromKey !== todayString) {
+          // Only delete entries that are older than today (not today's entries)
+          const entryDate = new Date(dateFromKey + 'T00:00:00.000Z');
+          const todayDate = new Date(todayString + 'T00:00:00.000Z');
+          
+          if (entryDate < todayDate) {
             await dailyStore.delete(key);
             deletedCount++;
-            console.log(`Deleted old entry: ${key} (date: ${dateFromKey})`);
+            console.log(`Deleted old entry: ${key} (date: ${dateFromKey}, older than ${todayString})`);
           } else {
-            console.log(`Kept current entry: ${key} (today's date: ${dateFromKey})`);
+            console.log(`Kept current entry: ${key} (date: ${dateFromKey}, same as or newer than ${todayString})`);
           }
           
         } catch (error) {
