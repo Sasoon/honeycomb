@@ -1,9 +1,9 @@
 const HowToPlay = () => {
   return (
-    <div className="max-w-3xl mx-auto px-3 sm:px-4">
-      <h1 className="text-3xl font-bold text-center mb-6">How to Play Honeycomb Tetris</h1>
+    <div className="page-container page-container--standard">
+      <h1 className="page-title">How to Play Honeycomb Tetris</h1>
       
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">Game Overview</h2>
         <p className="mb-4">
           Honeycomb Tetris is a fast-paced word-building puzzle game where letter tiles fall from above like Tetris blocks. 
@@ -33,7 +33,7 @@ const HowToPlay = () => {
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">How to Play</h2>
         
         <h3 className="font-semibold text-lg mb-2">Player Phase</h3>
@@ -83,7 +83,7 @@ const HowToPlay = () => {
         </ul>
       </div>
       
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">Game Over & Strategy</h2>
         <p className="mb-4">
           The game ends when new tiles can't fit on the board. Your goal is to survive as many rounds as possible

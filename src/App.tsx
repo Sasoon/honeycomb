@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { useState, lazy, Suspense } from 'react';
 
 import Header from './components/Header.tsx';
+import MobileSidebar from './components/MobileSidebar.tsx';
 
 const TetrisGame = lazy(() => import('./pages/TetrisGame.tsx'));
 const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
@@ -17,7 +18,6 @@ function AppContent() {
     setIsSidebarOpen(prev => !prev);
   };
   
-  const openMenu = () => setIsSidebarOpen(true);
   const closeMenu = () => setIsSidebarOpen(false);
   
   // Hide footer on main tetris game for full SPA experience
@@ -26,16 +26,11 @@ function AppContent() {
   return (
     <div className="h-screen flex flex-col">
       <Header toggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+      <MobileSidebar isOpen={isSidebarOpen} onClose={closeMenu} />
       <main className="flex-1 w-full mx-auto flex flex-col">
         <Suspense fallback={<div className="p-4">Loading…</div>}>
           <Routes>
-            <Route path="/" element={
-              <TetrisGame 
-                isSidebarOpen={isSidebarOpen} 
-                openMenu={openMenu}
-                closeMenu={closeMenu}
-              />
-            } />
+            <Route path="/" element={<TetrisGame />} />
             <Route path="/daily" element={<DailyChallenge />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/stats" element={<Stats />} />

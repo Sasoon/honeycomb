@@ -65,8 +65,16 @@ const DailyChallenge = () => {
           const storedCompletion = localStorage.getItem(completionKey);
           if (storedCompletion) {
             const completionInfo = JSON.parse(storedCompletion);
-            setCompletionData(completionInfo);
-            setShowCompletionModal(true);
+            // Only show modal if we have valid game data (actual gameplay occurred)
+            if (completionInfo.score > 0 || completionInfo.round > 1 || completionInfo.totalWords > 0) {
+              setCompletionData(completionInfo);
+              setShowCompletionModal(true);
+            } else {
+              // Clear invalid completion data
+              localStorage.removeItem(completionKey);
+              localStorage.removeItem(completedKey);
+              setIsCompleted(false);
+            }
           }
         }
       } catch (err) {
@@ -140,9 +148,6 @@ const DailyChallenge = () => {
   if (isPlayingChallenge || (isPlayingToday && !showCompletionModal)) {
     return (
       <TetrisGame
-        isSidebarOpen={false}
-        openMenu={() => {}}
-        closeMenu={() => {}}
         onBackToDailyChallenge={handleBackToDailyPage}
       />
     );
@@ -150,8 +155,8 @@ const DailyChallenge = () => {
   
   return (
     <>
-      <div className="max-w-4xl mx-auto px-3 sm:px-4">
-        <h1 className="text-3xl font-bold text-center mb-6">Daily Challenge</h1>
+      <div className="page-container page-container--standard">
+        <h1 className="page-title">Daily Challenge</h1>
       
       {isLoading ? (
         <div className="flex justify-center items-center h-64">

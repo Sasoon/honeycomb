@@ -75,11 +75,11 @@ const Leaderboard = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4">
-      <h1 className="text-3xl font-bold text-center mb-6">Leaderboard</h1>
+    <div className="page-container page-container--wide">
+      <h1 className="page-title">Leaderboard</h1>
 
       {/* Tab Navigation */}
-      <div className="flex bg-gray-100 rounded-lg p-1 mb-6 max-w-md mx-auto">
+      <div className="flex bg-gray-100 rounded-lg p-1 content-spacing max-w-md mx-auto">
         <button
           onClick={() => setActiveTab('daily')}
           className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
@@ -104,7 +104,7 @@ const Leaderboard = () => {
 
       {/* Header Info */}
       {leaderboardData && (
-        <div className="text-center mb-6">
+        <div className="text-center content-spacing">
           <h2 className="text-xl font-semibold mb-2">
             {activeTab === 'daily' 
               ? `Daily Challenge - ${new Date().toLocaleDateString(undefined, { 

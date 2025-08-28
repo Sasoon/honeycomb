@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -228,7 +228,7 @@ type FxOverlay = { key: string; letter: string; x: number; y: number };
 
 // (no-op placeholder removed)
 
-const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge }: { isSidebarOpen: boolean; openMenu?: () => void; closeMenu: () => void; onBackToDailyChallenge?: () => void; }) => {
+const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => void; }) => {
   const location = useLocation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -315,75 +315,9 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge
     }
   }, [location.pathname, onBackToDailyChallenge, isDailyChallenge, resetGame, initializeGame]);
   
-  // Handle clicking outside the sidebar to close it on mobile
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      // Only do this on mobile screens
-      if (window.innerWidth < 768) {
-        // Get the header element
-        const headerElement = document.querySelector('header');
-        
-        // Skip if click is in the header (where the X button is)
-        if (headerElement && headerElement.contains(event.target as Node)) {
-          return;
-        }
-        
-        if (
-          sidebarRef.current && 
-          isSidebarOpen && 
-          !sidebarRef.current.contains(event.target as Node) &&
-          closeMenu
-        ) {
-          closeMenu();
-        }
-      }
-    }
+  // Mobile sidebar is now handled by App.tsx MobileSidebar component
 
-    // Attach the event listener
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      // Clean up the event listener
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isSidebarOpen, closeMenu]);
-
-  // Handle touch swipes for mobile sidebar
-  useEffect(() => {
-    let touchStartX = 0;
-    let touchEndX = 0;
-    
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartX = e.touches[0].clientX;
-    };
-    
-    const handleTouchMove = (e: TouchEvent) => {
-      touchEndX = e.touches[0].clientX;
-    };
-    
-    const handleTouchEnd = () => {
-      // Swipe right to open sidebar
-      if (touchEndX - touchStartX > 100 && !isSidebarOpen && openMenu) {
-        openMenu();
-      }
-      // Swipe left to close sidebar
-      else if (touchStartX - touchEndX > 100 && isSidebarOpen && closeMenu) {
-        closeMenu();
-      }
-    };
-    
-    const mainContentElement = containerRef.current;
-    if (mainContentElement && window.innerWidth < 768) {
-      mainContentElement.addEventListener('touchstart', handleTouchStart, { passive: true } as AddEventListenerOptions);
-      mainContentElement.addEventListener('touchmove', handleTouchMove, { passive: true } as AddEventListenerOptions);
-      mainContentElement.addEventListener('touchend', handleTouchEnd, { passive: true } as AddEventListenerOptions);
-      
-      return () => {
-        mainContentElement.removeEventListener('touchstart', handleTouchStart as any);
-        mainContentElement.removeEventListener('touchmove', handleTouchMove as any);
-        mainContentElement.removeEventListener('touchend', handleTouchEnd as any);
-      };
-    }
-  }, [isSidebarOpen, openMenu, closeMenu]);
+  // Touch interactions removed - mobile navigation handled by MobileSidebar
 
   useEffect(() => {
     // CRITICAL FIX: If entering flood phase, immediately hide any newly placed tiles
@@ -851,33 +785,10 @@ const TetrisGame = ({ isSidebarOpen, openMenu, closeMenu, onBackToDailyChallenge
         {/* Tetris Game Sidebar */}
         <div 
           ref={sidebarRef}
-          className={`game-sidebar transition-all duration-300 ease-in-out 
-            ${isSidebarOpen ? 'w-64 md:w-72' : 'w-0 md:w-72'} 
-            bg-white shadow-md z-30 
-            ${isSidebarOpen ? 'fixed' : 'fixed md:relative'} 
-            top-0 left-0 md:top-0
-            h-full flex flex-col overflow-hidden`}
+          className="hidden md:flex game-sidebar w-72 bg-white shadow-md flex-col overflow-hidden"
         >
           {/* Sidebar content */}
-          <div className={`${isSidebarOpen ? 'flex' : 'hidden md:flex'} flex-col h-full py-4 px-3 overflow-y-auto`}>
-            {/* Mobile navigation menu */}
-            <div className="block md:hidden">
-              <nav className="flex flex-col space-y-2">
-                <Link to="/" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
-                  Classic Mode
-                </Link>
-                <Link to="/daily" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
-                  Daily
-                </Link>
-                <Link to="/stats" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
-                  Stats
-                </Link>
-                <Link to="/how-to-play" className="px-3 py-2 rounded-lg text-amber-800 hover:bg-amber-100">
-                  How to Play
-                </Link>
-              </nav>
-              <div className="border-t border-amber-200 my-4"></div>
-            </div>
+          <div className="hidden md:flex flex-col h-full py-4 px-3 overflow-y-auto">
             
             {/* Desktop game info */}
             <div className="hidden md:block">

@@ -10,6 +10,27 @@
   font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   background-color: #FFFBEB;
   color: #1E293B;
+  font-size: 16px; /* Explicit base for rem calculations */
+  --header-height: 64px; /* Header with py-4 (32px padding) + content */
+  
+  /* Standardized spacing system - 8px base grid */
+  --spacing-section: 2rem; /* 32px - section spacing */
+  --spacing-content: 1.5rem; /* 24px - content spacing */
+  --spacing-element: 1rem; /* 16px - element spacing */
+  --spacing-compact: 0.5rem; /* 8px - compact spacing */
+  
+  /* Container system */
+  --container-narrow: 48rem; /* 768px - Stats, forms */
+  --container-standard: 64rem; /* 1024px - Content pages */
+  --container-wide: 80rem; /* 1280px - Leaderboard, tables */
+  
+  /* Content padding */
+  --padding-page: clamp(1rem, 4vw, 2rem); /* Responsive padding */
+}
+
+html {
+  -webkit-text-size-adjust: 100%; /* Prevent iOS text size adjust */
+  text-size-adjust: 100%;
 }
 
 body {
@@ -60,45 +81,44 @@ button {
   font-weight: 400;
 }
 
-/* Define text sizes explicitly */
-.text-xs {
-  font-size: 0.75rem;
-  line-height: 1rem;
+/* Font sizes are defined in Tailwind config - removed duplicates for consistency */
+
+/* Standardized layout system */
+.page-container {
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--spacing-section) var(--padding-page) var(--spacing-content);
 }
 
-.text-sm {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
+.page-container--narrow {
+  max-width: var(--container-narrow);
 }
 
-.text-base {
-  font-size: 1rem;
-  line-height: 1.5rem;
+.page-container--standard {
+  max-width: var(--container-standard);
 }
 
-.text-lg {
-  font-size: 1.125rem;
-  line-height: 1.75rem;
+.page-container--wide {
+  max-width: var(--container-wide);
 }
 
-.text-xl {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
+.page-title {
+  font-size: 1.875rem; /* text-3xl */
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: var(--spacing-content);
 }
 
-.text-2xl {
-  font-size: 1.5rem;
-  line-height: 2rem;
+.section-spacing {
+  margin-bottom: var(--spacing-section);
 }
 
-.text-3xl {
-  font-size: 1.875rem;
-  line-height: 2.25rem;
+.content-spacing {
+  margin-bottom: var(--spacing-content);
 }
 
-.text-4xl {
-  font-size: 2.25rem;
-  line-height: 2.5rem;
+.element-spacing {
+  margin-bottom: var(--spacing-element);
 }
 
 /* Hexagonal Grid System */

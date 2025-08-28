@@ -36,7 +36,7 @@ const TetrisGameOverModal = ({
   } | null>(null);
   const [hasAlreadySubmitted, setHasAlreadySubmitted] = useState(false);
 
-  // Load saved player name, check submission status, and mark daily challenge as completed
+  // Load saved player name and check submission status
   useEffect(() => {
     if (isDailyChallenge && dailyDate) {
       const savedName = localStorage.getItem('honeycomb-player-name');
@@ -56,9 +56,20 @@ const TetrisGameOverModal = ({
           rank: submissionData.rank
         });
       }
-      
+    }
+  }, [isDailyChallenge, dailyDate]);
+
+  // Only mark daily challenge as completed when modal actually opens (game is actually over)
+  useEffect(() => {
+    if (!isOpen || !isDailyChallenge || !dailyDate) return;
+    
+    // Check if already marked to prevent duplicates
+    const completionKey = `honeycomb-daily-completed-${dailyDate}`;
+    const alreadyMarked = localStorage.getItem(completionKey) === 'true';
+    
+    if (!alreadyMarked) {
       // Mark today's daily challenge as completed
-      localStorage.setItem(`honeycomb-daily-completed-${dailyDate}`, 'true');
+      localStorage.setItem(completionKey, 'true');
       
       // Store the completion data for modal persistence
       const completionData = {
@@ -70,7 +81,7 @@ const TetrisGameOverModal = ({
       };
       localStorage.setItem(`honeycomb-daily-completion-${dailyDate}`, JSON.stringify(completionData));
     }
-  }, [isDailyChallenge, dailyDate, score, totalWords, round, longestWord]);
+  }, [isOpen, isDailyChallenge, dailyDate, score, totalWords, round, longestWord]);
 
   const handleSubmitScore = async () => {
     if (!playerName.trim() || !isDailyChallenge || !dailyDate) return;
