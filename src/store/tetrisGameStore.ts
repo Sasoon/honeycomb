@@ -192,7 +192,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
             initializeDailyChallenge: (seed: number, gameState: any, date: string) => {
                 const gridSize = 5;
-                const initialGrid = generateInitialGrid(gridSize);
+                const initialGrid = generateInitialGrid(gridSize, true); // Skip pre-placed tiles for daily challenges
                 const seededRNG = createSeededRNG(seed);
                 
                 // Use the pre-generated starting letters from the API

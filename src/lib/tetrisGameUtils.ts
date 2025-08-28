@@ -188,8 +188,10 @@ export function placeStartingTiles(
 ): HexCell[] {
     const newGrid = grid.map(cell => ({ ...cell }));
     
-    // Find top row cells
-    const topRowCells = newGrid.filter(cell => cell.position.row === 0);
+    // Find top row cells and sort by column for consistent placement
+    const topRowCells = newGrid
+        .filter(cell => cell.position.row === 0)
+        .sort((a, b) => a.position.col - b.position.col);
     
     // Place letters at top row first
     letters.forEach((letter, index) => {
