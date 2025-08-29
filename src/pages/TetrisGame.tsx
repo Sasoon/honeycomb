@@ -780,7 +780,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
-    <div className="game-container flex-1 bg-amber-50 overflow-hidden">
+    <div className="game-container flex-1 bg-amber-50 overflow-hidden" style={{ height: '100vh', height: '100svh' }}>
       <div className="flex flex-col md:flex-row h-full">
         {/* Tetris Game Sidebar */}
         <div 
@@ -892,7 +892,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
             />
           </div>
 
-          <div ref={containerRef} className="absolute inset-0 flex flex-col items-center justify-center px-2">
+          <div ref={containerRef} className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-4">
             {/* Falling overlays */}
             <div className="pointer-events-none absolute inset-0 z-40">
               <AnimatePresence>
@@ -1600,11 +1600,8 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
               />
             </div>
 
-          </div>
-
-          {/* Actions - positioned at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 p-2 z-10">
-            <div className="flex gap-2 justify-center flex-wrap items-center">
+            {/* Actions - positioned below grid */}
+            <div className="flex gap-2 justify-center flex-wrap items-center mt-4">
               {phase === 'player' && (
                 <>
                   <button 
@@ -1631,6 +1628,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
                 </button>
               )}
             </div>
+
           </div>
         </div>
       </div>
