@@ -116,19 +116,6 @@ const Leaderboard = () => {
               : 'All-Time Best Scores'
             }
           </h2>
-          <div className="flex items-center justify-center gap-4">
-            <p className="text-gray-600">
-              {leaderboardData.totalEntries} player{leaderboardData.totalEntries !== 1 ? 's' : ''} participated
-            </p>
-            <button
-              onClick={() => loadLeaderboard(activeTab)}
-              disabled={isLoading}
-              className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 text-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
-              title="Refresh leaderboard"
-            >
-              {isLoading ? '↻' : '⟳'}
-            </button>
-          </div>
         </div>
       )}
 

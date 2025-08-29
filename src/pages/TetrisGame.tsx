@@ -877,20 +877,22 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
         </div>
 
         {/* Main content */}
-        <div className="flex-1 h-full overflow-hidden flex flex-col">
+        <div className="flex-1 h-full overflow-hidden relative">
           {/* Mobile Game Controls */}
-          <TetrisMobileGameControls
-            score={score}
-            round={round}
-            wordsThisRound={wordsThisRound.length}
-            wordsThisRoundList={wordsThisRound}
-            currentWord={currentWord}
-            freeOrbitsAvailable={freeOrbitsAvailable || 0}
-            nextRows={nextRows}
-            previewLevel={previewLevel}
-          />
+          <div className="absolute top-0 left-0 right-0 z-10">
+            <TetrisMobileGameControls
+              score={score}
+              round={round}
+              wordsThisRound={wordsThisRound.length}
+              wordsThisRoundList={wordsThisRound}
+              currentWord={currentWord}
+              freeOrbitsAvailable={freeOrbitsAvailable || 0}
+              nextRows={nextRows}
+              previewLevel={previewLevel}
+            />
+          </div>
 
-          <div ref={containerRef} className="flex-1 w-full flex flex-col items-center justify-center relative px-2">
+          <div ref={containerRef} className="absolute inset-0 flex flex-col items-center justify-center px-2">
             {/* Falling overlays */}
             <div className="pointer-events-none absolute inset-0 z-40">
               <AnimatePresence>
@@ -1598,8 +1600,11 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
               />
             </div>
 
-            {/* Actions */}
-            <div className="mt-2 flex gap-2 justify-center flex-wrap items-center flex-shrink-0">
+          </div>
+
+          {/* Actions - positioned at bottom */}
+          <div className="absolute bottom-0 left-0 right-0 p-2 z-10">
+            <div className="flex gap-2 justify-center flex-wrap items-center">
               {phase === 'player' && (
                 <>
                   <button 
@@ -1626,7 +1631,6 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
                 </button>
               )}
             </div>
-
           </div>
         </div>
       </div>
