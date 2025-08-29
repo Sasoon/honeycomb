@@ -892,7 +892,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
             />
           </div>
 
-          <div ref={containerRef} className="absolute inset-0 flex flex-col items-center justify-center px-2 gap-4">
+          <div ref={containerRef} className="absolute inset-0 px-2">
             {/* Falling overlays */}
             <div className="pointer-events-none absolute inset-0 z-40">
               <AnimatePresence>
@@ -1577,7 +1577,15 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
 
 
             {/* Grid */}
-            <div className={`grid-container flex justify-center relative z-10 ${phase === 'flood' ? 'flood-phase' : ''} flex-shrink-0`}>
+            <div 
+              className={`grid-container relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}
+              style={{ 
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)'
+              }}
+            >
               <HexGrid
                 cells={grid.map(c => ({ ...c, isSelected: selectedTiles.some(t => t.cellId === c.id) }))}
                 onCellClick={handleCellClick}
@@ -1600,8 +1608,20 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
               />
             </div>
 
-            {/* Actions - positioned below grid */}
-            <div className="flex gap-2 justify-center flex-wrap items-center mt-4">
+            </div>
+
+          {/* Actions - positioned below centered grid */}
+          <div 
+            className="absolute inset-x-0 z-20" 
+            style={{ 
+              top: '50%',
+              transform: 'translateY(200px)', /* Position further below grid */
+              display: 'flex',
+              justifyContent: 'center',
+              pointerEvents: 'auto'
+            }}
+          >
+            <div className="flex gap-2 flex-wrap items-center px-4 py-2 rounded-lg">
               {phase === 'player' && (
                 <>
                   <button 
