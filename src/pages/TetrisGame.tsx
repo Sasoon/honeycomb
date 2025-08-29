@@ -780,7 +780,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
-    <div className="game-container flex-1 bg-amber-50 overflow-hidden" style={{ height: '100vh', height: '100svh' }}>
+    <div className="game-container flex-1 bg-amber-50 overflow-hidden mobile-height">
       <div className="flex flex-col md:flex-row h-full">
         {/* Tetris Game Sidebar */}
         <div 
@@ -1646,6 +1646,13 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
         dailyDate={dailyDate}
         challengeStartTime={challengeStartTime}
       />
+      
+      <style>{`
+        .mobile-height {
+          height: 100vh; /* Fallback for browsers without svh support */
+          height: 100svh; /* Modern browsers with small viewport height support */
+        }
+      `}</style>
 
     </div>
   );
