@@ -1578,7 +1578,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
 
             {/* Grid */}
             <div 
-              className={`grid-container relative z-10 ${phase === 'flood' ? 'flood-phase' : ''}`}
+              className={`grid-container relative ${phase === 'flood' ? 'flood-phase' : ''}`}
               style={{ 
                 position: 'absolute',
                 top: '50%',
@@ -1650,6 +1650,9 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
             </div>
 
           </div>
+        {/* <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
+          © {new Date().getFullYear()} Honeycomb Tetris - A Tetris-Style Word Game
+        </footer>  */}
         </div>
       </div>
       <Toaster position="bottom-center" />

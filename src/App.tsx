@@ -38,11 +38,6 @@ function AppContent() {
           </Routes>
         </Suspense>
       </main>
-      {showFooter && (
-        <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
-          © {new Date().getFullYear()} Honeycomb Tetris - A Tetris-Style Word Game
-        </footer>
-      )}
     </div>
   );
 }
