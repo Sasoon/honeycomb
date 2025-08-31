@@ -1622,27 +1622,37 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
             }}
           >
             <div className="flex gap-2 flex-wrap items-center px-4 py-2 rounded-lg">
-              {phase === 'player' && (
-                <>
-                  <button 
-                    onClick={() => submitWord()} 
-                    disabled={currentWord.length < 3} 
-                    className="py-1.5 px-3 text-sm bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-medium rounded transition-colors"
-                  >
-                    Submit Word
-                  </button>
-                  <button 
-                    onClick={() => endPlayerPhase()} 
-                    className="py-1.5 px-3 text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium rounded transition-colors"
-                  >
-                    End Turn
-                  </button>
-                </>
-              )}
+              <button 
+                onClick={() => submitWord()} 
+                disabled={currentWord.length < 3 || phase !== 'player'} 
+                className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                  phase === 'player' && currentWord.length >= 3
+                    ? 'bg-green-500 hover:bg-green-600 text-white'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Submit Word
+              </button>
+              <button 
+                onClick={() => endPlayerPhase()} 
+                disabled={phase !== 'player'}
+                className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                  phase === 'player'
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                End Turn
+              </button>
               {!isDailyChallenge && (
                 <button 
                   onClick={handleRestart} 
-                  className="py-1.5 px-3 text-sm bg-red-500 hover:bg-red-600 text-white font-medium rounded transition-colors"
+                  disabled={phase === 'flood' || phase === 'gravitySettle'}
+                  className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                    phase === 'flood' || phase === 'gravitySettle'
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-red-500 hover:bg-red-600 text-white'
+                  }`}
                 >
                   Restart
                 </button>
