@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useTetrisGameStore } from '../store/tetrisGameStore';
-import TetrisGameOverModal from '../components/TetrisGameOverModal';
 import TetrisGame from './TetrisGame';
 
 interface DailySeedData {
@@ -21,13 +20,6 @@ const DailyChallenge = () => {
   const [seedData, setSeedData] = useState<DailySeedData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [completionData, setCompletionData] = useState<{
-    score: number;
-    totalWords: number;
-    round: number;
-    longestWord: string;
-  } | null>(null);
   
   const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useTetrisGameStore();
   const [isPlayingChallenge, setIsPlayingChallenge] = useState(false);
@@ -58,28 +50,6 @@ const DailyChallenge = () => {
         const completedKey = `honeycomb-daily-completed-${today}`;
         const hasCompleted = localStorage.getItem(completedKey) === 'true';
         setIsCompleted(hasCompleted);
-        
-        // Check for completion data to show modal
-        if (hasCompleted) {
-          const completionKey = `honeycomb-daily-completion-${today}`;
-          const modalShownKey = `honeycomb-daily-modal-shown-${today}`;
-          const storedCompletion = localStorage.getItem(completionKey);
-          const hasModalBeenShown = localStorage.getItem(modalShownKey) === 'true';
-          
-          if (storedCompletion && !hasModalBeenShown) {
-            const completionInfo = JSON.parse(storedCompletion);
-            // Only show modal if we have valid game data (actual gameplay occurred)
-            if (completionInfo.score > 0 || completionInfo.round > 1 || completionInfo.totalWords > 0) {
-              setCompletionData(completionInfo);
-              setShowCompletionModal(true);
-            } else {
-              // Clear invalid completion data
-              localStorage.removeItem(completionKey);
-              localStorage.removeItem(completedKey);
-              setIsCompleted(false);
-            }
-          }
-        }
       } catch (err) {
         console.error('Error loading daily seed:', err);
         setError(err instanceof Error ? err.message : 'Failed to load daily challenge');
@@ -140,19 +110,12 @@ const DailyChallenge = () => {
     setIsPlayingChallenge(false);
   };
   
-  const handleCloseModal = () => {
-    setShowCompletionModal(false);
-    // Mark modal as shown so it won't appear again
-    const today = new Date().toISOString().split('T')[0];
-    const modalShownKey = `honeycomb-daily-modal-shown-${today}`;
-    localStorage.setItem(modalShownKey, 'true');
-  };
   
   // Check if already playing today's challenge
   const isPlayingToday = isDailyChallenge && dailyDate === seedData?.date;
   
   // If playing the challenge, render the game
-  if (isPlayingChallenge || (isPlayingToday && !showCompletionModal)) {
+  if (isPlayingChallenge || isPlayingToday) {
     return (
       <TetrisGame
         onBackToDailyChallenge={handleBackToDailyPage}
@@ -235,20 +198,6 @@ const DailyChallenge = () => {
         </div>
       )}
       </div>
-      
-      {/* Completion Modal */}
-      {completionData && (
-        <TetrisGameOverModal
-          isOpen={showCompletionModal}
-          score={completionData.score}
-          totalWords={completionData.totalWords}
-          round={completionData.round}
-          longestWord={completionData.longestWord}
-          onRestart={handleCloseModal}
-          isDailyChallenge={true}
-          dailyDate={seedData?.date}
-        />
-      )}
     </>
   );
 };
