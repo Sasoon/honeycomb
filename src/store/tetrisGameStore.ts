@@ -570,9 +570,8 @@ export const useTetrisGameStore = create<TetrisGameState>()(
 
                 // Always end round after word submission (original simple logic)
                 if (moveSources.size === 0) {
-                    setTimeout(() => {
-                        get().endRound();
-                    }, 250);
+                    // No gravity moves needed, trigger flood phase immediately
+                    get().endRound();
                 }
                 // If there are gravity moves, endRound will be called after gravity settles
             },
