@@ -138,7 +138,7 @@ export default async function handler(request, context) {
     }
 
     // Get player's rank in daily leaderboard
-    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score);
+    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, dailyStore);
 
     return new Response(
       JSON.stringify({
@@ -182,20 +182,18 @@ function sanitizePlayerName(name) {
 }
 
 // Get player's rank in daily leaderboard
-async function getDailyRank(isLocal, date, playerScore) {
+async function getDailyRank(isLocal, date, playerScore, store) {
   try {
     const scores = [];
     const keyPrefix = isLocal ? 'dev_' : '';
     
-    // Get scores from Netlify Blobs
-    const store = getStore('leaderboard-daily');
+    // List all scores for today
+    const entries = await store.list({ prefix: `${keyPrefix}${date}_` });
     
-    const entries = store.list({ prefix: `${keyPrefix}${date}_`, paginate: true });
-    
-    for await (const { blobs } of entries) {
-      for (const { key } of blobs) {
+    if (entries && entries.blobs) {
+      for (const blob of entries.blobs) {
         try {
-          const scoreData = await store.get(key, { type: 'json' });
+          const scoreData = await store.get(blob.key, { type: 'json' });
           if (scoreData && scoreData.score !== undefined) {
             scores.push(scoreData.score);
           }
@@ -214,7 +212,7 @@ async function getDailyRank(isLocal, date, playerScore) {
     
     return {
       rank,
-      totalPlayers: scores.length
+      totalPlayers: scores.length + 1  // Add 1 to include current player
     };
   } catch (error) {
     console.error('Error calculating daily rank:', error);
