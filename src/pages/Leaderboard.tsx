@@ -32,7 +32,7 @@ const Leaderboard = () => {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/get-leaderboard?type=${type}&limit=10`);
+      const response = await fetch(`/api/get-leaderboard?type=${type}&limit=10&t=${Date.now()}`);
       
       if (!response.ok) {
         throw new Error(`Failed to load leaderboard: ${response.statusText}`);
