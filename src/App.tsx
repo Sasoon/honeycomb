@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useState, lazy, Suspense } from 'react';
 
 import Header from './components/Header.tsx';
@@ -12,7 +12,6 @@ const HowToPlay = lazy(() => import('./pages/HowToPlay.tsx'));
 
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const location = useLocation();
   
   const toggleSidebar = () => {
     setIsSidebarOpen(prev => !prev);

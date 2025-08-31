@@ -207,7 +207,8 @@ async function getDailyRank(isLocal, date, playerScore) {
     
     // Sort scores in descending order and find rank
     scores.sort((a, b) => b - a);
-    const rank = scores.findIndex(score => score <= playerScore) + 1;
+    const rankIndex = scores.findIndex(score => score <= playerScore);
+    const rank = rankIndex === -1 ? 1 : rankIndex + 1;
     
     return {
       rank,
