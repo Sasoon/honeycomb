@@ -20,9 +20,6 @@ function AppContent() {
   
   const closeMenu = () => setIsSidebarOpen(false);
   
-  // Hide footer on main tetris game for full SPA experience
-  const showFooter = location.pathname !== '/';
-  
   return (
     <div className="h-screen flex flex-col">
       <Header toggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />

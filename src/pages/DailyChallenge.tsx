@@ -62,8 +62,11 @@ const DailyChallenge = () => {
         // Check for completion data to show modal
         if (hasCompleted) {
           const completionKey = `honeycomb-daily-completion-${today}`;
+          const modalShownKey = `honeycomb-daily-modal-shown-${today}`;
           const storedCompletion = localStorage.getItem(completionKey);
-          if (storedCompletion) {
+          const hasModalBeenShown = localStorage.getItem(modalShownKey) === 'true';
+          
+          if (storedCompletion && !hasModalBeenShown) {
             const completionInfo = JSON.parse(storedCompletion);
             // Only show modal if we have valid game data (actual gameplay occurred)
             if (completionInfo.score > 0 || completionInfo.round > 1 || completionInfo.totalWords > 0) {
@@ -139,6 +142,10 @@ const DailyChallenge = () => {
   
   const handleCloseModal = () => {
     setShowCompletionModal(false);
+    // Mark modal as shown so it won't appear again
+    const today = new Date().toISOString().split('T')[0];
+    const modalShownKey = `honeycomb-daily-modal-shown-${today}`;
+    localStorage.setItem(modalShownKey, 'true');
   };
   
   // Check if already playing today's challenge
@@ -224,13 +231,6 @@ const DailyChallenge = () => {
                 </a>
               </div>
             )}
-            
-            <div>
-              <h2 className="font-semibold mb-2">Top Scores:</h2>
-              <div className="text-sm text-gray-600 italic">
-                Challenge leaderboard will be implemented in a future update
-              </div>
-            </div>
           </div>
         </div>
       )}
