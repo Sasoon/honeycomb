@@ -17,7 +17,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-waxle py-4 px-3 shadow-md sticky top-0 z-40">
+    <header className="bg-primary py-4 px-3 shadow-md sticky top-0 z-40">
       <div>
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
@@ -55,34 +55,34 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/classic" 
                 className={`${isActive('/classic') || isActive('/') 
-                  ? 'bg-waxle-dark text-white' 
-                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-highlight text-primary-dark' 
+                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Classic
               </Link>
               <Link 
                 to="/daily" 
                 className={`${isActive('/daily') 
-                  ? 'bg-waxle-dark text-white' 
-                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-highlight text-primary-dark' 
+                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Daily
               </Link>
               <Link 
                 to="/leaderboard" 
                 className={`${isActive('/leaderboard') 
-                  ? 'bg-waxle-dark text-white' 
-                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-highlight text-primary-dark' 
+                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Leaderboard
               </Link>
               <Link 
                 to="/how-to-play" 
                 className={`${isActive('/how-to-play') 
-                  ? 'bg-waxle-dark text-white' 
-                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-highlight text-primary-dark' 
+                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
-                How to Play
+                Tutorial
               </Link>
             </nav>
           </div>

@@ -28,18 +28,18 @@ const WaxleMobileGameControls = ({
     <div className="md:hidden w-full cursor-pointer">
       {/* Compact Header - Always visible */}
       <div 
-        className="bg-white shadow-md border-b border-amber-100 p-4 transition-all"
+        className="bg-white shadow-md border-b border-secondary-light p-4 transition-all"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex justify-between items-center">
           <div className="flex space-x-2 items-center">
             {/* Next Drop Preview */}
             {previewLevel > 0 && nextRows.length > 0 && (
-              <div className="flex items-center gap-2 bg-gray-50 rounded-full px-3 py-1">
-                <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Next</span>
+              <div className="flex items-center gap-2 bg-bg-secondary rounded-full px-3 py-1">
+                <span className="text-xs font-medium text-secondary uppercase tracking-wide">Next</span>
                 <div className="flex gap-1">
-                  {nextRows[0]?.slice(0, 4).map((letter, idx) => (
-                    <div key={idx} className="w-5 h-5 bg-white rounded border border-gray-300 flex items-center justify-center text-xs font-semibold text-gray-700">
+                  {nextRows[0]?.map((letter, idx) => (
+                    <div key={idx} className="w-5 h-5 bg-white rounded border border-secondary-light flex items-center justify-center text-xs font-semibold text-primary">
                       {letter}
                     </div>
                   ))}
@@ -87,18 +87,15 @@ const WaxleMobileGameControls = ({
             <div className="p-3">
               <div>
                   {/* Words Submitted */}
-                  <div className="mb-3 p-2 bg-green-50 rounded-lg">
-                    <div className="text-sm font-medium text-green-800 mb-2">Words This Game ({wordsThisRound}):</div>
+                  <div className="mb-3 p-2 bg-success-light rounded-lg">
+                    <div className="text-sm font-medium text-primary mb-2">Words This Game ({wordsThisRound}):</div>
                     {wordsThisRoundList.length > 0 ? (
                       <div className="space-y-1 max-h-16 overflow-y-auto">
-                        {wordsThisRoundList.slice(-4).reverse().map((word, idx) => (
-                          <div key={idx} className="text-xs text-green-700 font-mono">
+                        {wordsThisRoundList.reverse().map((word, idx) => (
+                          <div key={idx} className="text-xs text-secondary-dark font-mono">
                             {word}
                           </div>
                         ))}
-                        {wordsThisRoundList.length > 4 && (
-                          <div className="text-xs text-green-600 italic">...and {wordsThisRoundList.length - 4} more</div>
-                        )}
                       </div>
                     ) : (
                       <div className="text-xs text-green-600 italic">No words submitted yet</div>
@@ -112,17 +109,6 @@ const WaxleMobileGameControls = ({
                       <p className="text-lg font-mono text-blue-800">{currentWord}</p>
                     </div>
                   )}
-
-                  {/* Quick Tips */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-amber-900">Quick Tips:</h4>
-                    <ul className="text-xs text-gray-600 space-y-1">
-                      <li>• Select tiles to form words (3+ letters)</li>
-                      <li>• Use orbit to rotate tiles around a pivot</li>
-                      <li>• Lock tiles to prevent them from moving</li>
-                      <li>• Clear words to prevent board overflow</li>
-                    </ul>
-                  </div>
                 </div>
             </div>
           </motion.div>

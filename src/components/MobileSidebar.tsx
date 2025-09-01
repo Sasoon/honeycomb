@@ -107,8 +107,8 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/classic" 
               className={`${isActive('/classic') || isActive('/') 
-                ? 'bg-waxle text-white' 
-                : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
+                ? 'bg-primary text-white' 
+                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
               Classic
@@ -116,8 +116,8 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/daily" 
               className={`${isActive('/daily') 
-                ? 'bg-waxle text-white' 
-                : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
+                ? 'bg-primary text-white' 
+                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
               Daily
@@ -125,8 +125,8 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/leaderboard" 
               className={`${isActive('/leaderboard') 
-                ? 'bg-waxle text-white' 
-                : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
+                ? 'bg-primary text-white' 
+                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
               Leaderboard
@@ -134,11 +134,11 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/how-to-play" 
               className={`${isActive('/how-to-play') 
-                ? 'bg-waxle text-white' 
-                : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
+                ? 'bg-primary text-white' 
+                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
-              How to Play
+              Tutorial
             </Link>
           </nav>
         </div>

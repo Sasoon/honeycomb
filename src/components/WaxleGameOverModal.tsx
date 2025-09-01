@@ -181,48 +181,48 @@ const WaxleGameOverModal = ({
             className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
           >
             <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">Game Over!</h2>
-              <p className="text-gray-600 mb-6">Nice run! Here are your stats:</p>
+              <h2 className="text-3xl font-bold text-primary mb-2">Game Over!</h2>
+              <p className="text-secondary mb-6">Nice run! Here are your stats:</p>
               
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-amber-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-amber-700">{score}</div>
-                  <div className="text-sm text-gray-600">Final Score</div>
+                <div className="bg-accent-light rounded-lg p-4">
+                  <div className="text-2xl font-bold text-primary">{score}</div>
+                  <div className="text-sm text-secondary">Final Score</div>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-blue-700">{totalWords}</div>
-                  <div className="text-sm text-gray-600">Words Found</div>
+                <div className="bg-success-light rounded-lg p-4">
+                  <div className="text-2xl font-bold text-primary">{totalWords}</div>
+                  <div className="text-sm text-secondary">Words Found</div>
                 </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-green-700">{round}</div>
-                  <div className="text-sm text-gray-600">Rounds Survived</div>
+                <div className="bg-secondary rounded-lg p-4">
+                  <div className="text-2xl font-bold text-white">{round}</div>
+                  <div className="text-sm text-white">Rounds Survived</div>
                 </div>
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <div className="text-lg font-bold text-purple-700 truncate" title={longestWord}>
+                <div className="bg-highlight rounded-lg p-4">
+                  <div className="text-lg font-bold text-primary-dark truncate" title={longestWord}>
                     {longestWord || 'N/A'}
                   </div>
-                  <div className="text-sm text-gray-600">Longest Word</div>
+                  <div className="text-sm text-secondary">Longest Word</div>
                 </div>
               </div>
 
               {/* Daily Challenge Submission */}
               {isDailyChallenge && !hasAlreadySubmitted && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Submit to Daily Leaderboard</h3>
+                  <h3 className="text-lg font-semibold text-primary mb-3">Submit to Daily Leaderboard</h3>
                   <input
                     type="text"
                     value={playerName}
                     onChange={(e) => setPlayerName(e.target.value)}
                     placeholder="Enter your name"
                     maxLength={20}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-waxle focus:border-transparent mb-3"
+                    className="w-full px-4 py-2 border border-secondary-light rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent mb-3"
                     onKeyPress={(e) => e.key === 'Enter' && handleSubmitScore()}
                   />
                   <button
                     onClick={handleSubmitScore}
                     disabled={!playerName.trim() || isSubmitting}
-                    className="w-full bg-waxle hover:bg-waxle-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+                    className="w-full bg-primary hover:bg-primary-light disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
                   >
                     {isSubmitting ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
@@ -264,7 +264,7 @@ const WaxleGameOverModal = ({
                     </button>
                     <a
                       href={`/leaderboard?t=${Date.now()}`}
-                      className="flex-1 text-center bg-waxle hover:bg-waxle-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-waxle"
+                      className="flex-1 text-center bg-primary hover:bg-primary-light text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-secondary"
                     >
                       View Leaderboard
                     </a>
@@ -274,7 +274,7 @@ const WaxleGameOverModal = ({
                   <>
                     <button
                       onClick={onRestart}
-                      className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300"
+                      className="flex-1 bg-accent hover:bg-accent-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
                     >
                       Play Again
                     </button>

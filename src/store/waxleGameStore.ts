@@ -292,16 +292,16 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     lockAnimatingTiles: [],
                 });
 
-                // Progressive difficulty: +1 tile every 4 rounds (balanced for new lock/orbit powers)
+                // Progressive difficulty: +1 tile every 3 rounds (accounting for Round 1 offset)
                 let currentTilesPerDrop = 3;
-                if (newRound >= 12) {
-                    currentTilesPerDrop = 6; // Cap at 6 tiles
+                if (newRound >= 11) {
+                    currentTilesPerDrop = 6; // Cap at 6 tiles (Round 11+)
                 } else if (newRound >= 8) {
-                    currentTilesPerDrop = 5; // Round 8-11: 5 tiles
-                } else if (newRound >= 4) {
-                    currentTilesPerDrop = 4; // Round 4-7: 4 tiles  
+                    currentTilesPerDrop = 5; // Round 8-10: 5 tiles
+                } else if (newRound >= 5) {
+                    currentTilesPerDrop = 4; // Round 5-7: 4 tiles  
                 }
-                // Round 1-3: 3 tiles (default)
+                // Round 2-4: 3 tiles (default, Round 1 has no flood)
                 
                 console.log(`[STORE] Round ${newRound}: ${currentTilesPerDrop} tiles per drop`);
 
@@ -358,27 +358,38 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const nextRound1 = newRound + 1;
                 const nextRound2 = newRound + 2;
                 
-                // Calculate tile count for next round
+                // Calculate tile count for next round (accounting for Round 1 offset)
                 let tilesForNextRound1 = 3;
-                if (nextRound1 >= 12) {
-                    tilesForNextRound1 = 6;
+                if (nextRound1 >= 11) {
+                    tilesForNextRound1 = 6; // Cap at 6 tiles
                 } else if (nextRound1 >= 8) {
-                    tilesForNextRound1 = 5;
-                } else if (nextRound1 >= 4) {
-                    tilesForNextRound1 = 4;
+                    tilesForNextRound1 = 5; // Round 8-10: 5 tiles
+                } else if (nextRound1 >= 5) {
+                    tilesForNextRound1 = 4; // Round 5-7: 4 tiles
                 }
                 
-                // Calculate tile count for round after next
+                // Calculate tile count for round after next (accounting for Round 1 offset)
                 let tilesForNextRound2 = 3;
-                if (nextRound2 >= 12) {
-                    tilesForNextRound2 = 6;
+                if (nextRound2 >= 11) {
+                    tilesForNextRound2 = 6; // Cap at 6 tiles
                 } else if (nextRound2 >= 8) {
-                    tilesForNextRound2 = 5;
-                } else if (nextRound2 >= 4) {
-                    tilesForNextRound2 = 4;
+                    tilesForNextRound2 = 5; // Round 8-10: 5 tiles
+                } else if (nextRound2 >= 5) {
+                    tilesForNextRound2 = 4; // Round 5-7: 4 tiles
                 }
 
-                let nextDrop1 = generateDropLettersSmart(tilesForNextRound1, newGrid, false, state.seededRNG);
+                // Shift the queue: nextRows[1] becomes nextRows[0] (making forecast accurate)
+                let nextDrop1 = state.nextRows[1] || generateDropLettersSmart(tilesForNextRound1, newGrid, false, state.seededRNG);
+                
+                // Ensure nextDrop1 has correct tile count for the next round
+                if (nextDrop1.length < tilesForNextRound1) {
+                    const additionalTiles = generateDropLettersSmart(tilesForNextRound1 - nextDrop1.length, newGrid, false, state.seededRNG);
+                    nextDrop1 = [...nextDrop1, ...additionalTiles];
+                } else if (nextDrop1.length > tilesForNextRound1) {
+                    nextDrop1 = nextDrop1.slice(0, tilesForNextRound1);
+                }
+                
+                // Only generate the new second forecast
                 const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false, state.seededRNG);
 
                 // Set the new state all at once, including hidden tiles for animation

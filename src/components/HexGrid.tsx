@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
 import AnimatedLockBorder from './AnimatedLockBorder';
+import HexagonBorder from './HexagonBorder';
 
 // Define types for our grid
 export type CellPosition = {
@@ -48,6 +49,8 @@ const CellView = memo(function CellView({
   isLocked,
   isLocking,
   isUnlocking,
+  showBorder,
+  borderColor,
   // drag handlers removed
 }: {
   cell: HexCell;
@@ -58,6 +61,8 @@ const CellView = memo(function CellView({
   isLocked?: boolean;
   isLocking?: boolean;
   isUnlocking?: boolean;
+  showBorder?: boolean;
+  borderColor?: string;
   // drag handlers removed
 }) {
   return (
@@ -100,6 +105,14 @@ const CellView = memo(function CellView({
           isUnlocking={isUnlocking || false}
           isLocked={isLocked || false}
         />
+        {/* HexagonBorder disabled for selected tiles - kept available for future use */}
+        {/* {showBorder && (
+          <HexagonBorder 
+            isVisible={true}
+            color={borderColor || 'var(--primary)'}
+            strokeWidth={2}
+          />
+        )} */}
         {(isLocked || isLocking) && (
           <div className="lock-indicator" style={{ position: 'absolute', top: '-4px', left: '-4px' }}>
             <span style={{ fontSize: '0.8rem' }}>🔒</span>
@@ -231,9 +244,10 @@ const HexGrid = ({
 
   const cellStyles = (cell: HexCell) => {
     let bgColor = 'bg-white';
-    let textColor = 'text-gray-800';
-    let border = '';
+    let textColor = 'text-primary';
     let extraClasses = '';
+    let showBorder = false;
+    let borderColor = '';
     
     const isPlacedThisTurn = placedTilesThisTurn.some(
       placedCell => placedCell.id === cell.id
@@ -241,47 +255,51 @@ const HexGrid = ({
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
     const isLocked = Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false;
-    const isAnimating = Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) : false;
-    const isLocking = isAnimating && !isLocked; // Animating to lock
-    const isUnlocking = isAnimating && isLocked; // Animating to unlock
     
     if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
       if (!isPlacementPhase) {
+        // showBorder = true; // Disabled - no borders for selected tiles
         if (isWordAlreadyScored) {
           // Always show red for already scored words
-          bgColor = 'bg-red-500';
-          border = 'hex-border-red';
+          bgColor = 'bg-primary-light';
+          // borderColor = 'var(--color-1)';
         } else if (isWordValid === true) {
-          bgColor = 'bg-green-500';
-          border = 'hex-border-green';
+          bgColor = 'bg-success';
+          // borderColor = 'var(--success-dark)';
         } else if (isWordValid === false) {
-          bgColor = 'bg-red-500';
-          border = 'hex-border-red';
+          bgColor = 'bg-primary-light';
+          // borderColor = 'var(--color-1)';
         } else {
-          bgColor = 'bg-blue-500';
-          border = 'hex-border-blue';
+          bgColor = 'bg-secondary';
+          // borderColor = 'var(--color-2)';
         }
         textColor = 'text-white';
       } else {
         // Placement phase highlighting
         if (isPlacedThisTurn) {
           bgColor = 'bg-blue-100';
+          // showBorder = true; // Disabled - no borders for selected tiles
+          // borderColor = 'var(--secondary)';
           extraClasses = isAnimatingPlacement ? 'scale-110 shadow-lg' : hasFinishedAnimation ? '' : 'scale-105';
         } else {
           bgColor = 'bg-white';
+          // showBorder = true; // Disabled - no borders for selected tiles
+          // borderColor = 'var(--color-2)';
         }
       }
     }
 
-
-    // Apply locked tile styling - removed border, now using AnimatedLockBorder component
-    if ((isLocked || isLocking) && !cell.isSelected) {
+    // Apply locked tile styling - using AnimatedLockBorder component for locks
+    if (isLocked && !cell.isSelected) {
       extraClasses += ' shadow-md';
     }
 
+
     return {
-      container: `${bgColor} ${textColor} ${border} ${extraClasses}`,
+      container: `${bgColor} ${textColor} ${extraClasses}`,
+      showBorder,
+      borderColor,
     };
   };
 
@@ -309,17 +327,20 @@ const HexGrid = ({
           >
             {rowCells.map(cell => {
               const showLetter = !hiddenLetterCellIds.includes(cell.id);
+              const styles = cellStyles(cell);
               return (
                 <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
                   <CellView
                     cell={cell}
                     onClick={onCellClick}
-                    containerClass={cellStyles(cell).container}
+                    containerClass={styles.container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
                     isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
                     isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
                     isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
+                    showBorder={styles.showBorder}
+                    borderColor={styles.borderColor}
                     // drag handlers removed
                   />
                 </div>

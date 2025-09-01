@@ -7,17 +7,44 @@ export default {
     theme: {
         extend: {
             colors: {
-                waxle: {
-                    light: '#FFF8E1',
-                    DEFAULT: '#FFC107',
-                    dark: '#FF9800',
+                // CSS Variable-based Palette System
+                primary: {
+                    DEFAULT: 'var(--primary)',
+                    light: 'var(--primary-light)',
+                    dark: 'var(--primary-dark)',
                 },
-                // Keep honeycomb colors for backwards compatibility during transition
-                honeycomb: {
-                    light: '#FFF8E1',
-                    DEFAULT: '#FFC107',
-                    dark: '#FF9800',
-                }
+                secondary: {
+                    DEFAULT: 'var(--secondary)',
+                    light: 'var(--secondary-light)',
+                    dark: 'var(--secondary-dark)',
+                },
+                accent: {
+                    DEFAULT: 'var(--accent)',
+                    light: 'var(--accent-light)',
+                    dark: 'var(--accent-dark)',
+                },
+                highlight: {
+                    DEFAULT: 'var(--highlight)',
+                    light: 'var(--highlight-light)',
+                    dark: 'var(--highlight-dark)',
+                },
+                success: {
+                    DEFAULT: 'var(--success)',
+                    light: 'var(--success-light)',
+                    dark: 'var(--success-dark)',
+                },
+                // Direct color variables for flexibility
+                'color-1': 'var(--color-1)',
+                'color-2': 'var(--color-2)',
+                'color-3': 'var(--color-3)',
+                'color-4': 'var(--color-4)',
+                'color-5': 'var(--color-5)',
+                // Background and text variables
+                'bg-primary': 'var(--bg-primary)',
+                'bg-secondary': 'var(--bg-secondary)',
+                'text-primary': 'var(--text-primary)',
+                'text-secondary': 'var(--text-secondary)',
+                'text-muted': 'var(--text-muted)',
             },
             fontFamily: {
                 game: ['Poppins', 'sans-serif'],

@@ -73,7 +73,7 @@ const AnimatedLockBorder = ({ isLocking, isUnlocking, isLocked }: AnimatedLockBo
         ref={pathRef}
         d="M 50 0 L 100 28.87 L 100 86.60 L 50 115.47 L 0 86.60 L 0 28.87 Z"
         fill="none"
-        stroke="#F97316"
+        stroke="var(--primary)" /* CSS variable */
         strokeWidth="2"
         style={{
           clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'

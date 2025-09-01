@@ -792,7 +792,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
-    <div className="game-container flex-1 bg-amber-50 overflow-hidden mobile-height">
+    <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height">
       <div className="flex flex-col md:flex-row h-full">
         {/* Tetris Game Sidebar */}
         <div 
@@ -808,26 +808,26 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               {/* Game stats */}
               <div className="flex justify-between mb-4 md:mb-6">
                 <div>
-                  <div className="text-sm text-gray-600">Score</div>
+                  <div className="text-sm text-secondary">Score</div>
                   <div className="text-2xl font-bold">{score}</div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600">Round</div>
+                  <div className="text-sm text-secondary">Round</div>
                   <div className="text-2xl font-bold">{round}</div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600">Orbits</div>
-                  <div className="text-lg font-bold text-amber-700">{freeOrbitsAvailable || 0}</div>
+                  <div className="text-sm text-secondary">Orbits</div>
+                  <div className="text-lg font-bold text-primary">{freeOrbitsAvailable || 0}</div>
                 </div>
               </div>
 
                             {/* Next Drop Preview */}
               {previewLevel > 0 && nextRows.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Next Drop:</div>
+                <div className="bg-bg-secondary rounded-lg p-3 mb-4">
+                  <div className="text-sm font-medium text-primary mb-2">Next Drop:</div>
                   <div className="flex gap-1.5 mb-2">
                     {nextRows[0]?.map((letter, idx) => (
-                      <div key={idx} className="w-6 h-6 bg-white rounded border border-gray-300 flex items-center justify-center text-xs font-semibold text-gray-700 shadow-sm">
+                      <div key={idx} className="w-6 h-6 bg-white rounded border border-secondary-light flex items-center justify-center text-xs font-semibold text-primary shadow-sm">
                         {letter}
                       </div>
                     ))}
@@ -835,7 +835,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   {previewLevel > 1 && nextRows[1] && (
                     <div className="flex gap-1 opacity-40">
                       {nextRows[1]?.map((letter, idx) => (
-                        <div key={idx} className="w-5 h-5 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-xs font-medium text-gray-600">
+                        <div key={idx} className="w-5 h-5 bg-highlight-light rounded border border-secondary-light flex items-center justify-center text-xs font-medium text-secondary">
                           {letter}
                         </div>
                       ))}
@@ -847,42 +847,29 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
               {/* Current word display */}
               {currentWord && (
-                <div className="bg-blue-50 rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-blue-900 mb-1">Current Word</h3>
+                <div className="bg-accent-light rounded-lg p-4 mb-4">
+                  <h3 className="font-semibold text-primary mb-1">Current Word</h3>
                   <p className="text-2xl font-mono tracking-wider">{currentWord}</p>
                 </div>
               )}
 
               {/* Words Submitted */}
-              <div className="bg-green-50 rounded-lg p-3 mb-4">
-                <div className="text-sm font-medium text-green-800 mb-2">Words This Game ({wordsThisRound.length}):</div>
+              <div className="bg-success-light rounded-lg p-3 mb-4">
+                <div className="text-sm font-medium text-primary mb-2">Words This Game ({wordsThisRound.length}):</div>
                 {wordsThisRound.length > 0 ? (
                   <div className="space-y-1 max-h-24 overflow-y-auto">
                     {wordsThisRound.slice(-6).reverse().map((word, idx) => (
-                      <div key={idx} className="text-sm text-green-700 font-mono">
+                      <div key={idx} className="text-sm text-secondary-dark font-mono">
                         {word}
                       </div>
                     ))}
                     {wordsThisRound.length > 6 && (
-                      <div className="text-xs text-green-600 italic">...and {wordsThisRound.length - 6} more</div>
+                      <div className="text-xs text-secondary italic">...and {wordsThisRound.length - 6} more</div>
                     )}
                   </div>
                 ) : (
-                  <div className="text-xs text-green-600 italic">No words submitted yet</div>
+                  <div className="text-xs text-secondary italic">No words submitted yet</div>
                 )}
-              </div>
-              
-              {/* Game instructions */}
-              <div className="mt-auto">
-                <details className="bg-amber-50 p-3 rounded-lg">
-                  <summary className="font-semibold text-amber-900 cursor-pointer">Quick Tips</summary>
-                  <ul className="list-disc list-inside text-sm space-y-1 mt-2 pl-2">
-                    <li>Tiles fall automatically each round</li>
-                    <li>Use orbit to rearrange letters (2 per turn)</li>
-                    <li>Lock tiles to prevent them moving</li>
-                    <li>Form words to clear space and score points</li>
-                  </ul>
-                </details>
               </div>
             </div>
           </div>
@@ -1016,44 +1003,12 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   width: `${cellSize.w}px`,
                   height: `${cellSize.h}px`,
                   clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                  border: `2px solid ${(freeOrbitsAvailable || 0) > 0 ? 'rgba(59, 130, 246, 0.6)' : 'rgba(156, 163, 175, 0.4)'}`,
                   zIndex: 58,
-                  boxShadow: (freeOrbitsAvailable || 0) > 0 
-                    ? '0 2px 4px rgba(59, 130, 246, 0.3), inset 0 0 0 1px rgba(59, 130, 246, 0.2)' 
-                    : '0 1px 2px rgba(0, 0, 0, 0.1)'
+
                 }}
               />
             )}
 
-            {/* QoL: subtle highlight of adjacent tiles around the selected pivot */}
-            {phase === 'player' && selectedSingle && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && !isDragging && (() => {
-              const container = containerRef.current; if (!container) return null;
-              const centers = mapCenters(container);
-              const pivot = grid.find(c => c.id === selectedSingle.cellId); if (!pivot) return null;
-              const neighbors = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced);
-              return neighbors.map(n => {
-                const ctr = centers.get(`${n.position.row},${n.position.col}`);
-                if (!ctr) return null;
-                return (
-                  <div
-                    key={`adj-${n.id}`}
-                    className="absolute pointer-events-none"
-                    style={{
-                      left: ctr.x,
-                      top: ctr.y,
-                      transform: 'translate(-50%, -50%)',
-                      width: `${cellSize.w}px`,
-                      height: `${cellSize.h}px`,
-                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                      borderRadius: 8,
-                      zIndex: 57,
-                      background: 'rgba(59, 130, 246, 0.08)',
-                      boxShadow: '0 0 10px rgba(59, 130, 246, 0.20), inset 0 0 0 1px rgba(59, 130, 246, 0.15)'
-                    }}
-                  />
-                );
-              });
-            })()}
 
             {phase === 'player' && selectedSingle && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && (() => {
               // Arc Dragger UI for orbit controls
@@ -1290,6 +1245,13 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
                     if (unlockedLetters.length < 2) {
                       toastService.error('Not enough unlocked neighbors to orbit');
+                      
+                      // Clean up orbit drag state properly
+                      setIsDragging(false);
+                      setIsOverCancel(false);
+                      setCurrentDragAngle(0);
+                      setLockedSteps(0);
+                      lockedStepsRef.current = 0;
                       operationInProgressRef.current = false;
                       return;
                     }
@@ -1433,10 +1395,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         }
                         // If locked, drawX/drawY remain at original center position
 
-                        // Get appropriate colors for the border stroke
-                        const borderColor = isLocked
-                          ? '%23FB923C' // Orange for locked tiles (URL encoded #FB923C)
-                          : isOverCancel ? '%239CA3AF' : '%2322C55E'; // Gray or green
+                        // Border stroke disabled - no borders on orbiting tiles
+                        const borderColor = 'transparent'; // No border stroke
 
                         // Snappy spring
                         return (
@@ -1466,18 +1426,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                               boxShadow: isOverCancel ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)'
                             }}
                           >
-                            {/* SVG hexagonal border overlay */}
-                            <div
-                              className="absolute inset-0 pointer-events-none"
-                              style={{
-                                backgroundImage: `url("data:image/svg+xml,%3csvg width='100%25' height='115.47%25' viewBox='0 0 100 115.47' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3e%3cpath d='M 50 0 L 100 28.87 L 100 86.60 L 50 115.47 L 0 86.60 L 0 28.87 Z' fill='none' stroke='${borderColor}' stroke-width='2'/%3e%3c/svg%3e")`,
-                                backgroundSize: '100% 100%',
-                                backgroundRepeat: 'no-repeat',
-                                backgroundPosition: 'center',
-                                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                                zIndex: 10
-                              }}
-                            />
+                            {/* SVG hexagonal border overlay - DISABLED */}
                             {cell.letter}
                           </motion.div>
                         );
