@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
 import AnimatedLockBorder from './AnimatedLockBorder';
-import HexagonBorder from './HexagonBorder';
+// import HexagonBorder from './HexagonBorder'; // Available for future use
 
 // Define types for our grid
 export type CellPosition = {
@@ -49,8 +49,8 @@ const CellView = memo(function CellView({
   isLocked,
   isLocking,
   isUnlocking,
-  showBorder,
-  borderColor,
+  // showBorder, // Disabled - borders removed from selected tiles
+  // borderColor, // Disabled - borders removed from selected tiles
   // drag handlers removed
 }: {
   cell: HexCell;
@@ -61,8 +61,8 @@ const CellView = memo(function CellView({
   isLocked?: boolean;
   isLocking?: boolean;
   isUnlocking?: boolean;
-  showBorder?: boolean;
-  borderColor?: string;
+  // showBorder?: boolean; // Disabled - borders removed from selected tiles
+  // borderColor?: string; // Disabled - borders removed from selected tiles
   // drag handlers removed
 }) {
   return (
@@ -246,8 +246,8 @@ const HexGrid = ({
     let bgColor = 'bg-white';
     let textColor = 'text-primary';
     let extraClasses = '';
-    let showBorder = false;
-    let borderColor = '';
+    // let showBorder = false; // Disabled - borders removed from selected tiles
+    // let borderColor = ''; // Disabled - borders removed from selected tiles
     
     const isPlacedThisTurn = placedTilesThisTurn.some(
       placedCell => placedCell.id === cell.id
@@ -298,8 +298,8 @@ const HexGrid = ({
 
     return {
       container: `${bgColor} ${textColor} ${extraClasses}`,
-      showBorder,
-      borderColor,
+      // showBorder, // Disabled - borders removed from selected tiles
+      // borderColor, // Disabled - borders removed from selected tiles
     };
   };
 
@@ -339,8 +339,8 @@ const HexGrid = ({
                     isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
                     isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
                     isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
-                    showBorder={styles.showBorder}
-                    borderColor={styles.borderColor}
+                    // showBorder={styles.showBorder} // Disabled - borders removed
+                    // borderColor={styles.borderColor} // Disabled - borders removed
                     // drag handlers removed
                   />
                 </div>

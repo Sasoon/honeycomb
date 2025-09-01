@@ -1396,7 +1396,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         // If locked, drawX/drawY remain at original center position
 
                         // Border stroke disabled - no borders on orbiting tiles
-                        const borderColor = 'transparent'; // No border stroke
+                        // const borderColor = 'transparent'; // No border stroke - unused
 
                         // Snappy spring
                         return (
