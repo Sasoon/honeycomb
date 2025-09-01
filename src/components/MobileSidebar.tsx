@@ -132,15 +132,6 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
               Leaderboard
             </Link>
             <Link 
-              to="/stats" 
-              className={`${isActive('/stats') 
-                ? 'bg-waxle text-white' 
-                : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
-              onClick={onClose}
-            >
-              Stats
-            </Link>
-            <Link 
               to="/how-to-play" 
               className={`${isActive('/how-to-play') 
                 ? 'bg-waxle text-white' 

@@ -7,7 +7,6 @@ import MobileSidebar from './components/MobileSidebar.tsx';
 const WaxleGame = lazy(() => import('./pages/WaxleGame.tsx'));
 const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
-const Stats = lazy(() => import('./pages/Stats.tsx'));
 const HowToPlay = lazy(() => import('./pages/HowToPlay.tsx'));
 
 function AppContent() {
@@ -30,7 +29,6 @@ function AppContent() {
             <Route path="/classic" element={<WaxleGame />} />
             <Route path="/daily" element={<DailyChallenge />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/stats" element={<Stats />} />
             <Route path="/how-to-play" element={<HowToPlay />} />
           </Routes>
         </Suspense>

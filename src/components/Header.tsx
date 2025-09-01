@@ -77,14 +77,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                 Leaderboard
               </Link>
               <Link 
-                to="/stats" 
-                className={`${isActive('/stats') 
-                  ? 'bg-waxle-dark text-white' 
-                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
-              >
-                Stats
-              </Link>
-              <Link 
                 to="/how-to-play" 
                 className={`${isActive('/how-to-play') 
                   ? 'bg-waxle-dark text-white' 
