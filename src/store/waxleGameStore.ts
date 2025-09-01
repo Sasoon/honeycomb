@@ -343,7 +343,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length);
                     console.log(`[DEBUG] Top row full:`, topRowFull);
                     
-                    toastService.error(`Game Over — No space for ${unplacedLetters.length} tiles! Score: ${points}, Words: ${words}`);
+                    // Toast removed - game over modal shows this information
                     set({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
                     return;
                 } else if (unplacedLetters.length > 0) {

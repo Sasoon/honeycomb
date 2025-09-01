@@ -1432,33 +1432,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         );
                       })}
 
-                      {/* Optional: show subtle snap points (kept lightweight) */}
-                      {Array.from({ length: 6 }, (_, i) => {
-                        const snapAngle = (i * Math.PI) / 3; // Every 60°
-                        const snapRadius = cellSize.w * 0.45;
-                        const snapX = orbitAnchor.x + Math.cos(snapAngle) * snapRadius;
-                        const snapY = orbitAnchor.y + Math.sin(snapAngle) * snapRadius;
-                        const currentAngle = ((currentDragAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-                        const distanceToThisSnap = Math.abs(currentAngle - snapAngle);
-                        const isNearSnap = Math.min(distanceToThisSnap, 2 * Math.PI - distanceToThisSnap) < Math.PI / 18;
-                        return (
-                          <motion.div
-                            key={`snap-${i}`}
-                            className="absolute pointer-events-none"
-                            animate={{ scale: isNearSnap ? 1.5 : 1, opacity: isNearSnap ? 0.8 : 0.25 }}
-                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                            style={{
-                              left: snapX,
-                              top: snapY,
-                              transform: 'translate(-50%, -50%)',
-                              width: '8px',
-                              height: '8px',
-                              background: isOverCancel ? 'rgba(156, 163, 175, 0.7)' : (isNearSnap ? 'rgba(34, 197, 94, 0.8)' : 'rgba(156, 163, 175, 0.5)'),
-                              borderRadius: '50%'
-                            }}
-                          />
-                        );
-                      })}
                     </>
                   )}
                 </>
@@ -1537,14 +1510,18 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             })()}
 
 
-            {/* Grid */}
+            {/* Grid and UI Buttons container */}
             <div 
               className={`grid-container relative ${phase === 'flood' ? 'flood-phase' : ''}`}
               style={{ 
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                transform: 'translate(-50%, -50%)'
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '2rem',
               }}
             >
               <HexGrid
@@ -1568,66 +1545,83 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   )
                 ]}
               />
-            </div>
-
-            </div>
-
-          {/* Actions - positioned below centered grid */}
-          <div 
-            className="absolute inset-x-0 z-20" 
-            style={{ 
-              top: '50%',
-              transform: 'translateY(200px)', /* Position further below grid */
-              display: 'flex',
-              justifyContent: 'center',
-              pointerEvents: 'auto'
-            }}
-          >
-            <div className="flex gap-2 flex-wrap items-center px-4 py-2 rounded-lg">
-              <button 
-                onClick={() => submitWord()} 
-                disabled={currentWord.length < 3 || phase !== 'player' || validationState !== true} 
-                className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
-                  phase === 'player' && currentWord.length >= 3 && validationState === true
-                    ? 'bg-amber-light hover:bg-amber text-white'
-                    : 'bg-secondary-dark text-text-muted cursor-not-allowed'
-                }`}
-              >
-                Submit Word
-              </button>
-              <button 
-                onClick={() => endPlayerPhase()} 
-                disabled={phase !== 'player'}
-                className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
-                  phase === 'player'
-                    ? 'bg-accent hover:bg-accent-dark text-white'
-                    : 'bg-secondary-dark text-text-muted cursor-not-allowed'
-                }`}
-              >
-                End Turn
-              </button>
-              {!isDailyChallenge && (
+              
+              {/* UI Buttons - now in same container as grid */}
+              <div className="flex gap-2 flex-wrap items-center px-4 py-2 rounded-lg">
                 <button 
-                  onClick={handleRestart} 
-                  disabled={phase === 'flood' || phase === 'gravitySettle'}
+                  onClick={() => submitWord()} 
+                  disabled={currentWord.length < 3 || phase !== 'player' || validationState !== true} 
                   className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
-                    phase === 'flood' || phase === 'gravitySettle'
-                      ? 'bg-secondary-dark text-text-muted cursor-not-allowed'
-                      : 'bg-primary hover:bg-primary-dark text-white'
+                    phase === 'player' && currentWord.length >= 3 && validationState === true
+                      ? 'bg-amber-light hover:bg-amber text-white'
+                      : 'bg-secondary-dark text-text-muted cursor-not-allowed'
                   }`}
                 >
-                  Restart
+                  Submit Word
                 </button>
-              )}
+                <button 
+                  onClick={() => endPlayerPhase()} 
+                  disabled={phase !== 'player'}
+                  className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                    phase === 'player'
+                      ? 'bg-accent hover:bg-accent-dark text-white'
+                      : 'bg-secondary-dark text-text-muted cursor-not-allowed'
+                  }`}
+                >
+                  End Turn
+                </button>
+                {!isDailyChallenge && (
+                  <button 
+                    onClick={handleRestart} 
+                    disabled={phase === 'flood' || phase === 'gravitySettle'}
+                    className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                      phase === 'flood' || phase === 'gravitySettle'
+                        ? 'bg-secondary-dark text-text-muted cursor-not-allowed'
+                        : 'bg-primary hover:bg-primary-dark text-white'
+                    }`}
+                  >
+                    Restart
+                  </button>
+                )}
+              </div>
             </div>
 
+            </div>
+
+          {/* Toast container - positioned based on modal state */}
+          <div 
+            className="absolute inset-x-0 pointer-events-none" 
+            style={{ 
+              top: phase === 'gameOver' ? '50%' : '75vh', /* Center for modal toasts, below UI for gameplay toasts */
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: phase === 'gameOver' ? 10000 : 9999,
+            }}
+          >
+            <Toaster 
+              containerStyle={{
+                position: 'relative',
+                width: '100vw',
+              }}
+              toastOptions={{
+                style: {
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  minWidth: 'auto',
+                  maxWidth: 'none',
+                  width: 'auto',
+                  padding: '12px 20px',
+                }
+              }}
+            />
           </div>
         {/* <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
           © {new Date().getFullYear()} WAXLE - A Falling Tile Word Game
         </footer>  */}
         </div>
       </div>
-      <Toaster position="bottom-center" />
 
       {/* Game Over Modal */}
       <WaxleGameOverModal
