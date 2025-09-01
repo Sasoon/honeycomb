@@ -1,6 +1,7 @@
 // Remove React import
 import { useState, useRef, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
+import AnimatedLockBorder from './AnimatedLockBorder';
 
 // Define types for our grid
 export type CellPosition = {
@@ -33,6 +34,7 @@ export interface HexGridProps {
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
   lockMode?: boolean; // Whether lock mode is active - deprecated, keeping for compatibility
   lockedTiles?: string[]; // Array of locked tile IDs
+  lockAnimatingTiles?: string[]; // Array of tile IDs currently animating
   onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle - deprecated, now handled in overlay
 }
 
@@ -44,6 +46,8 @@ const CellView = memo(function CellView({
   setRef,
   showLetter,
   isLocked,
+  isLocking,
+  isUnlocking,
   // drag handlers removed
 }: {
   cell: HexCell;
@@ -52,6 +56,8 @@ const CellView = memo(function CellView({
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
   isLocked?: boolean;
+  isLocking?: boolean;
+  isUnlocking?: boolean;
   // drag handlers removed
 }) {
   return (
@@ -89,7 +95,12 @@ const CellView = memo(function CellView({
             </span>
           </div>
         )}
-        {isLocked && (
+        <AnimatedLockBorder 
+          isLocking={isLocking || false}
+          isUnlocking={isUnlocking || false}
+          isLocked={isLocked || false}
+        />
+        {(isLocked || isLocking) && (
           <div className="lock-indicator" style={{ position: 'absolute', top: '-4px', left: '-4px' }}>
             <span style={{ fontSize: '0.8rem' }}>🔒</span>
           </div>
@@ -108,6 +119,7 @@ const HexGrid = ({
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
   lockedTiles = [],
+  lockAnimatingTiles = [],
   // onTileLockToggle,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
@@ -229,6 +241,9 @@ const HexGrid = ({
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
     const isLocked = Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false;
+    const isAnimating = Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) : false;
+    const isLocking = isAnimating && !isLocked; // Animating to lock
+    const isUnlocking = isAnimating && isLocked; // Animating to unlock
     
     if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
@@ -260,9 +275,8 @@ const HexGrid = ({
     }
 
 
-    // Apply locked tile styling
-    if (isLocked && !cell.isSelected) {
-      border = border || 'hex-border-locked';
+    // Apply locked tile styling - removed border, now using AnimatedLockBorder component
+    if ((isLocked || isLocking) && !cell.isSelected) {
       extraClasses += ' shadow-md';
     }
 
@@ -304,6 +318,8 @@ const HexGrid = ({
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
                     isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
+                    isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
+                    isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
                     // drag handlers removed
                   />
                 </div>

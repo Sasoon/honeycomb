@@ -38,6 +38,7 @@ interface WaxleGameState {
     // Lock mode state
     lockMode?: boolean; // Whether lock mode is active
     lockedTiles?: string[]; // Array of locked tile IDs
+    lockAnimatingTiles?: string[]; // Tiles currently animating lock/unlock
 
     // Falling tiles mechanics
     nextRows: string[][]; // Letters for upcoming rows
@@ -133,6 +134,7 @@ const initialState: Omit<WaxleGameState,
     tilesHiddenForAnimation: [],
     lockMode: false,
     lockedTiles: [],
+    lockAnimatingTiles: [],
 
     // Daily Challenge mode
     isDailyChallenge: false,
@@ -187,6 +189,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     freeOrbitsAvailable: 2, // 2 orbits per turn
                     lockMode: false,
                     lockedTiles: [],
+                    lockAnimatingTiles: [],
                 });
             },
 
@@ -226,6 +229,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     freeOrbitsAvailable: 2,
                     lockMode: false,
                     lockedTiles: [],
+                    lockAnimatingTiles: [],
                     
                     // Daily challenge specific
                     isDailyChallenge: true,
@@ -285,6 +289,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 set({
                     lockMode: false,
                     lockedTiles: [],
+                    lockAnimatingTiles: [],
                 });
 
                 // Progressive difficulty: +1 tile every 4 rounds (balanced for new lock/orbit powers)
@@ -611,12 +616,27 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         return currentLockedTiles.includes(tileId);
                     });
                     
-                    const newLockedTiles = currentLockedTiles.filter(id => !validTilesToUnlock.includes(id));
+                    // Start unlock animation
+                    const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
+                    const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToUnlock])];
+                    
                     set({ 
-                        lockedTiles: newLockedTiles,
+                        lockAnimatingTiles: newAnimatingTiles,
                         selectedTiles: [],
                         currentWord: ''
                     });
+                    
+                    // After 400ms, complete the unlock
+                    setTimeout(() => {
+                        const currentState = get();
+                        const newLockedTiles = (currentState.lockedTiles || []).filter(id => !validTilesToUnlock.includes(id));
+                        const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToUnlock.includes(id));
+                        
+                        set({
+                            lockedTiles: newLockedTiles,
+                            lockAnimatingTiles: newAnimatingTiles
+                        });
+                    }, 400);
                     
                     const count = validTilesToUnlock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} unlocked`);
@@ -630,12 +650,27 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         return cell && cell.letter && cell.isPlaced;
                     });
                     
-                    const newLockedTiles = [...new Set([...currentLockedTiles, ...validTilesToLock])];
+                    // Start lock animation
+                    const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
+                    const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToLock])];
+                    
                     set({ 
-                        lockedTiles: newLockedTiles,
+                        lockAnimatingTiles: newAnimatingTiles,
                         selectedTiles: [],
                         currentWord: ''
                     });
+                    
+                    // After 400ms, complete the lock
+                    setTimeout(() => {
+                        const currentState = get();
+                        const newLockedTiles = [...new Set([...(currentState.lockedTiles || []), ...validTilesToLock])];
+                        const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToLock.includes(id));
+                        
+                        set({
+                            lockedTiles: newLockedTiles,
+                            lockAnimatingTiles: newAnimatingTiles
+                        });
+                    }, 400);
                     
                     const count = validTilesToLock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);

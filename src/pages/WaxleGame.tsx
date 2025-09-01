@@ -278,6 +278,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     freeOrbitsAvailable,
     lockMode,
     lockedTiles,
+    lockAnimatingTiles,
     toggleTileLock,
     initializeGame,
     selectTile,
@@ -1608,6 +1609,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 isTetrisVariant={true}
                 lockMode={lockMode}
                 lockedTiles={lockedTiles}
+                lockAnimatingTiles={lockAnimatingTiles}
                 onTileLockToggle={toggleTileLock}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,

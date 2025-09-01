@@ -213,7 +213,10 @@ button {
   border: 2px solid #F97316;
 }
 
-.hex-grid__item.hex-border-locked {
+/* Lock border animations */
+.hex-grid__item.hex-border-locked,
+.hex-grid__item.hex-border-locking,
+.hex-grid__item.hex-border-unlocking {
   position: relative;
 }
 
