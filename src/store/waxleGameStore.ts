@@ -330,8 +330,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const topRowFull = topRowCells.every(cell => cell.letter && cell.isPlaced);
                 
                 if (unplacedLetters.length > 0 && topRowFull) {
-                    const words = state.totalWords;
-                    const points = state.score;
                     
                     // DEBUG: Log game state when game over occurs
                     console.log(`[DEBUG] GAME OVER triggered at round ${newRound}`);

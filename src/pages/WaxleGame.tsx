@@ -241,7 +241,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [currentDragAngle, setCurrentDragAngle] = useState<number>(0);
+  const [, setCurrentDragAngle] = useState<number>(0);
   const operationInProgressRef = useRef<boolean>(false);
   const orbitPlanRef = useRef<{
     pivotId: string;
@@ -952,19 +952,20 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 {fxOverlays.map(fx => (
                   <motion.div
                     key={fx.key}
-                    initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1 }}
+                    initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1, rotateZ: 0 }}
                     animate={{ 
                       x: fx.x - cellSize.w / 2, 
                       y: fx.y - cellSize.h / 2, 
                       opacity: 1,
-                      scale: 1
+                      // Deep magnetic slingshot: dramatic burst, bounce, damped wobble
+                      scale: [1, 1.5, 0.6, 1.3, 0.5, 1],
+                      rotateZ: [0, 6, -8, 4, -2, 0]
                     }}
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ 
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 30,
-                      mass: 1
+                      duration: 1.2,
+                      times: [0, 0.15, 0.35, 0.55, 0.75, 1],
+                      ease: "anticipate" // pronounced ease-in then snap & wobble
                     }}
                     style={{ position: 'absolute', left: 0, top: 0 }}
                   >
@@ -1107,6 +1108,25 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   const containerMoveX = moveClientX - rect.left;
                   const containerMoveY = moveClientY - rect.top;
 
+                  // --- Orbit jitter guard --------------------------------------------------
+                  // Very small drags near the pivot center cause the angle to flip wildly,
+                  // which results in back-and-forth snapping between slots.  Delay engaging
+                  // the snapping logic until the pointer is at least `minRadiusForSnap`
+                  // away from the pivot.  This also gives the interaction a more
+                  // "magnetic" feel — you need to pull the handle outward a little before
+                  // it "catches" into the orbit track.
+                  const dxPivot = containerMoveX - orbitAnchor.x;
+                  const dyPivot = containerMoveY - orbitAnchor.y;
+                  const radiusPivot = Math.hypot(dxPivot, dyPivot);
+                  const minRadiusForSnap = cellSize.w * 0.45; // tweak as needed
+
+                  if (radiusPivot < minRadiusForSnap) {
+                    // Provide visual feedback (soft rotation) but skip snapping logic
+                    const softAngle = Math.atan2(dyPivot, dxPivot) - startAngle;
+                    setCurrentDragAngle(softAngle);
+                    return;
+                  }
+
                   // Detect pointer over cancel (X) icon area while dragging
                   const iconCX = orbitAnchor.x;
                   const iconCY = orbitAnchor.y - cellSize.h * 0.4;
@@ -1139,8 +1159,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   else totalRotation = deltaAngle;
 
                   // Hysteresis thresholds (radians)
-                  const enterThreshold = Math.PI / 24; // ~7.5° to enter next slot (easier to snap in)
-                  const exitThreshold = Math.PI / 5;  // ~36° to leave the current slot (harder to pull out)
+                  const enterThreshold = Math.PI / 12; // ~15° to enter next slot
+                  const exitThreshold = Math.PI * 5 / 12;  // ~75° to leave current slot
 
                   // Angle relative to current locked slot center
                   const relAngle = totalRotation - currentLockedStepsLocal * (Math.PI / 3);
@@ -1163,6 +1183,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     setLockedSteps(currentLockedStepsLocal);
                     lockedStepsRef.current = currentLockedStepsLocal;
                     haptics.tick();
+                    // Snap preview angle to the new slot centre for crisp, decisive motion
+                    setCurrentDragAngle(currentLockedStepsLocal * (Math.PI / 3));
                   }
 
                   // Drive soft angle for UI feedback (handle rotation)
@@ -1405,7 +1427,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                             className="absolute pointer-events-none"
                             initial={{ x: drawX, y: drawY, scale: 1, opacity: 1 }}
                             animate={{ x: drawX, y: drawY, scale: isLocked ? 1.0 : 1.02, opacity: 1 }}
-                            transition={{ type: 'spring', stiffness: 650, damping: 50, mass: 1.5 }}
+                            transition={{ type: 'spring', stiffness: 950, damping: 50, mass: 1.5 }}
                             style={{
                               position: 'absolute',
                               left: 0,
