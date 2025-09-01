@@ -77,21 +77,30 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
   }, [isOpen, onClose]);
   
   return (
-    <div 
-      ref={sidebarRef}
-      className={`mobile-sidebar transition-all duration-300 ease-in-out 
-        ${isOpen ? 'w-64' : 'w-0'} 
-        bg-white shadow-md z-30 
-        fixed
-        left-0
-        flex flex-col overflow-hidden md:hidden`}
-      style={{
-        top: 'var(--header-height)',
-        height: 'calc(100% - var(--header-height))'
-      }}
-    >
-      {/* Sidebar content */}
-      <div className={`${isOpen ? 'flex' : 'hidden'} flex-col h-full py-4 px-3 overflow-y-auto`}>
+    <>
+      {/* Backdrop overlay when menu is open */}
+      <div 
+        className={`fixed inset-0 bg-black z-40 md:hidden transition-all duration-300 ease-in-out pointer-events-none
+          ${isOpen ? 'bg-opacity-30 pointer-events-auto' : 'bg-opacity-0'}`}
+        style={{ top: 'var(--header-height)' }}
+        onClick={isOpen ? onClose : undefined}
+      />
+      
+      <div 
+        ref={sidebarRef}
+        className={`mobile-sidebar transition-all duration-300 ease-in-out 
+          ${isOpen ? 'w-64' : 'w-0'} 
+          bg-white shadow-md z-50 
+          fixed
+          left-0
+          flex flex-col overflow-hidden md:hidden`}
+        style={{
+          top: 'var(--header-height)',
+          height: 'calc(100% - var(--header-height))'
+        }}
+      >
+        {/* Sidebar content */}
+        <div className={`${isOpen ? 'flex' : 'hidden'} flex-col h-full py-4 px-3 overflow-y-auto`}>
         {/* Mobile navigation menu */}
         <div className="block">
           <nav className="flex flex-col space-y-2">
@@ -144,6 +153,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 
