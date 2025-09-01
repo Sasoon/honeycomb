@@ -36,7 +36,7 @@ const WaxleMobileGameControls = ({
             {/* Next Drop Preview */}
             {previewLevel > 0 && nextRows.length > 0 && (
               <div className="flex items-center gap-2 bg-bg-secondary rounded-full px-3 py-1">
-                <span className="text-xs font-medium text-secondary uppercase tracking-wide">Next</span>
+                <span className="text-xs font-medium text-primary uppercase tracking-wide">NEXT</span>
                 <div className="flex gap-1">
                   {nextRows[0]?.map((letter, idx) => (
                     <div key={idx} className="w-5 h-5 bg-white rounded border border-secondary-light flex items-center justify-center text-xs font-semibold text-primary">

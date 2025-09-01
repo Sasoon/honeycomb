@@ -824,8 +824,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                             {/* Next Drop Preview */}
               {previewLevel > 0 && nextRows.length > 0 && (
                 <div className="bg-bg-secondary rounded-lg p-3 mb-4">
-                  <div className="text-sm font-medium text-primary mb-2">Next Drop:</div>
-                  <div className="flex gap-1.5 mb-2">
+                  <div className="text-sm font-medium inline-block text-primary mb-2">NEXT</div>
+                  <div className="flex gap-1.5">
                     {nextRows[0]?.map((letter, idx) => (
                       <div key={idx} className="w-6 h-6 bg-white rounded border border-secondary-light flex items-center justify-center text-xs font-semibold text-primary shadow-sm">
                         {letter}
