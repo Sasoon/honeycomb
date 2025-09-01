@@ -133,12 +133,12 @@ const DailyChallenge = () => {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-waxle"></div>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-red-700 mb-2">Failed to Load Challenge</h2>
-          <p className="text-red-600 mb-4">{error}</p>
+        <div className="bg-accent-light border border-accent rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-text-primary mb-2">Failed to Load Challenge</h2>
+          <p className="text-text-secondary mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition-colors"
           >
             Retry
           </button>
@@ -172,7 +172,7 @@ const DailyChallenge = () => {
               disabled={!seedData || isCompleted}
               className={`w-full py-3 text-white font-semibold rounded-lg transition-colors ${
                 isCompleted 
-                  ? 'bg-green-500 cursor-not-allowed' 
+                  ? 'bg-success cursor-not-allowed' 
                   : 'bg-waxle hover:bg-waxle-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
               }`}
             >
@@ -184,11 +184,11 @@ const DailyChallenge = () => {
             </button>
             
             {isCompleted && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                <p className="text-green-700 mb-2">🎉 Great job completing today's challenge!</p>
+              <div className="bg-success-light border border-success rounded-lg p-4 text-center">
+                <p className="text-text-primary mb-2">🎉 Great job completing today's challenge!</p>
                 <a 
                   href="/leaderboard" 
-                  className="inline-block px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="inline-block px-4 py-2 bg-success text-white rounded-lg hover:bg-success-dark transition-colors"
                 >
                   View Leaderboard
                 </a>

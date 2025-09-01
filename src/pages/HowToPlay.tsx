@@ -3,7 +3,7 @@ const HowToPlay = () => {
     <div className="page-container page-container--standard">
       <h1 className="page-title">How to Play WAXLE</h1>
       
-      <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
+      <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">Game Overview</h2>
         <p className="mb-4">
           WAXLE is a fast-paced word-building puzzle game where letter tiles fall from above. 
@@ -33,14 +33,14 @@ const HowToPlay = () => {
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
+      <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">How to Play</h2>
         
         <h3 className="font-semibold text-lg mb-2">Player Phase</h3>
         <ol className="list-decimal list-inside mb-6 space-y-2">
           <li>
             <strong>Form Words:</strong> Select tiles on the grid to form words.
-            <ul className="list-disc list-inside ml-6 mt-1 text-sm text-gray-700">
+            <ul className="list-disc list-inside ml-6 mt-1 text-sm text-text-muted">
               <li>Words must be at least 3 letters long</li>
               <li>Tiles must be connected (adjacent to each other)</li>
               <li>Submit multiple words per turn</li>
@@ -48,7 +48,7 @@ const HowToPlay = () => {
           </li>
           <li>
             <strong>Use Special Abilities:</strong> Use Orbit and Lock to manipulate tiles.
-            <ul className="list-disc list-inside ml-6 mt-1 text-sm text-gray-700">
+            <ul className="list-disc list-inside ml-6 mt-1 text-sm text-text-muted">
               <li>Orbit: Drag to rotate tiles around a pivot point (2 uses per turn)</li>
               <li>Lock: Click to prevent tiles from moving during flood</li>
             </ul>
@@ -62,13 +62,13 @@ const HowToPlay = () => {
         <div className="space-y-3 mb-6">
           <div>
             <div className="font-medium">Automatic Tile Drop</div>
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-text-muted">
               New letter tiles cascade from the top of the grid. The number of tiles increases each round (3 → 4 → 5 → 6 max).
             </p>
           </div>
           <div>
             <div className="font-medium">Gravity & Settling</div>
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-text-muted">
               Tiles fall down and settle in available spaces. Locked tiles stay in place while others move around them.
             </p>
           </div>
@@ -83,7 +83,7 @@ const HowToPlay = () => {
         </ul>
       </div>
       
-      <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
+      <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">Game Over & Strategy</h2>
         <p className="mb-4">
           The game ends when new tiles can't fit on the board. Your goal is to survive as many rounds as possible

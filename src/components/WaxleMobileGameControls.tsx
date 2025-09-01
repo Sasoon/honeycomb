@@ -98,15 +98,15 @@ const WaxleMobileGameControls = ({
                         ))}
                       </div>
                     ) : (
-                      <div className="text-xs text-green-600 italic">No words submitted yet</div>
+                      <div className="text-xs text-text-muted italic">No words submitted yet</div>
                     )}
                   </div>
 
                   {/* Current Word Display */}
                   {currentWord && (
-                    <div className="mb-3 p-2 bg-blue-50 rounded-lg">
-                      <h3 className="text-sm font-semibold text-blue-900 mb-1">Current Word</h3>
-                      <p className="text-lg font-mono text-blue-800">{currentWord}</p>
+                    <div className="mb-3 p-2 bg-secondary rounded-lg">
+                      <h3 className="text-sm font-semibold text-primary mb-1">Current Word</h3>
+                      <p className="text-lg font-mono text-text-primary">{currentWord}</p>
                     </div>
                   )}
                 </div>

@@ -128,12 +128,12 @@ const Leaderboard = () => {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <h3 className="text-lg font-semibold text-red-700 mb-2">Failed to Load Leaderboard</h3>
-          <p className="text-red-600 mb-4">{error}</p>
+        <div className="bg-accent-light border border-accent rounded-lg p-6 text-center">
+          <h3 className="text-lg font-semibold text-text-primary mb-2">Failed to Load Leaderboard</h3>
+          <p className="text-text-secondary mb-4">{error}</p>
           <button 
             onClick={() => loadLeaderboard(activeTab)}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition-colors"
           >
             Try Again
           </button>
@@ -153,22 +153,22 @@ const Leaderboard = () => {
               <table className="w-full">
                 <thead className="bg-waxle-light">
                   <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Rank</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Player</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Score</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Round</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Words</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Longest</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Time</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Submitted</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-text-secondary">Rank</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-text-secondary">Player</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Score</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Round</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Words</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Longest</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Time</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Submitted</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-secondary">
                   {leaderboardData.leaderboard.map((entry) => (
                     <tr 
                       key={`${entry.playerName}-${entry.submittedAt}`}
-                      className={`hover:bg-gray-50 ${
-                        entry.rank <= 3 ? 'bg-yellow-50' : ''
+                      className={`hover:bg-secondary ${
+                        entry.rank <= 3 ? 'bg-highlight-light' : ''
                       }`}
                     >
                       <td className="px-4 py-3">
@@ -188,7 +188,7 @@ const Leaderboard = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
+                      <td className="px-4 py-3 font-medium text-text-primary">
                         {entry.playerName}
                       </td>
                       <td className="px-4 py-3 text-center font-bold text-honeycomb">

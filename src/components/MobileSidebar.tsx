@@ -90,7 +90,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
         ref={sidebarRef}
         className={`mobile-sidebar transition-all duration-300 ease-in-out 
           ${isOpen ? 'w-64' : 'w-0'} 
-          bg-white shadow-md z-50 
+          bg-secondary-light shadow-lg z-50 
           fixed
           left-0
           flex flex-col overflow-hidden md:hidden`}

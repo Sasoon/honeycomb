@@ -235,16 +235,16 @@ const WaxleGameOverModal = ({
               {/* Submission Result */}
               {submissionResult && (
                 <div className={`mb-6 p-4 rounded-lg ${
-                  submissionResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                  submissionResult.success ? 'bg-success-light border border-success' : 'bg-accent-light border border-accent'
                 }`}>
                   <div className={`font-semibold ${
-                    submissionResult.success ? 'text-green-700' : 'text-red-700'
+                    submissionResult.success ? 'text-text-primary' : 'text-text-primary'
                   }`}>
                     {submissionResult.success ? '✅ ' : '❌ '}
                     {submissionResult.message}
                   </div>
                   {submissionResult.success && submissionResult.rank && (
-                    <div className="text-sm text-green-600 mt-2">
+                    <div className="text-sm text-text-secondary mt-2">
                       Daily Rank: #{submissionResult.rank.rank} of {submissionResult.rank.totalPlayers} players
                     </div>
                   )}
@@ -258,7 +258,7 @@ const WaxleGameOverModal = ({
                   <>
                     <button
                       onClick={handleShare}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-light"
                     >
                       Share Stats
                     </button>
@@ -280,7 +280,7 @@ const WaxleGameOverModal = ({
                     </button>
                     <button
                       onClick={handleShare}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-light"
                     >
                       Share Stats
                     </button>
@@ -288,7 +288,7 @@ const WaxleGameOverModal = ({
                 )}
               </div>
               
-              <p className="text-xs text-gray-400 mt-4">
+              <p className="text-xs text-text-muted mt-4">
                 {isDailyChallenge 
                   ? hasAlreadySubmitted 
                     ? 'Daily challenge complete! Come back tomorrow for a new challenge.'

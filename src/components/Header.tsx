@@ -50,7 +50,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
           
           {/* Center/Right - Navigation links only on desktop */}
           <div className="flex items-center">
-            <span className="text-white text-xl font-bold md:hidden">WAXLE</span>
+            <Link to="/" className="text-white text-xl font-bold md:hidden">WAXLE</Link>
             <nav className="hidden md:flex flex-wrap justify-center gap-2 ml-6">
               <Link 
                 to="/classic" 
