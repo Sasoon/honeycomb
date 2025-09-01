@@ -391,79 +391,90 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
         const newlySettled = grid.filter(cell => cell.placedThisTurn);
         setHiddenCellIds(newlySettled.map(c => c.id));
         
-        // Group tiles by their settling distance for staggered animation
-        const tilesByDistance = new Map<number, Array<{ cell: HexCell; sourceCell: HexCell; from: { x: number; y: number }; to: { x: number; y: number } }>>();
-        
-        newlySettled.forEach((cell) => {
-            const sourceId = gravityMoves.get(cell.id);
-            const sourceCell = previousGrid.find(c => c.id === sourceId);
-            if (!sourceCell) return;
+        // Handle case where gravity moves were detected but no tiles actually need animation
+        if (newlySettled.length === 0) {
+            // No tiles to animate, proceed directly to flood phase
+            animationDoneSignal = () => {
+                const advanceT = window.setTimeout(() => {
+                    endRound();
+                }, 100); // Short delay to ensure state consistency
+                timersRef.current.push(advanceT);
+            };
+        } else {
+            // Group tiles by their settling distance for staggered animation
+            const tilesByDistance = new Map<number, Array<{ cell: HexCell; sourceCell: HexCell; from: { x: number; y: number }; to: { x: number; y: number } }>>();
+            
+            newlySettled.forEach((cell) => {
+                const sourceId = gravityMoves.get(cell.id);
+                const sourceCell = previousGrid.find(c => c.id === sourceId);
+                if (!sourceCell) return;
 
-            const from = centers.get(`${sourceCell.position.row},${sourceCell.position.col}`);
-            const to = centers.get(`${cell.position.row},${cell.position.col}`);
-            if (!from || !to) return;
-            
-            const distance = Math.abs(cell.position.row - sourceCell.position.row);
-            if (!tilesByDistance.has(distance)) {
-                tilesByDistance.set(distance, []);
-            }
-            tilesByDistance.get(distance)!.push({ cell, sourceCell, from, to });
-        });
-        
-        let maxDelay = 0;
-        const baseDelay = 120; // Base animation duration
-        const staggerDelay = 80; // Time between distance groups
-        
-        // Animate by distance groups (shorter distances first)
-        const sortedDistances = Array.from(tilesByDistance.keys()).sort((a, b) => a - b);
-        
-        sortedDistances.forEach((distance, distanceIdx) => {
-            const tilesAtDistance = tilesByDistance.get(distance)!;
-            
-            tilesAtDistance.forEach((tileData, tileIdx) => {
-                const { cell, from, to } = tileData;
-                const ovKey = `gset-${cell.id}-${Date.now()}`;
+                const from = centers.get(`${sourceCell.position.row},${sourceCell.position.col}`);
+                const to = centers.get(`${cell.position.row},${cell.position.col}`);
+                if (!from || !to) return;
                 
-                // Spawn overlay at source
-                setFxOverlays(prev => [...prev, { 
-                    key: ovKey, 
-                    letter: cell.letter, 
-                    x: from.x, 
-                    y: from.y 
-                }]);
-                
-                // Smooth staggered start within distance group
-                const groupStartDelay = distanceIdx * staggerDelay;
-                const tileStartDelay = groupStartDelay + (tileIdx * 25); // Small stagger within group
-                
-                // Start animation
-                const animT = window.setTimeout(() => {
-                    setFxOverlays(prev => prev.map(o => 
-                        o.key === ovKey ? { ...o, x: to.x, y: to.y } : o
-                    ));
-                }, tileStartDelay);
-                timersRef.current.push(animT);
-                
-                // Calculate animation duration based on distance (longer falls take more time)
-                const animDuration = baseDelay + (distance * 30);
-                const finalDelay = tileStartDelay + animDuration;
-                maxDelay = Math.max(maxDelay, finalDelay);
-                
-                // Clean up overlay and reveal tile
-                const doneT = window.setTimeout(() => {
-                    setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
-                    setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
-                }, finalDelay);
-                timersRef.current.push(doneT);
+                const distance = Math.abs(cell.position.row - sourceCell.position.row);
+                if (!tilesByDistance.has(distance)) {
+                    tilesByDistance.set(distance, []);
+                }
+                tilesByDistance.get(distance)!.push({ cell, sourceCell, from, to });
             });
-        });
+            
+            let maxDelay = 0;
+            const baseDelay = 120; // Base animation duration
+            const staggerDelay = 80; // Time between distance groups
+            
+            // Animate by distance groups (shorter distances first)
+            const sortedDistances = Array.from(tilesByDistance.keys()).sort((a, b) => a - b);
+            
+            sortedDistances.forEach((distance, distanceIdx) => {
+                const tilesAtDistance = tilesByDistance.get(distance)!;
+                
+                tilesAtDistance.forEach((tileData, tileIdx) => {
+                    const { cell, from, to } = tileData;
+                    const ovKey = `gset-${cell.id}-${Date.now()}`;
+                    
+                    // Spawn overlay at source
+                    setFxOverlays(prev => [...prev, { 
+                        key: ovKey, 
+                        letter: cell.letter, 
+                        x: from.x, 
+                        y: from.y 
+                    }]);
+                    
+                    // Smooth staggered start within distance group
+                    const groupStartDelay = distanceIdx * staggerDelay;
+                    const tileStartDelay = groupStartDelay + (tileIdx * 25); // Small stagger within group
+                    
+                    // Start animation
+                    const animT = window.setTimeout(() => {
+                        setFxOverlays(prev => prev.map(o => 
+                            o.key === ovKey ? { ...o, x: to.x, y: to.y } : o
+                        ));
+                    }, tileStartDelay);
+                    timersRef.current.push(animT);
+                    
+                    // Calculate animation duration based on distance (longer falls take more time)
+                    const animDuration = baseDelay + (distance * 30);
+                    const finalDelay = tileStartDelay + animDuration;
+                    maxDelay = Math.max(maxDelay, finalDelay);
+                    
+                    // Clean up overlay and reveal tile
+                    const doneT = window.setTimeout(() => {
+                        setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
+                        setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
+                    }, finalDelay);
+                    timersRef.current.push(doneT);
+                });
+            });
 
-        animationDoneSignal = () => {
-          const advanceT = window.setTimeout(() => {
-            endRound();
-          }, maxDelay + 100);
-          timersRef.current.push(advanceT);
-        };
+            animationDoneSignal = () => {
+              const advanceT = window.setTimeout(() => {
+                endRound();
+              }, maxDelay + 100);
+              timersRef.current.push(advanceT);
+            };
+        }
     } else if (phase === 'flood') {
         const newlyFilled = grid
           .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
