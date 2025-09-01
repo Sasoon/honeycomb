@@ -187,11 +187,11 @@ const WaxleGameOverModal = ({
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-accent-light rounded-lg p-4">
-                  <div className="text-2xl font-bold text-primary">{score}</div>
+                  <div className="text-2xl font-bold text-amber">{score}</div>
                   <div className="text-sm text-secondary">Final Score</div>
                 </div>
                 <div className="bg-success-light rounded-lg p-4">
-                  <div className="text-2xl font-bold text-primary">{totalWords}</div>
+                  <div className="text-2xl font-bold text-amber">{totalWords}</div>
                   <div className="text-sm text-secondary">Words Found</div>
                 </div>
                 <div className="bg-secondary rounded-lg p-4">
@@ -216,13 +216,13 @@ const WaxleGameOverModal = ({
                     onChange={(e) => setPlayerName(e.target.value)}
                     placeholder="Enter your name"
                     maxLength={20}
-                    className="w-full px-4 py-2 border border-secondary-light rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent mb-3"
+                    className="w-full px-4 py-2 border border-secondary-light rounded-lg focus:ring-2 focus:ring-amber focus:border-transparent mb-3"
                     onKeyPress={(e) => e.key === 'Enter' && handleSubmitScore()}
                   />
                   <button
                     onClick={handleSubmitScore}
                     disabled={!playerName.trim() || isSubmitting}
-                    className="w-full bg-primary hover:bg-primary-light disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+                    className="w-full bg-amber hover:bg-amber-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
                   >
                     {isSubmitting ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
@@ -258,13 +258,13 @@ const WaxleGameOverModal = ({
                   <>
                     <button
                       onClick={handleShare}
-                      className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-light"
+                      className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber"
                     >
                       Share Stats
                     </button>
                     <a
                       href={`/leaderboard?t=${Date.now()}`}
-                      className="flex-1 text-center bg-primary hover:bg-primary-light text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-secondary"
+                      className="flex-1 text-center bg-primary hover:bg-primary-light text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber"
                     >
                       View Leaderboard
                     </a>
@@ -274,13 +274,13 @@ const WaxleGameOverModal = ({
                   <>
                     <button
                       onClick={onRestart}
-                      className="flex-1 bg-accent hover:bg-accent-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
+                      className="flex-1 bg-accent hover:bg-accent-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber"
                     >
                       Play Again
                     </button>
                     <button
                       onClick={handleShare}
-                      className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-light"
+                      className="flex-1 bg-primary hover:bg-primary-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber"
                     >
                       Share Stats
                     </button>

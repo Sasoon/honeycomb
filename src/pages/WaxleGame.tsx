@@ -809,22 +809,22 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               <div className="flex justify-between mb-4 md:mb-6">
                 <div>
                   <div className="text-sm text-secondary">Score</div>
-                  <div className="text-2xl font-bold">{score}</div>
+                  <div className="text-2xl font-bold text-amber">{score}</div>
                 </div>
                 <div>
                   <div className="text-sm text-secondary">Round</div>
-                  <div className="text-2xl font-bold">{round}</div>
+                  <div className="text-2xl font-bold text-amber">{round}</div>
                 </div>
                 <div>
                   <div className="text-sm text-secondary">Orbits</div>
-                  <div className="text-lg font-bold text-primary">{freeOrbitsAvailable || 0}</div>
+                  <div className="text-lg font-bold text-amber">{freeOrbitsAvailable || 0}</div>
                 </div>
               </div>
 
                             {/* Next Drop Preview */}
               {previewLevel > 0 && nextRows.length > 0 && (
                 <div className="bg-bg-secondary rounded-lg p-3 mb-4">
-                  <div className="text-sm font-medium inline-block text-primary mb-2">NEXT</div>
+                  <div className="text-sm font-medium inline-block text-amber mb-2">NEXT</div>
                   <div className="flex gap-1.5">
                     {nextRows[0]?.map((letter, idx) => (
                       <div key={idx} className="w-6 h-6 bg-secondary rounded border border-secondary-dark flex items-center justify-center text-xs font-semibold text-primary shadow-sm">
@@ -849,7 +849,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               {currentWord && (
                 <div className="bg-accent-light rounded-lg p-4 mb-4">
                   <h3 className="font-semibold text-primary mb-1">Current Word</h3>
-                  <p className="text-2xl font-mono tracking-wider">{currentWord}</p>
+                  <p className="text-2xl font-mono tracking-wider text-amber">{currentWord}</p>
                 </div>
               )}
 
@@ -1586,10 +1586,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             <div className="flex gap-2 flex-wrap items-center px-4 py-2 rounded-lg">
               <button 
                 onClick={() => submitWord()} 
-                disabled={currentWord.length < 3 || phase !== 'player'} 
+                disabled={currentWord.length < 3 || phase !== 'player' || validationState !== true} 
                 className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
-                  phase === 'player' && currentWord.length >= 3
-                    ? 'bg-success hover:bg-success-dark text-white'
+                  phase === 'player' && currentWord.length >= 3 && validationState === true
+                    ? 'bg-amber-light hover:bg-amber text-white'
                     : 'bg-secondary-dark text-text-muted cursor-not-allowed'
                 }`}
               >

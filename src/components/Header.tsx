@@ -55,7 +55,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/classic" 
                 className={`${isActive('/classic') || isActive('/') 
-                  ? 'bg-highlight text-primary-dark' 
+                  ? 'bg-amber text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Classic
@@ -63,7 +63,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/daily" 
                 className={`${isActive('/daily') 
-                  ? 'bg-highlight text-primary-dark' 
+                  ? 'bg-amber text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Daily
@@ -71,7 +71,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/leaderboard" 
                 className={`${isActive('/leaderboard') 
-                  ? 'bg-highlight text-primary-dark' 
+                  ? 'bg-amber text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Leaderboard
@@ -79,7 +79,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/how-to-play" 
                 className={`${isActive('/how-to-play') 
-                  ? 'bg-highlight text-primary-dark' 
+                  ? 'bg-amber text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Tutorial

@@ -107,7 +107,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/classic" 
               className={`${isActive('/classic') || isActive('/') 
-                ? 'bg-primary text-white' 
+                ? 'bg-amber text-white' 
                 : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
@@ -116,7 +116,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/daily" 
               className={`${isActive('/daily') 
-                ? 'bg-primary text-white' 
+                ? 'bg-amber text-white' 
                 : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
@@ -125,7 +125,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/leaderboard" 
               className={`${isActive('/leaderboard') 
-                ? 'bg-primary text-white' 
+                ? 'bg-amber text-white' 
                 : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
@@ -134,7 +134,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/how-to-play" 
               className={`${isActive('/how-to-play') 
-                ? 'bg-primary text-white' 
+                ? 'bg-amber text-white' 
                 : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >

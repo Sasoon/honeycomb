@@ -262,16 +262,16 @@ const HexGrid = ({
         // showBorder = true; // Disabled - no borders for selected tiles
         if (isWordAlreadyScored) {
           // Always show red for already scored words
-          bgColor = 'bg-primary-light';
+          bgColor = 'bg-amber-dark';
           // borderColor = 'var(--color-1)';
         } else if (isWordValid === true) {
-          bgColor = 'bg-success';
+          bgColor = 'bg-amber-light';
           // borderColor = 'var(--success-dark)';
         } else if (isWordValid === false) {
-          bgColor = 'bg-primary-light';
+          bgColor = 'bg-amber-dark';
           // borderColor = 'var(--color-1)';
         } else {
-          bgColor = 'bg-secondary';
+          bgColor = 'bg-highlight-dark';
           // borderColor = 'var(--color-2)';
         }
         textColor = 'text-white';
@@ -283,7 +283,7 @@ const HexGrid = ({
           // borderColor = 'var(--secondary)';
           extraClasses = isAnimatingPlacement ? 'scale-110 shadow-lg' : hasFinishedAnimation ? '' : 'scale-105';
         } else {
-          bgColor = 'bg-secondary';
+          bgColor = 'bg-highlight-dark';
           // showBorder = true; // Disabled - no borders for selected tiles
           // borderColor = 'var(--color-2)';
         }

@@ -130,7 +130,7 @@ const DailyChallenge = () => {
       
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-waxle"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber"></div>
         </div>
       ) : error ? (
         <div className="bg-accent-light border border-accent rounded-lg p-6 text-center">
@@ -147,7 +147,7 @@ const DailyChallenge = () => {
         <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6">
           <div className="text-center mb-6">
             <div className="text-xl font-semibold">Today's Challenge</div>
-            <div className="text-2xl font-bold text-waxle-dark">
+            <div className="text-2xl font-bold text-amber">
               {todayLabel}
             </div>
           </div>
@@ -173,7 +173,7 @@ const DailyChallenge = () => {
               className={`w-full py-3 text-white font-semibold rounded-lg transition-colors ${
                 isCompleted 
                   ? 'bg-success cursor-not-allowed' 
-                  : 'bg-waxle hover:bg-waxle-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
+                  : 'bg-amber hover:bg-amber-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
               }`}
             >
               {isCompleted 

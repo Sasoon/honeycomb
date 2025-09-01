@@ -122,7 +122,7 @@ const Leaderboard = () => {
       {/* Loading State */}
       {isLoading && (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-waxle"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber"></div>
         </div>
       )}
 
@@ -174,7 +174,7 @@ const Leaderboard = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center">
                           <span className={`text-lg font-bold ${
-                            entry.rank === 1 ? 'text-success' :
+                            entry.rank === 1 ? 'text-amber' :
                             entry.rank === 2 ? 'text-text-secondary' :
                             entry.rank === 3 ? 'text-highlight' :
                             'text-text-primary'
@@ -191,7 +191,7 @@ const Leaderboard = () => {
                       <td className="px-4 py-3 font-medium text-text-primary">
                         {entry.playerName}
                       </td>
-                      <td className="px-4 py-3 text-center font-bold text-honeycomb">
+                      <td className="px-4 py-3 text-center font-bold text-amber">
                         {entry.score.toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-center text-text-secondary">
@@ -223,7 +223,7 @@ const Leaderboard = () => {
         <div className="text-center mt-6">
           <button
             onClick={() => loadLeaderboard(activeTab)}
-            className="px-6 py-2 bg-waxle text-white rounded-lg hover:bg-waxle-dark transition-colors"
+            className="px-6 py-2 bg-amber text-white rounded-lg hover:bg-amber-dark transition-colors"
           >
             Refresh
           </button>

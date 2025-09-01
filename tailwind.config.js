@@ -33,6 +33,11 @@ export default {
                     light: 'var(--success-light)',
                     dark: 'var(--success-dark)',
                 },
+                amber: {
+                    DEFAULT: 'var(--amber)',
+                    light: 'var(--amber-light)',
+                    dark: 'var(--amber-dark)',
+                },
                 // Direct color variables for flexibility
                 'color-1': 'var(--color-1)',
                 'color-2': 'var(--color-2)',

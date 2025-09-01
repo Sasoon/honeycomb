@@ -34,6 +34,11 @@
   --success-light: #c5d1dc;
   --success-dark: #7b93ae;
   
+  /* Amber accent colors */
+  --amber: #B45309;
+  --amber-light: #DC6F0F;
+  --amber-dark: #92420A;
+  
   /* Background and Text */
   --bg-primary: #f8f9fa;
   --bg-secondary: var(--color-5);
@@ -213,7 +218,7 @@ button {
 }
 
 .hex-grid__item.bg-secondary {
-  background: linear-gradient(135deg, var(--secondary), var(--secondary-dark))
+  
 }
 
 /* Hexagon Border Animations */
