@@ -122,7 +122,7 @@ const Leaderboard = () => {
       {/* Loading State */}
       {isLoading && (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-honeycomb"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-waxle"></div>
         </div>
       )}
 
@@ -151,7 +151,7 @@ const Leaderboard = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-honeycomb-light">
+                <thead className="bg-waxle-light">
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Rank</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Player</th>
@@ -223,7 +223,7 @@ const Leaderboard = () => {
         <div className="text-center mt-6">
           <button
             onClick={() => loadLeaderboard(activeTab)}
-            className="px-6 py-2 bg-honeycomb text-white rounded-lg hover:bg-honeycomb-dark transition-colors"
+            className="px-6 py-2 bg-waxle text-white rounded-lg hover:bg-waxle-dark transition-colors"
           >
             Refresh
           </button>

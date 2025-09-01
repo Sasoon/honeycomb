@@ -7,6 +7,12 @@ export default {
     theme: {
         extend: {
             colors: {
+                waxle: {
+                    light: '#FFF8E1',
+                    DEFAULT: '#FFC107',
+                    dark: '#FF9800',
+                },
+                // Keep honeycomb colors for backwards compatibility during transition
                 honeycomb: {
                     light: '#FFF8E1',
                     DEFAULT: '#FFC107',

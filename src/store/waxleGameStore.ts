@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateTetrisScore, generateRandomLetter, placeStartingTiles } from '../lib/tetrisGameUtils';
+import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateWaxleScore, generateRandomLetter, placeStartingTiles } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
@@ -19,8 +19,8 @@ export interface SelectedTile {
     position: number; // Order in which it was selected
 }
 
-// Tetris game state
-interface TetrisGameState {
+// WAXLE game state
+interface WaxleGameState {
     // Core game state
     gameInitialized: boolean;
     phase: GamePhase;
@@ -72,7 +72,7 @@ interface TetrisGameState {
     lastSaved: number;
 
     // Actions
-    setGameState: (state: Partial<TetrisGameState>) => void;
+    setGameState: (state: Partial<WaxleGameState>) => void;
     initializeGame: () => void;
     initializeDailyChallenge: (seed: number, gameState: any, date: string) => void;
     resetGame: () => void;
@@ -100,7 +100,7 @@ interface TetrisGameState {
 }
 
 // Initial state
-const initialState: Omit<TetrisGameState,
+const initialState: Omit<WaxleGameState,
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
@@ -140,8 +140,8 @@ const initialState: Omit<TetrisGameState,
     lastSaved: Date.now(),
 };
 
-// Create the Tetris game store
-export const useTetrisGameStore = create<TetrisGameState>()(
+// Create the WAXLE game store
+export const useWaxleGameStore = create<WaxleGameState>()(
     persist(
         (set, get) => ({
             ...initialState,
@@ -540,11 +540,11 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 // Calculate score
                 const baseScore = state.currentWord.length;
                 const isCombo = state.wordsThisRound.length > 0; // Simple combo: any word after the first
-                const wordScore = calculateTetrisScore(baseScore, state.round, tilesCleared, isCombo);
+                const wordScore = calculateWaxleScore(baseScore, state.round, tilesCleared, isCombo);
 
 
                 // Update state
-                const updates: Partial<TetrisGameState> = {
+                const updates: Partial<WaxleGameState> = {
                     grid: newGrid,
                     wordsThisRound: [...state.wordsThisRound, state.currentWord],
                     totalWords: state.totalWords + 1,
@@ -584,7 +584,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
                 return;
             },
 
-            // Note: Orbit logic is implemented in TetrisGame.tsx drag handler
+            // Note: Orbit logic is implemented in WaxleGame.tsx drag handler
             orbitPivot: (_pivotCellId: string, _direction: 'cw' | 'ccw' = 'cw') => {
                 // This function exists for interface compatibility but orbit is handled in UI
                 console.log('[ORBIT-STORE] This function is not used - orbit handled in UI');
@@ -649,7 +649,7 @@ export const useTetrisGameStore = create<TetrisGameState>()(
             }
         }),
         {
-            name: 'honeycomb-tetris-game',
+            name: 'waxle-game',
             skipHydration: false,
             partialize: (state) => {
                 // Don't persist daily challenge game state or game over phase

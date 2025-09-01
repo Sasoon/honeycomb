@@ -3,13 +3,13 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTetrisGameStore } from '../store/tetrisGameStore';
+import { useWaxleGameStore } from '../store/waxleGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
-import { areCellsAdjacent } from '../lib/tetrisGameUtils';
+import { areCellsAdjacent } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import toastService from '../lib/toastService';
-import TetrisGameOverModal from '../components/TetrisGameOverModal';
-import TetrisMobileGameControls from '../components/TetrisMobileGameControls';
+import WaxleGameOverModal from '../components/WaxleGameOverModal';
+import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
 // Flood animation timing constants
@@ -142,7 +142,7 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   }
   const path: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
   
-  const isDebug = typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugAnim') === '1';
+  const isDebug = typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugAnim') === '1';
   if (isDebug) {
     console.log(`[PATH-DEBUG] Computing path to target (${target.row}, ${target.col})`);
   }
@@ -228,7 +228,7 @@ type FxOverlay = { key: string; letter: string; x: number; y: number };
 
 // (no-op placeholder removed)
 
-const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => void; }) => {
+const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => void; }) => {
   const location = useLocation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -296,7 +296,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
     gravityMoves,
     floodPaths,
     tilesHiddenForAnimation: _unusedTiles,
-  } = useTetrisGameStore();
+  } = useWaxleGameStore();
 
   useEffect(() => { 
     if (!gameInitialized) {
@@ -487,7 +487,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
           setHiddenCellIds(newlyFilled.map(c => c.id));
         }
 
-        const debugAnim = typeof window !== 'undefined' && window.localStorage.getItem('tetrisDebugAnim') === '1';
+        const debugAnim = typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugAnim') === '1';
         const tNow = () => (typeof performance !== 'undefined' ? Math.round(performance.now()) : Date.now());
 
         // Animation constants
@@ -891,7 +891,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
         <div className="flex-1 h-full overflow-hidden relative">
           {/* Mobile Game Controls */}
           <div className="absolute top-0 left-0 right-0 z-10">
-            <TetrisMobileGameControls
+            <WaxleMobileGameControls
               score={score}
               round={round}
               wordsThisRound={wordsThisRound.length}
@@ -1253,7 +1253,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
                     const direction = lockedStepsRef.current > 0 ? 'cw' : 'ccw';
                     console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations (lockedSteps: ${lockedStepsRef.current})`);
 
-                    let currentGrid = useTetrisGameStore.getState().grid;
+                    let currentGrid = useWaxleGameStore.getState().grid;
                     const plan = orbitPlanRef.current;
                     const pivot = currentGrid.find(c => c.id === selectedSingle.cellId);
                     if (!pivot || !plan || plan.pivotId !== pivot.id) {
@@ -1269,7 +1269,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
                     }
 
                     // Get current locked tiles
-                    const currentState = useTetrisGameStore.getState();
+                    const currentState = useWaxleGameStore.getState();
                     const lockedTileIds = Array.isArray(currentState.lockedTiles) ? currentState.lockedTiles : [];
                     console.log('[ORBIT-UI] Locked tiles:', lockedTileIds);
 
@@ -1333,7 +1333,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
                     // Decrement orbit count properly  
                     const newOrbitsAvailable = Math.max(0, (currentState.freeOrbitsAvailable || 0) - 1);
                     
-                    useTetrisGameStore.setState({ 
+                    useWaxleGameStore.setState({ 
                       grid: currentGrid, 
                       selectedTiles: [], 
                       currentWord: '', 
@@ -1406,7 +1406,7 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
                         let drawY = center.y - cellSize.h / 2;
                         
                         // Check if this tile is locked
-                        const currentState = useTetrisGameStore.getState();
+                        const currentState = useWaxleGameStore.getState();
                         const lockedTileIds = Array.isArray(currentState.lockedTiles) ? currentState.lockedTiles : [];
                         const isLocked = lockedTileIds.includes(cell.id);
                         
@@ -1672,14 +1672,14 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
 
           </div>
         {/* <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
-          © {new Date().getFullYear()} Honeycomb Tetris - A Tetris-Style Word Game
+          © {new Date().getFullYear()} WAXLE - A Falling Tile Word Game
         </footer>  */}
         </div>
       </div>
       <Toaster position="bottom-center" />
 
       {/* Game Over Modal */}
-      <TetrisGameOverModal
+      <WaxleGameOverModal
         isOpen={phase === 'gameOver'}
         score={score}
         totalWords={totalWords}
@@ -1702,4 +1702,4 @@ const TetrisGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () =>
   );
 };
 
-export default TetrisGame; 
+export default WaxleGame; 

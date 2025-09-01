@@ -1,17 +1,17 @@
 const HowToPlay = () => {
   return (
     <div className="page-container page-container--standard">
-      <h1 className="page-title">How to Play Honeycomb Tetris</h1>
+      <h1 className="page-title">How to Play WAXLE</h1>
       
       <div className="bg-white rounded-lg shadow-md p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4">Game Overview</h2>
         <p className="mb-4">
-          Honeycomb Tetris is a fast-paced word-building puzzle game where letter tiles fall from above like Tetris blocks. 
+          WAXLE is a fast-paced word-building puzzle game where letter tiles fall from above. 
           Form words to clear tiles from the board and survive as long as possible as the difficulty increases each round!
         </p>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-honeycomb-light rounded-lg p-4">
+          <div className="bg-waxle-light rounded-lg p-4">
             <h3 className="font-semibold mb-2">Game Elements</h3>
             <ul className="list-disc list-inside text-sm space-y-1">
               <li>5×5 hexagonal grid</li>
@@ -21,7 +21,7 @@ const HowToPlay = () => {
               <li>Orbit and Lock special abilities</li>
             </ul>
           </div>
-          <div className="bg-honeycomb-light rounded-lg p-4">
+          <div className="bg-waxle-light rounded-lg p-4">
             <h3 className="font-semibold mb-2">Special Mechanics</h3>
             <ul className="list-disc list-inside text-sm space-y-1">
               <li><span className="font-medium">Orbit:</span> Rotate tiles around a pivot point</li>
@@ -99,8 +99,8 @@ const HowToPlay = () => {
           <li>Plan ahead for the increasing tile count each round</li>
         </ul>
         
-        <div className="text-center p-4 bg-honeycomb-light rounded-lg">
-          <p className="font-semibold">Good luck surviving the Tetris flood!</p>
+        <div className="text-center p-4 bg-waxle-light rounded-lg">
+          <p className="font-semibold">Good luck surviving the falling tile flood!</p>
         </div>
       </div>
     </div>

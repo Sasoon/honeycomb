@@ -24,7 +24,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           dictionary: ['/src/lib/words_dictionary.json'],
-          tetris: ['/src/pages/TetrisGame.tsx'],
+          waxle: ['/src/pages/WaxleGame.tsx'],
           daily: ['/src/pages/DailyChallenge.tsx'],
           stats: ['/src/pages/Stats.tsx'],
           howto: ['/src/pages/HowToPlay.tsx']

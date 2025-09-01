@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useTetrisGameStore } from '../store/tetrisGameStore';
-import TetrisGame from './TetrisGame';
+import { useWaxleGameStore } from '../store/waxleGameStore';
+import WaxleGame from './WaxleGame';
 
 interface DailySeedData {
   date: string;
@@ -21,7 +21,7 @@ const DailyChallenge = () => {
   const [error, setError] = useState<string | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   
-  const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useTetrisGameStore();
+  const { initializeDailyChallenge, isDailyChallenge, dailyDate } = useWaxleGameStore();
   const [isPlayingChallenge, setIsPlayingChallenge] = useState(false);
   
   // Load daily seed on component mount
@@ -47,7 +47,7 @@ const DailyChallenge = () => {
         
         // Check if today's challenge has already been completed
         const today = new Date().toISOString().split('T')[0];
-        const completedKey = `honeycomb-daily-completed-${today}`;
+        const completedKey = `waxle-daily-completed-${today}`;
         const hasCompleted = localStorage.getItem(completedKey) === 'true';
         setIsCompleted(hasCompleted);
       } catch (err) {
@@ -117,7 +117,7 @@ const DailyChallenge = () => {
   // If playing the challenge, render the game
   if (isPlayingChallenge || isPlayingToday) {
     return (
-      <TetrisGame
+      <WaxleGame
         onBackToDailyChallenge={handleBackToDailyPage}
       />
     );
@@ -126,11 +126,11 @@ const DailyChallenge = () => {
   return (
     <>
       <div className="page-container page-container--standard">
-        <h1 className="page-title">Daily Challenge</h1>
+        <h1 className="page-title">Daily</h1>
       
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-honeycomb"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-waxle"></div>
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
@@ -147,7 +147,7 @@ const DailyChallenge = () => {
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="text-center mb-6">
             <div className="text-xl font-semibold">Today's Challenge</div>
-            <div className="text-2xl font-bold text-honeycomb-dark">
+            <div className="text-2xl font-bold text-waxle-dark">
               {todayLabel}
             </div>
           </div>
@@ -158,7 +158,7 @@ const DailyChallenge = () => {
           </div>
           
           <div className="space-y-4">
-            <div className="bg-honeycomb-light rounded-lg p-4">
+            <div className="bg-waxle-light rounded-lg p-4">
               <h2 className="font-semibold mb-2">Today's Challenge Rules:</h2>
               <ul className="text-sm space-y-1 list-disc list-inside">
                 <li>Standard game rules apply</li>
@@ -173,7 +173,7 @@ const DailyChallenge = () => {
               className={`w-full py-3 text-white font-semibold rounded-lg transition-colors ${
                 isCompleted 
                   ? 'bg-green-500 cursor-not-allowed' 
-                  : 'bg-honeycomb hover:bg-honeycomb-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
+                  : 'bg-waxle hover:bg-waxle-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
               }`}
             >
               {isCompleted 

@@ -139,7 +139,7 @@ export function generateDropLettersSmart(count: number, grid: HexCell[], rewardC
 // === End dynamic letter generation ===============================================
 
 // Check if the game is over (top row has tiles)
-export function checkTetrisGameOver(grid: HexCell[]): boolean {
+export function checkWaxleGameOver(grid: HexCell[]): boolean {
     // Find cells in the top row (row 0)
     const topRowCells = grid.filter(cell => cell.position.row === 0);
 
@@ -655,7 +655,7 @@ export function clearTilesAndApplyGravity(
 
 
 // Calculate score for a word with bonuses
-export function calculateTetrisScore(
+export function calculateWaxleScore(
     baseWordScore: number,
     round: number,
     tilesCleared: number,

@@ -1,11 +1,11 @@
-import { useTetrisGameStore } from '../store/tetrisGameStore';
+import { useWaxleGameStore } from '../store/waxleGameStore';
 
 const Stats = () => {
-  const { score, totalWords, round, longestWord, tilesCleared } = useTetrisGameStore();
+  const { score, totalWords, round, longestWord, tilesCleared } = useWaxleGameStore();
   
   return (
     <div className="page-container page-container--narrow">
-      <h1 className="page-title">Tetris Statistics</h1>
+      <h1 className="page-title">Game Statistics</h1>
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 section-spacing">
         <StatCard label="Current Score" value={score.toString()} />
@@ -20,7 +20,7 @@ const Stats = () => {
           <div>
             <h3 className="font-semibold text-gray-700 mb-2">Tiles Cleared</h3>
             <div className="flex items-center">
-              <div className="text-4xl font-bold text-honeycomb-dark">{tilesCleared}</div>
+              <div className="text-4xl font-bold text-waxle-dark">{tilesCleared}</div>
               <div className="ml-2 text-sm text-gray-600">tiles</div>
             </div>
           </div>

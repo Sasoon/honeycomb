@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import toastService from '../lib/toastService';
 
-interface TetrisGameOverModalProps {
+interface WaxleGameOverModalProps {
   isOpen: boolean;
   score: number;
   totalWords: number;
@@ -15,7 +15,7 @@ interface TetrisGameOverModalProps {
   challengeStartTime?: number;
 }
 
-const TetrisGameOverModal = ({
+const WaxleGameOverModal = ({
   isOpen,
   score,
   totalWords,
@@ -26,7 +26,7 @@ const TetrisGameOverModal = ({
   isDailyChallenge = false,
   dailyDate,
   challengeStartTime
-}: TetrisGameOverModalProps) => {
+}: WaxleGameOverModalProps) => {
   const [playerName, setPlayerName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<{
@@ -39,13 +39,13 @@ const TetrisGameOverModal = ({
   // Load saved player name and check submission status
   useEffect(() => {
     if (isDailyChallenge && dailyDate) {
-      const savedName = localStorage.getItem('honeycomb-player-name');
+      const savedName = localStorage.getItem('waxle-player-name');
       if (savedName) {
         setPlayerName(savedName);
       }
       
       // Check if score has already been submitted for this date
-      const submissionKey = `honeycomb-daily-submitted-${dailyDate}`;
+      const submissionKey = `waxle-daily-submitted-${dailyDate}`;
       const existingSubmission = localStorage.getItem(submissionKey);
       if (existingSubmission) {
         const submissionData = JSON.parse(existingSubmission);
@@ -79,7 +79,7 @@ const TetrisGameOverModal = ({
         longestWord,
         completedAt: new Date().toISOString()
       };
-      localStorage.setItem(`honeycomb-daily-completion-${dailyDate}`, JSON.stringify(completionData));
+      localStorage.setItem(`waxle-daily-completion-${dailyDate}`, JSON.stringify(completionData));
     }
   }, [isOpen, isDailyChallenge, dailyDate, score, totalWords, round, longestWord]);
 
@@ -93,7 +93,7 @@ const TetrisGameOverModal = ({
       const timeSpent = challengeStartTime ? Math.floor((Date.now() - challengeStartTime) / 1000) : 0;
       
       // Save player name to localStorage
-      localStorage.setItem('honeycomb-player-name', playerName.trim());
+      localStorage.setItem('waxle-player-name', playerName.trim());
       
       const response = await fetch('/api/submit-score', {
         method: 'POST',
@@ -132,7 +132,7 @@ const TetrisGameOverModal = ({
       
       // Store submission data to prevent duplicate submissions
       if (dailyDate) {
-        localStorage.setItem(`honeycomb-daily-submitted-${dailyDate}`, JSON.stringify(submissionData));
+        localStorage.setItem(`waxle-daily-submitted-${dailyDate}`, JSON.stringify(submissionData));
       }
       
     } catch (error) {
@@ -148,8 +148,8 @@ const TetrisGameOverModal = ({
 
   const handleShare = () => {
     const shareText = isDailyChallenge 
-      ? `🎯 Honeycomb Tetris - Daily Challenge\n\nScore: ${score}\nWords: ${totalWords}\nRounds: ${round}\nLongest: ${longestWord}\n\nPlay today's challenge: https://honeycomb-game.netlify.app/daily`
-      : `🎯 Honeycomb Tetris\n\nFinal Score: ${score}\nWords Found: ${totalWords}\nRounds Survived: ${round}\nLongest Word: ${longestWord}\n\nPlay at: ${window.location.origin}`;
+      ? `🎯 WAXLE - Daily Challenge\n\nScore: ${score}\nWords: ${totalWords}\nRounds: ${round}\nLongest: ${longestWord}\n\nPlay today's challenge: https://honeycomb-game.netlify.app/daily`
+      : `🎯 WAXLE\n\nFinal Score: ${score}\nWords Found: ${totalWords}\nRounds Survived: ${round}\nLongest Word: ${longestWord}\n\nPlay at: ${window.location.origin}`;
     
     // Copy to clipboard only
     navigator.clipboard.writeText(shareText).then(() => {
@@ -216,13 +216,13 @@ const TetrisGameOverModal = ({
                     onChange={(e) => setPlayerName(e.target.value)}
                     placeholder="Enter your name"
                     maxLength={20}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-honeycomb focus:border-transparent mb-3"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-waxle focus:border-transparent mb-3"
                     onKeyPress={(e) => e.key === 'Enter' && handleSubmitScore()}
                   />
                   <button
                     onClick={handleSubmitScore}
                     disabled={!playerName.trim() || isSubmitting}
-                    className="w-full bg-honeycomb hover:bg-honeycomb-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
+                    className="w-full bg-waxle hover:bg-waxle-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
                   >
                     {isSubmitting ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
@@ -264,7 +264,7 @@ const TetrisGameOverModal = ({
                     </button>
                     <a
                       href={`/leaderboard?t=${Date.now()}`}
-                      className="flex-1 text-center bg-honeycomb hover:bg-honeycomb-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-honeycomb"
+                      className="flex-1 text-center bg-waxle hover:bg-waxle-dark text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-waxle"
                     >
                       View Leaderboard
                     </a>
@@ -304,4 +304,4 @@ const TetrisGameOverModal = ({
   );
 };
 
-export default TetrisGameOverModal;
+export default WaxleGameOverModal;

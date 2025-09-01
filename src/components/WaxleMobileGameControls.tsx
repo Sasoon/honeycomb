@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type TetrisMobileGameControlsProps = {
+type WaxleMobileGameControlsProps = {
   score: number;
   round: number;
   wordsThisRound: number;
@@ -12,7 +12,7 @@ type TetrisMobileGameControlsProps = {
   previewLevel: number;
 };
 
-const TetrisMobileGameControls = ({
+const WaxleMobileGameControls = ({
   score,
   round,
   wordsThisRound,
@@ -21,7 +21,7 @@ const TetrisMobileGameControls = ({
   freeOrbitsAvailable,
   nextRows,
   previewLevel
-}: TetrisMobileGameControlsProps) => {
+}: WaxleMobileGameControlsProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -132,4 +132,4 @@ const TetrisMobileGameControls = ({
   );
 };
 
-export default TetrisMobileGameControls;
+export default WaxleMobileGameControls;

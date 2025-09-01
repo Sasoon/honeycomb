@@ -4,7 +4,7 @@ import { useState, lazy, Suspense } from 'react';
 import Header from './components/Header.tsx';
 import MobileSidebar from './components/MobileSidebar.tsx';
 
-const TetrisGame = lazy(() => import('./pages/TetrisGame.tsx'));
+const WaxleGame = lazy(() => import('./pages/WaxleGame.tsx'));
 const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
 const Stats = lazy(() => import('./pages/Stats.tsx'));
@@ -26,7 +26,8 @@ function AppContent() {
       <main className="flex-1 w-full mx-auto flex flex-col">
         <Suspense fallback={<div className="p-4">Loading…</div>}>
           <Routes>
-            <Route path="/" element={<TetrisGame />} />
+            <Route path="/" element={<WaxleGame />} />
+            <Route path="/classic" element={<WaxleGame />} />
             <Route path="/daily" element={<DailyChallenge />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/stats" element={<Stats />} />

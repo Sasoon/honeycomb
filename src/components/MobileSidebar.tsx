@@ -105,9 +105,9 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
         <div className="block">
           <nav className="flex flex-col space-y-2">
             <Link 
-              to="/" 
-              className={`${isActive('/') 
-                ? 'bg-honeycomb text-white' 
+              to="/classic" 
+              className={`${isActive('/classic') || isActive('/') 
+                ? 'bg-waxle text-white' 
                 : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
@@ -116,16 +116,16 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/daily" 
               className={`${isActive('/daily') 
-                ? 'bg-honeycomb text-white' 
+                ? 'bg-waxle text-white' 
                 : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
-              Daily Challenge
+              Daily
             </Link>
             <Link 
               to="/leaderboard" 
               className={`${isActive('/leaderboard') 
-                ? 'bg-honeycomb text-white' 
+                ? 'bg-waxle text-white' 
                 : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
@@ -134,7 +134,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/stats" 
               className={`${isActive('/stats') 
-                ? 'bg-honeycomb text-white' 
+                ? 'bg-waxle text-white' 
                 : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >
@@ -143,7 +143,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             <Link 
               to="/how-to-play" 
               className={`${isActive('/how-to-play') 
-                ? 'bg-honeycomb text-white' 
+                ? 'bg-waxle text-white' 
                 : 'text-amber-800 hover:bg-amber-100'} px-3 py-2 rounded-lg`}
               onClick={onClose}
             >

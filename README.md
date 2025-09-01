@@ -1,10 +1,10 @@
-# Honeycomb Tetris
+# WAXLE
 
-A Tetris-style word game with falling letter tiles. Form words to clear tiles from the board in this fast-paced puzzle variant.
+A falling tile word game with letter blocks. Form words to clear tiles from the board in this fast-paced puzzle variant.
 
 ## Features
 
-- Tetris-style falling tiles with letter blocks
+- Falling tiles with letter blocks
 - Form words to clear tiles and score points  
 - Flood mechanics with cascading tile placement
 - Mobile-responsive design with touch controls
@@ -23,8 +23,8 @@ A Tetris-style word game with falling letter tiles. Form words to clear tiles fr
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/honeycomb.git
-cd honeycomb
+git clone https://github.com/yourusername/waxle.git
+cd waxle
 
 # Install dependencies
 npm install
@@ -52,10 +52,10 @@ yarn dev
 - Zustand for state management
 
 ### Game Concept
-*Honeycomb* is a single-player word-building puzzle game played on a grid of interlocking hexagonal tiles, like a honeycomb shape. Players strategically place letter tiles to form words along connected paths, leveraging special tiles and mechanics to maximize their score while aiming to reach a target score in the fewest turns possible.
+*Honeycomb* is a single-player word-building puzzle game played on a grid of interlocking hexagonal tiles, like a waxle shape. Players strategically place letter tiles to form words along connected paths, leveraging special tiles and mechanics to maximize their score while aiming to reach a target score in the fewest turns possible.
 
 ### Core Components
-- **Grid**: A honeycomb-shaped hexagonal grid with 19 interlocked hexagons arranged in a natural honeycomb pattern, with the middle row containing 5 hexagons and rows above and below having fewer hexagons (creating the tapered honeycomb shape).
+- **Grid**: A waxle-shaped hexagonal grid with 19 interlocked hexagons arranged in a natural waxle pattern, with the middle row containing 5 hexagons and rows above and below having fewer hexagons (creating the tapered waxle shape).
 - **Letter Tiles**: 100 tiles, distributed by frequency:
     - 61 common
     - 26 medium

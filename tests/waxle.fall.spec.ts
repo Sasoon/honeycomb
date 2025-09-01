@@ -19,14 +19,14 @@ async function captureSequence(page: Page, labelPrefix: string, maxFrames = 40, 
 
 test.describe('Tetris falling overlays', () => {
     test('falls slot-by-slot with overlays only once', async ({ page }) => {
-        await page.goto('/tetris');
+        await page.goto('/classic');
 
         await expect(page.locator('.hex-grid')).toBeVisible();
         await snap(page, 'baseline');
 
         // Optional: enable debug dots if env toggled
         if (process.env.TETRIS_DEBUG_PATH === '1') {
-            await page.evaluate(() => localStorage.setItem('tetrisDebugPath', '1'));
+            await page.evaluate(() => localStorage.setItem('waxleDebugPath', '1'));
             await page.reload();
             await expect(page.locator('.hex-grid')).toBeVisible();
         }

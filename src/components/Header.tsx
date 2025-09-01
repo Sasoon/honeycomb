@@ -17,7 +17,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-honeycomb py-4 px-3 shadow-md sticky top-0 z-40">
+    <header className="bg-waxle py-4 px-3 shadow-md sticky top-0 z-40">
       <div>
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
@@ -44,51 +44,51 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
             
             {/* Logo always visible */}
             <Link to="/" className="text-white text-2xl font-bold flex items-center">
-            <span className="hidden md:inline">Honeycomb Tetris</span>
+            <span className="hidden md:inline">WAXLE</span>
             </Link>
           </div>
           
           {/* Center/Right - Navigation links only on desktop */}
           <div className="flex items-center">
-            <span className="text-white text-xl font-bold md:hidden">Tetris</span>
+            <span className="text-white text-xl font-bold md:hidden">WAXLE</span>
             <nav className="hidden md:flex flex-wrap justify-center gap-2 ml-6">
               <Link 
-                to="/" 
-                className={`${isActive('/') 
-                  ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
+                to="/classic" 
+                className={`${isActive('/classic') || isActive('/') 
+                  ? 'bg-waxle-dark text-white' 
+                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
               >
-                Tetris
+                Classic
               </Link>
               <Link 
                 to="/daily" 
                 className={`${isActive('/daily') 
-                  ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-waxle-dark text-white' 
+                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
               >
-                Daily Challenge
+                Daily
               </Link>
               <Link 
                 to="/leaderboard" 
                 className={`${isActive('/leaderboard') 
-                  ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-waxle-dark text-white' 
+                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
               >
                 Leaderboard
               </Link>
               <Link 
                 to="/stats" 
                 className={`${isActive('/stats') 
-                  ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-waxle-dark text-white' 
+                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
               >
                 Stats
               </Link>
               <Link 
                 to="/how-to-play" 
                 className={`${isActive('/how-to-play') 
-                  ? 'bg-honeycomb-dark text-white' 
-                  : 'text-white hover:bg-honeycomb-dark/70'} px-3 py-2 rounded-lg`}
+                  ? 'bg-waxle-dark text-white' 
+                  : 'text-white hover:bg-waxle-dark/70'} px-3 py-2 rounded-lg`}
               >
                 How to Play
               </Link>
