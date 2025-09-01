@@ -203,8 +203,8 @@ button {
   color: white;
 }
 
-.hex-grid__item.bg-green-100 {
-  background: linear-gradient(135deg, var(--success-light), var(--success));
+.hex-grid__item.bg-highlight-light {
+  background: linear-gradient(135deg, var(--highlight-light), var(--highlight));
   position: relative;
 }
 
@@ -212,8 +212,8 @@ button {
   background: linear-gradient(135deg, var(--highlight-light), var(--highlight));
 }
 
-.hex-grid__item.bg-white {
-  background: linear-gradient(135deg,#fff,#f0f0f0)
+.hex-grid__item.bg-secondary {
+  background: linear-gradient(135deg, var(--secondary), var(--secondary-dark))
 }
 
 /* Hexagon Border Animations */
@@ -449,7 +449,7 @@ button {
 }
 
 /* Add impact ring animation */
-.hex-grid__item.bg-green-100:not(.animation-finished)::after {
+.hex-grid__item.bg-highlight-light:not(.animation-finished)::after {
   content: '';
   position: absolute;
   inset: -5px;
@@ -867,9 +867,9 @@ button {
   transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55), box-shadow 0.3s ease;
 }
 
-.hex-grid__item.bg-blue-100 {
+.hex-grid__item.bg-highlight-light {
   transform: scale(1.02);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 2px 8px var(--highlight);
 }
 
 /* Add a cascade effect for multiple falling tiles */

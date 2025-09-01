@@ -79,13 +79,13 @@ const Leaderboard = () => {
       <h1 className="page-title">Leaderboard</h1>
 
       {/* Tab Navigation */}
-      <div className="flex bg-gray-100 rounded-lg p-1 content-spacing max-w-md mx-auto">
+      <div className="flex bg-secondary rounded-lg p-1 content-spacing max-w-md mx-auto">
         <button
           onClick={() => setActiveTab('daily')}
           className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'daily'
-              ? 'bg-white text-honeycomb shadow-sm'
-              : 'text-gray-600 hover:text-gray-800'
+              ? 'bg-secondary-light text-primary shadow-sm'
+              : 'text-text-secondary hover:text-text-primary'
           }`}
         >
           Daily
@@ -94,8 +94,8 @@ const Leaderboard = () => {
           onClick={() => setActiveTab('alltime')}
           className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'alltime'
-              ? 'bg-white text-honeycomb shadow-sm'
-              : 'text-gray-600 hover:text-gray-800'
+              ? 'bg-secondary-light text-primary shadow-sm'
+              : 'text-text-secondary hover:text-text-primary'
           }`}
         >
           All Time
@@ -142,11 +142,11 @@ const Leaderboard = () => {
 
       {/* Leaderboard Table */}
       {leaderboardData && !isLoading && !error && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary overflow-hidden">
           {leaderboardData.leaderboard.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">No scores yet!</p>
-              <p className="text-gray-400 mt-2">Be the first to complete today's challenge.</p>
+              <p className="text-text-muted text-lg">No scores yet!</p>
+              <p className="text-text-muted mt-2 opacity-80">Be the first to complete today's challenge.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -174,10 +174,10 @@ const Leaderboard = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center">
                           <span className={`text-lg font-bold ${
-                            entry.rank === 1 ? 'text-yellow-600' :
-                            entry.rank === 2 ? 'text-gray-500' :
-                            entry.rank === 3 ? 'text-amber-600' :
-                            'text-gray-700'
+                            entry.rank === 1 ? 'text-success' :
+                            entry.rank === 2 ? 'text-text-secondary' :
+                            entry.rank === 3 ? 'text-highlight' :
+                            'text-text-primary'
                           }`}>
                             #{entry.rank}
                           </span>
@@ -194,19 +194,19 @@ const Leaderboard = () => {
                       <td className="px-4 py-3 text-center font-bold text-honeycomb">
                         {entry.score.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-600">
+                      <td className="px-4 py-3 text-center text-text-secondary">
                         {entry.round}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-600">
+                      <td className="px-4 py-3 text-center text-text-secondary">
                         {entry.totalWords}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-600 font-mono">
+                      <td className="px-4 py-3 text-center text-text-secondary font-mono">
                         {entry.longestWord || '-'}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-600">
+                      <td className="px-4 py-3 text-center text-text-secondary">
                         {formatTimeSpent(entry.timeSpent)}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-500 text-sm">
+                      <td className="px-4 py-3 text-center text-text-muted text-sm">
                         {formatDate(entry.submittedAt)}
                       </td>
                     </tr>

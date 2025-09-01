@@ -243,7 +243,7 @@ const HexGrid = ({
   }, []);
 
   const cellStyles = (cell: HexCell) => {
-    let bgColor = 'bg-white';
+    let bgColor = 'bg-secondary';
     let textColor = 'text-primary';
     let extraClasses = '';
     // let showBorder = false; // Disabled - borders removed from selected tiles
@@ -278,12 +278,12 @@ const HexGrid = ({
       } else {
         // Placement phase highlighting
         if (isPlacedThisTurn) {
-          bgColor = 'bg-blue-100';
+          bgColor = 'bg-highlight-light';
           // showBorder = true; // Disabled - no borders for selected tiles
           // borderColor = 'var(--secondary)';
           extraClasses = isAnimatingPlacement ? 'scale-110 shadow-lg' : hasFinishedAnimation ? '' : 'scale-105';
         } else {
-          bgColor = 'bg-white';
+          bgColor = 'bg-secondary';
           // showBorder = true; // Disabled - no borders for selected tiles
           // borderColor = 'var(--color-2)';
         }

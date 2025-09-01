@@ -178,7 +178,7 @@ const WaxleGameOverModal = ({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", damping: 15 }}
-            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
+            className="bg-secondary-light rounded-2xl p-6 max-w-md w-full shadow-2xl border border-secondary"
           >
             <div className="text-center">
               <h2 className="text-3xl font-bold text-primary mb-2">Game Over!</h2>

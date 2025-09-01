@@ -144,7 +144,7 @@ const DailyChallenge = () => {
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6">
           <div className="text-center mb-6">
             <div className="text-xl font-semibold">Today's Challenge</div>
             <div className="text-2xl font-bold text-waxle-dark">
@@ -153,7 +153,7 @@ const DailyChallenge = () => {
           </div>
           
           <div className="mb-6">
-            <div className="text-sm text-gray-600 mb-1">Next challenge in:</div>
+            <div className="text-sm text-text-muted mb-1">Next challenge in:</div>
             <div className="text-3xl font-mono font-bold text-center">{countdown}</div>
           </div>
           

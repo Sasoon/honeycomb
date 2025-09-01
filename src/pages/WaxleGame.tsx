@@ -797,7 +797,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         {/* Tetris Game Sidebar */}
         <div 
           ref={sidebarRef}
-          className="hidden md:flex game-sidebar w-72 bg-white shadow-md flex-col overflow-hidden"
+          className="hidden md:flex game-sidebar w-72 bg-secondary-light shadow-lg border border-secondary flex-col overflow-hidden"
         >
           {/* Sidebar content */}
           <div className="hidden md:flex flex-col h-full py-4 px-3 overflow-y-auto">
@@ -827,7 +827,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   <div className="text-sm font-medium inline-block text-primary mb-2">NEXT</div>
                   <div className="flex gap-1.5">
                     {nextRows[0]?.map((letter, idx) => (
-                      <div key={idx} className="w-6 h-6 bg-white rounded border border-secondary-light flex items-center justify-center text-xs font-semibold text-primary shadow-sm">
+                      <div key={idx} className="w-6 h-6 bg-secondary rounded border border-secondary-dark flex items-center justify-center text-xs font-semibold text-primary shadow-sm">
                         {letter}
                       </div>
                     ))}
@@ -835,7 +835,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   {previewLevel > 1 && nextRows[1] && (
                     <div className="flex gap-1 opacity-40">
                       {nextRows[1]?.map((letter, idx) => (
-                        <div key={idx} className="w-5 h-5 bg-highlight-light rounded border border-secondary-light flex items-center justify-center text-xs font-medium text-secondary">
+                        <div key={idx} className="w-5 h-5 bg-secondary-dark rounded border border-highlight flex items-center justify-center text-xs font-medium text-white">
                           {letter}
                         </div>
                       ))}
@@ -1589,8 +1589,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 disabled={currentWord.length < 3 || phase !== 'player'} 
                 className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
                   phase === 'player' && currentWord.length >= 3
-                    ? 'bg-green-500 hover:bg-green-600 text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    ? 'bg-success hover:bg-success-dark text-white'
+                    : 'bg-secondary-dark text-text-muted cursor-not-allowed'
                 }`}
               >
                 Submit Word
@@ -1600,8 +1600,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 disabled={phase !== 'player'}
                 className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
                   phase === 'player'
-                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    ? 'bg-accent hover:bg-accent-dark text-white'
+                    : 'bg-secondary-dark text-text-muted cursor-not-allowed'
                 }`}
               >
                 End Turn
@@ -1612,8 +1612,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   disabled={phase === 'flood' || phase === 'gravitySettle'}
                   className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
                     phase === 'flood' || phase === 'gravitySettle'
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-red-500 hover:bg-red-600 text-white'
+                      ? 'bg-secondary-dark text-text-muted cursor-not-allowed'
+                      : 'bg-primary hover:bg-primary-dark text-white'
                   }`}
                 >
                   Restart

@@ -28,7 +28,7 @@ const WaxleMobileGameControls = ({
     <div className="md:hidden w-full cursor-pointer">
       {/* Compact Header - Always visible */}
       <div 
-        className="bg-white shadow-md border-b border-secondary-light p-4 transition-all"
+        className="bg-primary-light shadow-md border-b border-secondary p-4 transition-all"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex justify-between items-center">
@@ -39,7 +39,7 @@ const WaxleMobileGameControls = ({
                 <span className="text-xs font-medium text-primary uppercase tracking-wide">NEXT</span>
                 <div className="flex gap-1">
                   {nextRows[0]?.map((letter, idx) => (
-                    <div key={idx} className="w-5 h-5 bg-white rounded border border-secondary-light flex items-center justify-center text-xs font-semibold text-primary">
+                    <div key={idx} className="w-5 h-5 bg-secondary rounded border border-secondary-dark flex items-center justify-center text-xs font-semibold text-primary">
                       {letter}
                     </div>
                   ))}
@@ -51,13 +51,13 @@ const WaxleMobileGameControls = ({
           {/* Game Stats */}
           <div className="flex space-x-2 text-sm items-center">
             <div>
-              <span className="text-gray-500">Score:</span> {score}
+              <span className="text-text-muted">Score:</span> <span className="text-white">{score}</span>
             </div>
             <div>
-              <span className="text-gray-500">Round:</span> {round}
+              <span className="text-text-muted">Round:</span> <span className="text-white">{round}</span>
             </div>
             <div>
-              <span className="text-gray-500">Orbits:</span> {freeOrbitsAvailable || 0}
+              <span className="text-text-muted">Orbits:</span> <span className="text-white">{freeOrbitsAvailable || 0}</span>
             </div>
             
             {/* Expand/Collapse Indicator */}
@@ -81,7 +81,7 @@ const WaxleMobileGameControls = ({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2, type: "tween" }}
-            className="bg-white rounded-lg shadow-md overflow-hidden mb-2"
+            className="bg-secondary-light shadow-lg border border-secondary overflow-hidden mb-2"
           >
             {/* Content */}
             <div className="p-3">
