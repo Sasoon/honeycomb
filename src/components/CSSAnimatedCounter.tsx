@@ -7,13 +7,15 @@ interface CSSAnimatedCounterProps {
   duration?: number;
   formatNumber?: (num: number) => string;
   property?: string; // CSS custom property name
+  delay?: number; // Animation delay in milliseconds
 }
 
 export const CSSAnimatedCounter = ({ 
   value, 
   className,
   duration = 1.0,
-  property = 'counter-value'
+  property = 'counter-value',
+  delay = 0
 }: CSSAnimatedCounterProps) => {
   const counterRef = useRef<HTMLDivElement>(null);
   const prevValueRef = useRef<number>(value);
@@ -22,12 +24,15 @@ export const CSSAnimatedCounter = ({
     if (counterRef.current && value !== prevValueRef.current) {
       const element = counterRef.current;
       
-      // Set the CSS custom property to trigger the animation
-      element.style.setProperty(`--${property}`, value.toString());
+      // Apply delay before starting animation
+      const timeoutId = setTimeout(() => {
+        element.style.setProperty(`--${property}`, value.toString());
+      }, delay);
       
       prevValueRef.current = value;
+      return () => clearTimeout(timeoutId);
     }
-  }, [value, property]);
+  }, [value, property, delay]);
 
   // Generate unique counter name to avoid conflicts
   const counterName = `counter-${property}`;

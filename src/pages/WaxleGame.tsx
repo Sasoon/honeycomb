@@ -763,6 +763,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     duration={1.0}
                     property="score"
                     className="tabular-nums"
+                    delay={0}
                   />
                 </div>
                 <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">Score</div>
@@ -779,6 +780,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     <AnimatedTickingCounter 
                       value={round} 
                       className="min-w-[24px] tabular-nums"
+                      delay={200}
                     />
                   </div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Round</div>
@@ -793,7 +795,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       maxOrbits={2}
                       size={20}
                       className="flex-shrink-0"
-                      animationDelay={0} // Wait for round counter animation to finish
+                      animationDelay={400}
                     />
                     <span>{freeOrbitsAvailable || 0}</span>
                   </div>
@@ -1586,7 +1588,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               className={`grid-container relative ${phase === 'flood' ? 'flood-phase' : ''}`}
               style={{ 
                 position: 'absolute',
-                top: '50%',
+                // On mobile, account for mobile controls height (68px) + header (68px) = 136px total offset  
+                top: window.innerWidth < 768 ? 'calc(50% + 34px)' : '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 display: 'flex',

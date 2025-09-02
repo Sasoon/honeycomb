@@ -149,10 +149,10 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
               {/* Navigation with staggered animations */}
               <nav className="flex flex-col space-y-3">
                 {[
-                  { to: '/classic', label: 'Classic', icon: '🎯', isActive: isActive('/classic') || isActive('/') },
-                  { to: '/daily', label: 'Daily', icon: '📅', isActive: isActive('/daily') },
-                  { to: '/leaderboard', label: 'Leaderboard', icon: '🏆', isActive: isActive('/leaderboard') },
-                  { to: '/how-to-play', label: 'Tutorial', icon: '❓', isActive: isActive('/how-to-play') }
+                  { to: '/classic', label: 'Classic', isActive: isActive('/classic') || isActive('/') },
+                  { to: '/daily', label: 'Daily', isActive: isActive('/daily') },
+                  { to: '/leaderboard', label: 'Leaderboard', isActive: isActive('/leaderboard') },
+                  { to: '/how-to-play', label: 'Tutorial', isActive: isActive('/how-to-play') }
                 ].map((item, index) => (
                   <motion.div
                     key={item.to}
@@ -182,13 +182,6 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
                       )}
                       onClick={onClose}
                     >
-                      <span className={cn(
-                        "text-lg transition-all duration-300",
-                        item.isActive && "drop-shadow-sm",
-                        !item.isActive && "group-hover:scale-110"
-                      )}>
-                        {item.icon}
-                      </span>
                       <span className={cn(
                         "transition-all duration-300 relative z-10",
                         item.isActive && "drop-shadow-sm font-semibold",

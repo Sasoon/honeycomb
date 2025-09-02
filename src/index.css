@@ -52,7 +52,7 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 16px; /* Explicit base for rem calculations */
-  --header-height: 52px; /* Header with py-4 (16px padding) + content height */
+  --header-height: 68px; /* Header with py-4 (32px padding) + content height (36px) */
   
   /* Standardized spacing system - 8px base grid */
   --spacing-section: 2rem; /* 32px - section spacing */

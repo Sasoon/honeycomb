@@ -4,12 +4,14 @@ interface AnimatedTickingCounterProps {
   value: number;
   className?: string;
   formatNumber?: (num: number) => string;
+  delay?: number; // Animation delay in milliseconds
 }
 
 export const AnimatedTickingCounter = ({ 
   value, 
   className,
-  formatNumber = (num) => num.toString()
+  formatNumber = (num) => num.toString(),
+  delay = 0
 }: AnimatedTickingCounterProps) => {
   return (
     <div className={className}>
@@ -21,9 +23,10 @@ export const AnimatedTickingCounter = ({
           exit={{ y: -20, opacity: 0 }}
           transition={{
             type: "spring",
-            stiffness: 800,
-            damping: 25,
-            duration: 0.1
+            stiffness: 1200,
+            damping: 20,
+            duration: 0.05,
+            delay: delay / 1000 // Convert ms to seconds for Framer Motion
           }}
           className="flex items-center justify-center"
         >

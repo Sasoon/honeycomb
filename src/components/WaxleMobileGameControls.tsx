@@ -35,14 +35,15 @@ const WaxleMobileGameControls = ({
       <div 
         className={cn(
           "bg-bg-primary/95 backdrop-blur-sm border-b border-secondary/20",
-          "p-4 shadow-lg shadow-secondary/10",
+          "px-4 shadow-lg shadow-secondary/10",
           "transition-all duration-300 ease-out cursor-pointer",
           "hover:shadow-xl hover:shadow-secondary/20",
-          "active:bg-bg-secondary/50"
+          "active:bg-bg-secondary/50",
+          "h-[68px] flex items-center"
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center w-full">
           <div className="flex items-center space-x-3">
             {/* Next Drop Preview with modern styling */}
             {previewLevel > 0 && nextRows.length > 0 && (
@@ -53,7 +54,7 @@ const WaxleMobileGameControls = ({
               )}>
                 <span className="text-xs font-medium text-amber uppercase tracking-wide">Next</span>
                 <div className="flex gap-1">
-                  {nextRows[0]?.slice(0, 4).map((letter, idx) => (
+                  {nextRows[0]?.map((letter, idx) => (
                     <div key={idx} className={cn(
                       "w-6 h-6 bg-bg-secondary border border-secondary/30",
                       "rounded-lg flex items-center justify-center",
@@ -78,6 +79,7 @@ const WaxleMobileGameControls = ({
                     duration={1.0}
                     property="mobile-score"
                     className="tabular-nums"
+                    delay={0}
                   />
                 </span>
               </div>
@@ -86,6 +88,7 @@ const WaxleMobileGameControls = ({
                   R<AnimatedTickingCounter 
                     value={round} 
                     className="tabular-nums"
+                    delay={200}
                   />
                 </span>
                 <span className="w-1 h-1 bg-secondary/40 rounded-full" />
@@ -95,7 +98,7 @@ const WaxleMobileGameControls = ({
                     maxOrbits={2}
                     size={12}
                     className="flex-shrink-0"
-                    animationDelay={150}
+                    animationDelay={400}
                   />
                   <span className="text-xs">
                     {freeOrbitsAvailable || 0} {(freeOrbitsAvailable || 0) === 1 ? 'Orbit' : 'Orbits'}
