@@ -747,15 +747,15 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               {/* Game stats */}
               <div className="flex justify-between mb-4 md:mb-6">
                 <div>
-                  <div className="text-sm text-secondary">Score</div>
+                  <div className="text-sm text-primary">Score</div>
                   <div className="text-2xl font-bold text-amber">{score}</div>
                 </div>
                 <div>
-                  <div className="text-sm text-secondary">Round</div>
+                  <div className="text-sm text-primary">Round</div>
                   <div className="text-2xl font-bold text-amber">{round}</div>
                 </div>
                 <div>
-                  <div className="text-sm text-secondary">Orbits</div>
+                  <div className="text-sm text-primary">Orbits</div>
                   <div className="text-lg font-bold text-amber">{freeOrbitsAvailable || 0}</div>
                 </div>
               </div>
@@ -798,7 +798,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 {wordsThisRound.length > 0 ? (
                   <div className="space-y-1 max-h-24 overflow-y-auto">
                     {wordsThisRound.slice(-6).reverse().map((word, idx) => (
-                      <div key={idx} className="text-sm text-secondary-dark font-mono">
+                      <div key={idx} className="text-sm text-primary-dark font-mono">
                         {word}
                       </div>
                     ))}

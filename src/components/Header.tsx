@@ -17,7 +17,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-primary py-4 px-3 shadow-md sticky top-0 z-40">
+    <header className="bg-accent-light py-4 px-3 shadow-md sticky top-0 z-40">
       <div>
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
@@ -55,7 +55,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/classic" 
                 className={`${isActive('/classic') || isActive('/') 
-                  ? 'bg-amber text-white' 
+                  ? 'bg-accent-dark text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Classic
@@ -63,7 +63,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/daily" 
                 className={`${isActive('/daily') 
-                  ? 'bg-amber text-white' 
+                  ? 'bg-accent-dark text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Daily
@@ -71,7 +71,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/leaderboard" 
                 className={`${isActive('/leaderboard') 
-                  ? 'bg-amber text-white' 
+                  ? 'bg-accent-dark text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Leaderboard
@@ -79,7 +79,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/how-to-play" 
                 className={`${isActive('/how-to-play') 
-                  ? 'bg-amber text-white' 
+                  ? 'bg-accent-dark text-white' 
                   : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
               >
                 Tutorial

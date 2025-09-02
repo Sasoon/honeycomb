@@ -188,11 +188,11 @@ const WaxleGameOverModal = ({
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-accent-light rounded-lg p-4">
                   <div className="text-2xl font-bold text-amber">{score}</div>
-                  <div className="text-sm text-secondary">Final Score</div>
+                  <div className="text-sm text-primary">Final Score</div>
                 </div>
                 <div className="bg-success-light rounded-lg p-4">
                   <div className="text-2xl font-bold text-amber">{totalWords}</div>
-                  <div className="text-sm text-secondary">Words Found</div>
+                  <div className="text-sm text-primary">Words Found</div>
                 </div>
                 <div className="bg-secondary rounded-lg p-4">
                   <div className="text-2xl font-bold text-white">{round}</div>
@@ -202,7 +202,7 @@ const WaxleGameOverModal = ({
                   <div className="text-lg font-bold text-primary-dark truncate" title={longestWord}>
                     {longestWord || 'N/A'}
                   </div>
-                  <div className="text-sm text-secondary">Longest Word</div>
+                  <div className="text-sm text-primary">Longest Word</div>
                 </div>
               </div>
 
