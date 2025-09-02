@@ -783,74 +783,80 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               </div>
             </div>
 
-            {/* Mobile-style Next Drop for Desktop */}
+            {/* Next Drop with Border-Intersecting Labels */}
             {previewLevel > 0 && nextRows.length > 0 && (
-              <div className="space-y-3">
-                <div className={cn(
-                  "flex items-center gap-2",
-                  "bg-amber/10 border border-amber/20",
-                  "rounded-xl px-3 py-2"
-                )}>
-                  <span className="text-xs font-medium text-amber uppercase tracking-wide">Next</span>
-                  <div className="flex gap-1">
-                    {nextRows[0]?.map((letter, idx) => (
-                      <div key={idx} className={cn(
-                        "w-6 h-6 bg-bg-secondary border border-secondary/30",
-                        "rounded-lg flex items-center justify-center",
-                        "text-xs font-semibold text-text-primary"
-                      )}>
-                        {letter}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {previewLevel > 1 && nextRows[1] && (
+              <div className="space-y-4">
+                <div className="relative">
                   <div className={cn(
-                    "flex items-center gap-2 opacity-60",
-                    "bg-secondary/5 border border-secondary/10",
-                    "rounded-xl px-3 py-2"
+                    "bg-amber/10 border border-amber/20 rounded-xl p-3"
                   )}>
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wide">Then</span>
-                    <div className="flex gap-1">
-                      {nextRows[1]?.map((letter, idx) => (
+                    <div className="flex items-center justify-center gap-1">
+                      {nextRows[0]?.map((letter, idx) => (
                         <div key={idx} className={cn(
-                          "w-5 h-5 bg-secondary/10 border border-secondary/20",
-                          "rounded flex items-center justify-center",
-                          "text-xs font-medium text-text-secondary"
+                          "w-7 h-7 bg-bg-secondary border border-secondary/30",
+                          "rounded-lg flex items-center justify-center",
+                          "text-xs font-semibold text-text-primary"
                         )}>
                           {letter}
                         </div>
                       ))}
                     </div>
                   </div>
+                  <div className="absolute -top-3 left-4">
+                    <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
+                      Next
+                    </span>
+                  </div>
+                </div>
+                {previewLevel > 1 && nextRows[1] && (
+                  <div className="relative">
+                    <div className={cn(
+                      "bg-secondary/5 border border-secondary/10 rounded-xl p-3 pt-5 opacity-60"
+                    )}>
+                      <div className="flex items-center justify-center gap-1">
+                        {nextRows[1]?.map((letter, idx) => (
+                          <div key={idx} className={cn(
+                            "w-5 h-5 bg-secondary/10 border border-secondary/20",
+                            "rounded flex items-center justify-center",
+                            "text-xs font-medium text-text-secondary"
+                          )}>
+                            {letter}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="absolute -top-3 left-4">
+                      <span className="bg-bg-primary px-2 text-xs font-medium text-text-muted uppercase tracking-wide">
+                        Then
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Compact Current Word Display */}
+            {/* Current Word with Border-Intersecting Label */}
             {currentWord && (
-              <div className="space-y-2">
-                <span className="text-xs font-medium text-amber uppercase tracking-wide">Current</span>
+              <div className="relative">
                 <div className={cn(
                   "text-lg font-mono text-amber font-bold text-center",
-                  "bg-amber/10 border border-amber/30 rounded-xl py-2 px-3"
+                  "bg-amber/10 border border-amber/30 rounded-xl p-3"
                 )}>
                   {currentWord}
+                </div>
+                <div className="absolute -top-3 left-4">
+                  <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
+                    Current
+                  </span>
                 </div>
               </div>
             )}
 
-            {/* Compact Words Found */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-success uppercase tracking-wide">Found</span>
-                <div className="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">
-                  {wordsThisRound.length}
-                </div>
-              </div>
+            {/* Words Found with Border-Intersecting Label */}
+            <div className="relative">
               <div className={cn(
                 "bg-success/10 border border-success/20",
-                "rounded-xl p-3"
+                "rounded-xl p-4 pt-6"
               )}>
                 {wordsThisRound.length > 0 ? (
                   <div className="space-y-1 max-h-28 overflow-y-auto">
@@ -873,6 +879,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     <div className="text-xs text-text-muted italic">No words found yet</div>
                   </div>
                 )}
+              </div>
+              <div className="absolute -top-3 left-4 flex items-center gap-2">
+                <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
+                  Found ({wordsThisRound.length})
+                </span>
               </div>
             </div>
           </div>
