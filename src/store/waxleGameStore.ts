@@ -29,7 +29,7 @@ interface WaxleGameState {
     score: number;
     round: number;
     gravityMoves?: Map<string, string>; // Optional map of post-score moves (to -> from)
-    floodPaths?: Record<string, string[]>; // Paths for flood tile animations
+    floodPaths?: Record<string, { path: string[]; batch: number }>; // Paths for flood tile animations
     tilesHiddenForAnimation?: string[]; // Tiles that should be hidden during animation
     // Free utility actions
     freeMoveAvailable?: boolean;
