@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 
 type MobileSidebarProps = {
@@ -10,8 +11,24 @@ type MobileSidebarProps = {
 const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
   const location = useLocation();
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(52); // Default fallback
   
   const isActive = (path: string) => location.pathname === path;
+  
+  // Calculate actual header height on mount
+  useEffect(() => {
+    const calculateHeaderHeight = () => {
+      const headerElement = document.querySelector('header');
+      if (headerElement) {
+        const height = headerElement.getBoundingClientRect().height;
+        setHeaderHeight(Math.round(height));
+      }
+    };
+    
+    calculateHeaderHeight();
+    window.addEventListener('resize', calculateHeaderHeight);
+    return () => window.removeEventListener('resize', calculateHeaderHeight);
+  }, []);
   
   // Handle clicking outside the sidebar to close it on mobile
   useEffect(() => {
@@ -79,108 +96,129 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
   
   return (
     <>
-      {/* Fixed backdrop - only show when menu is open */}
-      {isOpen && (
-        <div 
-          className={cn(
-            "fixed inset-0 z-40 md:hidden",
-            "backdrop-blur-sm bg-black/40 transition-opacity duration-300"
-          )}
-          style={{ top: 'var(--header-height)' }}
-          onClick={onClose}
-        />
-      )}
-      
-      {/* Modern sliding sidebar - hidden when closed */}
-      <div 
-        ref={sidebarRef}
-        className={cn(
-          "mobile-sidebar transition-all duration-300 ease-out",
-          "bg-bg-primary/95 backdrop-blur-xl shadow-2xl shadow-secondary/20", 
-          "fixed left-0 flex flex-col overflow-hidden md:hidden z-50",
-          "border-r border-secondary/20",
-          isOpen ? "w-80 block" : "w-0 hidden"
-        )}
-        style={{
-          top: 'var(--header-height)',
-          height: 'calc(100% - var(--header-height))'
-        }}
-      >
-        {/* Sidebar content - only render when open */}
+      {/* Animated backdrop */}
+      <AnimatePresence>
         {isOpen && (
-          <div className="flex flex-col h-full py-6 px-4 overflow-y-auto">
-            {/* Navigation with modern styling */}
-            <nav className="flex flex-col space-y-3">
-            <Link 
-              to="/classic" 
-              className={cn(
-                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
-                "flex items-center space-x-3",
-                isActive('/classic') || isActive('/') 
-                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
-                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
-              )}
-              onClick={onClose}
-            >
-              <span>🎯</span>
-              <span>Classic</span>
-            </Link>
-            <Link 
-              to="/daily" 
-              className={cn(
-                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
-                "flex items-center space-x-3",
-                isActive('/daily')
-                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
-                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
-              )}
-              onClick={onClose}
-            >
-              <span>📅</span>
-              <span>Daily</span>
-            </Link>
-            <Link 
-              to="/leaderboard" 
-              className={cn(
-                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
-                "flex items-center space-x-3",
-                isActive('/leaderboard')
-                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
-                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
-              )}
-              onClick={onClose}
-            >
-              <span>🏆</span>
-              <span>Leaderboard</span>
-            </Link>
-            <Link 
-              to="/how-to-play" 
-              className={cn(
-                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
-                "flex items-center space-x-3",
-                isActive('/how-to-play')
-                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
-                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
-              )}
-              onClick={onClose}
-            >
-              <span>❓</span>
-              <span>Tutorial</span>
-            </Link>
-          </nav>
-          
-          {/* Bottom spacer */}
-          <div className="flex-1" />
-          
-          {/* Optional footer content */}
-          <div className="pt-6 border-t border-secondary/20">
-            <p className="text-xs text-text-muted text-center">
-              Swipe left to close
-            </p>
-          </div>
-        </div>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className={cn(
+              "fixed inset-0 z-40 md:hidden",
+              "backdrop-blur-sm bg-black/20"
+            )}
+            style={{ top: `${headerHeight}px` }}
+            onClick={onClose}
+          />
         )}
-      </div>
+      </AnimatePresence>
+      
+      {/* Animated sliding sidebar */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            ref={sidebarRef}
+            initial={{ x: -320, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -320, opacity: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 30,
+              duration: 0.3 
+            }}
+            className={cn(
+              "mobile-sidebar bg-bg-primary/95 backdrop-blur-xl", 
+              "fixed left-0 w-80 flex flex-col overflow-hidden md:hidden z-50",
+              "shadow-2xl shadow-secondary/20",
+              "drop-shadow-lg"
+            )}
+            style={{
+              top: `${headerHeight}px`,
+              height: `calc(100vh - ${headerHeight}px)`
+            }}
+          >
+            {/* Sidebar content with staggered animations */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1, duration: 0.2 }}
+              className="flex flex-col h-full py-6 px-4 overflow-y-auto"
+            >
+              {/* Navigation with staggered animations */}
+              <nav className="flex flex-col space-y-3">
+                {[
+                  { to: '/classic', label: 'Classic', icon: '🎯', isActive: isActive('/classic') || isActive('/') },
+                  { to: '/daily', label: 'Daily', icon: '📅', isActive: isActive('/daily') },
+                  { to: '/leaderboard', label: 'Leaderboard', icon: '🏆', isActive: isActive('/leaderboard') },
+                  { to: '/how-to-play', label: 'Tutorial', icon: '❓', isActive: isActive('/how-to-play') }
+                ].map((item, index) => (
+                  <motion.div
+                    key={item.to}
+                    initial={{ x: -30, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ 
+                      delay: 0.1 + index * 0.05, 
+                      duration: 0.2,
+                      ease: "easeOut"
+                    }}
+                  >
+                    <Link 
+                      to={item.to} 
+                      className={cn(
+                        "px-4 py-3 rounded-xl font-medium transition-all duration-300",
+                        "flex items-center space-x-3 relative group",
+                        "border border-transparent",
+                        item.isActive
+                          ? 'bg-accent-dark text-white shadow-lg shadow-accent/20'
+                          : cn(
+                              'text-text-primary',
+                              'hover:bg-gradient-to-r hover:from-secondary/5 hover:via-secondary/10 hover:to-secondary/5',
+                              'hover:border-secondary/20 hover:shadow-lg hover:shadow-secondary/10',
+                              'hover:text-text-primary hover:scale-[1.02]',
+                              'active:scale-[0.98] active:shadow-sm'
+                            )
+                      )}
+                      onClick={onClose}
+                    >
+                      <span className={cn(
+                        "text-lg transition-all duration-300",
+                        item.isActive && "drop-shadow-sm",
+                        !item.isActive && "group-hover:scale-110"
+                      )}>
+                        {item.icon}
+                      </span>
+                      <span className={cn(
+                        "transition-all duration-300 relative z-10",
+                        item.isActive && "drop-shadow-sm font-semibold",
+                        !item.isActive && "group-hover:translate-x-0.5"
+                      )}>
+                        {item.label}
+                      </span>
+                    </Link>
+                  </motion.div>
+                ))}
+              </nav>
+              
+              {/* Bottom spacer */}
+              <div className="flex-1" />
+              
+              {/* Optional footer content */}
+              <motion.div 
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3, duration: 0.2 }}
+                className="pt-6 border-t border-secondary/20"
+              >
+                <p className="text-xs text-text-muted text-center">
+                  Swipe left to close
+                </p>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };

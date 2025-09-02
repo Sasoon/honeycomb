@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { CSSAnimatedCounter } from './CSSAnimatedCounter';
+import { AnimatedTickingCounter } from './AnimatedTickingCounter';
+import { DynamicZapIcon } from './DynamicZapIcon';
 
 type WaxleMobileGameControlsProps = {
   score: number;
@@ -70,13 +73,34 @@ const WaxleMobileGameControls = ({
               <div className="flex items-center space-x-1">
                 <span className="text-text-secondary">Score</span>
                 <span className="font-semibold text-amber bg-amber/10 px-2 py-0.5 rounded-full text-xs">
-                  {score}
+                  <CSSAnimatedCounter 
+                    value={score} 
+                    duration={1.0}
+                    property="mobile-score"
+                    className="tabular-nums"
+                  />
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <span className="text-text-secondary">R{round}</span>
+                <span className="text-text-secondary flex items-center">
+                  R<AnimatedTickingCounter 
+                    value={round} 
+                    className="tabular-nums"
+                  />
+                </span>
                 <span className="w-1 h-1 bg-secondary/40 rounded-full" />
-                <span className="text-text-secondary">{freeOrbitsAvailable || 0}⚡</span>
+                <div className="flex items-center space-x-1 text-text-secondary">
+                  <DynamicZapIcon 
+                    orbitsAvailable={freeOrbitsAvailable || 0}
+                    maxOrbits={2}
+                    size={12}
+                    className="flex-shrink-0"
+                    animationDelay={150}
+                  />
+                  <span className="text-xs">
+                    {freeOrbitsAvailable || 0} {(freeOrbitsAvailable || 0) === 1 ? 'Orbit' : 'Orbits'}
+                  </span>
+                </div>
               </div>
             </div>
             
