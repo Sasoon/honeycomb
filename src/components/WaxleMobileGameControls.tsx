@@ -33,7 +33,7 @@ const WaxleMobileGameControls = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="md:hidden w-full">
+    <div className="w-full">
       {/* Flush Compact Header */}
       <div 
         className={cn(
@@ -58,12 +58,6 @@ const WaxleMobileGameControls = ({
                 nextRows[0]?.length >= 6 ? "gap-1 px-2" : "gap-2 px-3"
               )}>
                 {/* Show abbreviated label with many tiles, full label otherwise */}
-                <span className={cn(
-                  "font-medium text-amber uppercase tracking-wide",
-                  nextRows[0]?.length >= 6 ? "text-[10px] hidden xs:inline" : "text-xs"
-                )}>
-                  {nextRows[0]?.length >= 6 ? "N" : "Next"}
-                </span>
                 <div className={cn(
                   "flex",
                   // Dynamic gap based on tile count

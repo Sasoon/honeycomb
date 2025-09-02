@@ -37,6 +37,7 @@ export interface HexGridProps {
   lockedTiles?: string[]; // Array of locked tile IDs
   lockAnimatingTiles?: string[]; // Array of tile IDs currently animating
   onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle - deprecated, now handled in overlay
+  enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
 }
 
 
@@ -52,6 +53,7 @@ const CellView = memo(function CellView({
   // showBorder, // Disabled - borders removed from selected tiles
   // borderColor, // Disabled - borders removed from selected tiles
   // drag handlers removed
+  enableLayout = true,
 }: {
   cell: HexCell;
   onClick: (cell: HexCell) => void;
@@ -64,7 +66,9 @@ const CellView = memo(function CellView({
   // showBorder?: boolean; // Disabled - borders removed from selected tiles
   // borderColor?: string; // Disabled - borders removed from selected tiles
   // drag handlers removed
+  enableLayout?: boolean;
 }) {
+  const layoutProps = enableLayout ? { layout: true } : {};
   return (
     <motion.div
       key={cell.id}
@@ -76,7 +80,7 @@ const CellView = memo(function CellView({
       className={`hex-grid__item ${containerClass}`}
       onClick={() => onClick(cell)}
       // drag handlers removed
-      layout
+      {...layoutProps}
       style={{ position: 'relative' }}
     >
       <div className="hex-grid__content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -133,6 +137,7 @@ const HexGrid = ({
   hiddenLetterCellIds = [],
   lockedTiles = [],
   lockAnimatingTiles = [],
+  enableLayout = true,
   // onTileLockToggle,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
@@ -339,6 +344,7 @@ const HexGrid = ({
                     isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
                     isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
                     isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
+                    enableLayout={enableLayout}
                     // showBorder={styles.showBorder} // Disabled - borders removed
                     // borderColor={styles.borderColor} // Disabled - borders removed
                     // drag handlers removed

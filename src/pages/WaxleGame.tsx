@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Hash, Undo2 } from 'lucide-react';
+import { Hash } from 'lucide-react';
 import { CSSAnimatedCounter } from '../components/CSSAnimatedCounter';
 import { AnimatedTickingCounter } from '../components/AnimatedTickingCounter';
 import { DynamicZapIcon } from '../components/DynamicZapIcon';
@@ -16,6 +16,7 @@ import { haptics } from '../lib/haptics';
 import toastService from '../lib/toastService';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
 import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
+import GameControls from '../components/GameControls';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
 // Flood animation timing constants
@@ -248,6 +249,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [, setCurrentDragAngle] = useState<number>(0);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
+  const [showMobileControls, setShowMobileControls] = useState(false);
   const operationInProgressRef = useRef<boolean>(false);
   const orbitPlanRef = useRef<{
     pivotId: string;
@@ -703,6 +708,40 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     };
   }, [phase, grid, previousGrid, cellSize.h, startPlayerPhase, gravityMoves, floodPaths, endRound]);
 
+  // Screen size detection with staggered animation orchestration
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const newIsDesktop = window.innerWidth >= 768;
+      
+      // Initialize on first load
+      if (showDesktopSidebar === false && showMobileControls === false) {
+        setIsDesktop(newIsDesktop);
+        setShowDesktopSidebar(newIsDesktop);
+        setShowMobileControls(!newIsDesktop);
+        return;
+      }
+      
+      // Handle transitions
+      if (newIsDesktop !== isDesktop && !isTransitioning) {
+        setIsTransitioning(true);
+        
+        if (newIsDesktop) {
+          // Mobile → Desktop: Hide mobile controls; sidebar will be shown after exit animation completes
+          setShowMobileControls(false);
+        } else {
+          // Desktop → Mobile: Hide sidebar; mobile controls will be shown after exit animation completes  
+          setShowDesktopSidebar(false);
+        }
+        
+        setIsDesktop(newIsDesktop);
+      }
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, [isDesktop, isTransitioning, showDesktopSidebar, showMobileControls]);
+
   const hasSelection = currentWord.length > 0;
   const validationState = currentWord.length >= 3 ? isWordValid : undefined;
 
@@ -739,17 +778,81 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
-    <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height">
-      <div className="flex flex-col md:flex-row h-full">
-        {/* Modern Desktop Game Sidebar */}
-        <div 
-          ref={sidebarRef}
-          className={cn(
-            "hidden md:flex game-sidebar w-72 flex-col overflow-hidden",
-            "bg-bg-primary/95 backdrop-blur-sm border-r border-secondary/20",
-            "shadow-2xl shadow-secondary/20"
-          )}
+    <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-all duration-300 ease-in-out relative">
+      {/* Mobile Game Controls - Outside flex container to prevent layout shifts */}
+      <div className={cn("absolute top-0 left-0 right-0 z-10", isDesktop ? "hidden" : "block")}>
+        <AnimatePresence
+          onExitComplete={() => {
+            if (isDesktop) {
+              setShowDesktopSidebar(true);
+              setIsTransitioning(false);
+            }
+          }}
         >
+          {showMobileControls && (
+            <motion.div
+              key="mobile-controls"
+              initial={{ y: -80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -80, opacity: 0 }}
+              transition={{ 
+                type: "spring",
+                stiffness: 300,
+                damping: 30,
+                mass: 0.6
+              }}
+              style={{ willChange: 'transform' }}
+            >
+              <WaxleMobileGameControls
+                score={score}
+                round={round}
+                wordsThisRound={wordsThisRound.length}
+                wordsThisRoundList={wordsThisRound}
+                currentWord={currentWord}
+                freeOrbitsAvailable={freeOrbitsAvailable || 0}
+                nextRows={nextRows}
+                previewLevel={previewLevel}
+                isWordValid={validationState === true}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      
+      <div className={cn(
+        "flex h-full transition-all duration-300 ease-in-out",
+        (isDesktop || showDesktopSidebar || isTransitioning) ? "flex-row" : "flex-col"
+      )}>
+        {/* Modern Desktop Game Sidebar with Optimized Animation */}
+        <AnimatePresence
+          onExitComplete={() => {
+            // Sidebar finished exiting → we are in mobile view now.
+            if (!isDesktop) {
+              setShowMobileControls(true);
+              setIsTransitioning(false);
+            }
+          }}
+        >
+          {showDesktopSidebar && (
+            <motion.div
+              ref={sidebarRef}
+              key="desktop-sidebar"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: '18rem', opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ 
+                type: "spring",
+                stiffness: 300,
+                damping: 30,
+                mass: 0.8
+              }}
+              style={{ willChange: 'transform', overflow: 'hidden' }}
+              className={cn(
+                "flex game-sidebar flex-col",
+                "bg-bg-primary/95 backdrop-blur-sm border-r border-secondary/20",
+                "shadow-2xl shadow-secondary/20"
+              )}
+            >
           {/* Modern Sidebar content */}
           <div className="flex flex-col h-full p-6 overflow-y-auto space-y-6">
             
@@ -919,24 +1022,12 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             </div>
 
           </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main content */}
         <div className="flex-1 h-full overflow-hidden relative">
-          {/* Mobile Game Controls */}
-          <div className="absolute top-0 left-0 right-0 z-10">
-            <WaxleMobileGameControls
-              score={score}
-              round={round}
-              wordsThisRound={wordsThisRound.length}
-              wordsThisRoundList={wordsThisRound}
-              currentWord={currentWord}
-              freeOrbitsAvailable={freeOrbitsAvailable || 0}
-              nextRows={nextRows}
-              previewLevel={previewLevel}
-              isWordValid={validationState === true}
-            />
-          </div>
 
           <div ref={containerRef} className="absolute inset-0 px-2">
             {/* Falling overlays */}
@@ -1598,11 +1689,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
             {/* Grid and UI Buttons container */}
             <div 
-              className={`grid-container relative ${phase === 'flood' ? 'flood-phase' : ''}`}
+              className={`grid-container relative transition-all duration-300 ease-in-out ${phase === 'flood' ? 'flood-phase' : ''}`}
               style={{ 
                 position: 'absolute',
                 // On mobile, account for mobile controls height (68px) + header (68px) = 136px total offset  
-                top: window.innerWidth < 768 ? 'calc(50% + 34px)' : '50%',
+                top: !isDesktop ? 'calc(50% + 34px)' : '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 display: 'flex',
@@ -1624,6 +1715,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 lockedTiles={lockedTiles}
                 lockAnimatingTiles={lockAnimatingTiles}
                 onTileLockToggle={toggleTileLock}
+                enableLayout={!isTransitioning}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,
                   ...(isDragging && selectedSingle ? 
@@ -1633,68 +1725,18 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 ]}
               />
               
-              {/* UI Buttons with consistent site styling */}
-              <div className="flex gap-3 flex-wrap items-center justify-center">
-                <button 
-                  onClick={() => submitWord()} 
-                  disabled={currentWord.length < 3 || phase !== 'player' || validationState !== true} 
-                  className={cn(
-                    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50",
-                    "h-10 px-6",
-                    phase === 'player' && currentWord.length >= 3 && validationState === true
-                      ? "bg-amber-light hover:bg-amber-dark text-white hover:shadow-lg hover:shadow-amber/20"
-                      : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
-                  )}
-                >
-                  Submit
-                </button>
-                <button 
-                  onClick={() => endPlayerPhase()} 
-                  disabled={phase !== 'player'}
-                  className={cn(
-                    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                    "h-10 px-6",
-                    phase === 'player'
-                      ? "bg-accent hover:bg-accent-dark text-white hover:shadow-lg hover:shadow-accent/20"
-                      : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
-                  )}
-                >
-                  End Turn
-                </button>
-                <button 
-                  onClick={() => undoLastAction()} 
-                  disabled={!canUndo()}
-                  className={cn(
-                    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/50",
-                    "h-10 px-6",
-                    canUndo()
-                      ? "bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 text-text-primary hover:shadow-lg hover:shadow-secondary/10"
-                      : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
-                  )}
-                >
-                  <Undo2 className="w-4 h-4" />
-                  Undo
-                </button>
-                {!isDailyChallenge && (
-                  <button 
-                    onClick={handleRestart} 
-                    disabled={phase === 'flood' || phase === 'gravitySettle'}
-                    className={cn(
-                      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/50",
-                      "h-10 px-6",
-                      phase === 'flood' || phase === 'gravitySettle'
-                        ? "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
-                        : "bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 text-text-primary hover:shadow-lg hover:shadow-secondary/10"
-                    )}
-                  >
-                    Restart
-                  </button>
-                )}
-              </div>
+              {/* Unified Game Controls */}
+              <GameControls
+                currentWord={currentWord}
+                phase={phase}
+                validationState={validationState}
+                onSubmitWord={() => submitWord()}
+                onEndTurn={() => endPlayerPhase()}
+                onUndo={() => undoLastAction()}
+                onRestart={!isDailyChallenge ? handleRestart : undefined}
+                canUndo={canUndo()}
+                isDailyChallenge={isDailyChallenge}
+              />
             </div>
 
             </div>
