@@ -507,6 +507,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         
                  // Prevent top-row overlap: ensure one overlay per top-row entry at t=0
         const usedTopEntries = new Set<string>();
+        const topRowStartJitter = new Map<string, number>();
         const tilePaths = newlyFilled.map(cell => {
           // Use the exact path from the flood logic
           const p = floodPaths && floodPaths[cell.id];
@@ -613,23 +614,26 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         });
 
         // --------- SCHEDULING ----------------------------------------------------
-        let runningStart = 0;
+        let cumulativeStart = 0;
         const batchesSorted = [...batches.entries()].sort((a,b)=>a[0]-b[0]);
 
         let maxFinalDelay = 0;
 
         batchesSorted.forEach(([batchIdx, batchPaths])=>{
+          const batchStart = cumulativeStart;
+
           (batchPaths as any).forEach(({ cell, pathCenters }: any)=>{
             const offset = batchOffsets.get(cell.id) ?? 0;
-            const baseDelay = runningStart + offset*perStep;
+            const baseDelay = batchStart + offset*perStep;
 
             const initial = pathCenters[0].center;
-            const spawnOverlay = () => setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y, pulse: 0, rX: 0, rY: 0 }]);
-            if(batchIdx===0){
-              spawnOverlay();
+            const fadeDelay = batchIdx === 0 ? 0 : batchStart;
+            const createOv = () => setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y, pulse: 0, rX: 0, rY: 0 }]);
+            if (fadeDelay === 0) {
+              createOv();
             } else {
-              const spawnT = window.setTimeout(spawnOverlay, runningStart);
-              timersRef.current.push(spawnT);
+              const ovT = window.setTimeout(createOv, fadeDelay);
+              timersRef.current.push(ovT);
             }
 
             pathCenters.forEach((pc: any, stepIndex: number) => {
@@ -665,7 +669,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             timersRef.current.push(doneT);
           });
 
-          runningStart += (perBatchMaxDelay.get(batchIdx) ?? 0) + 160; // same buffer
+          cumulativeStart += (perBatchMaxDelay.get(batchIdx) ?? 0) + 160; // move to next batch start time
         });
 
         animationDoneSignal = () => {
