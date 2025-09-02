@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
-import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hash } from 'lucide-react';
 import { CSSAnimatedCounter } from '../components/CSSAnimatedCounter';
@@ -755,6 +754,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
   
 
+  const [isSettling, setIsSettling] = useState(false);
+
   const handleRestart = () => {
     // Prevent restart during daily challenges
     if (isDailyChallenge) {
@@ -772,10 +773,13 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     operationInProgressRef.current = false;
     resetGame();
     initializeGame();
+    setIsSettling(true);
+    window.setTimeout(() => setIsSettling(false), 700);
   };
   
 
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
+  const [isRestartHoldActive, setIsRestartHoldActive] = useState(false);
 
   return (
     <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-all duration-300 ease-in-out relative">
@@ -1716,6 +1720,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 lockAnimatingTiles={lockAnimatingTiles}
                 onTileLockToggle={toggleTileLock}
                 enableLayout={!isTransitioning}
+                isRestartHoldActive={isRestartHoldActive}
+                isSettling={isSettling}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,
                   ...(isDragging && selectedSingle ? 
@@ -1734,6 +1740,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 onEndTurn={() => endPlayerPhase()}
                 onUndo={() => undoLastAction()}
                 onRestart={!isDailyChallenge ? handleRestart : undefined}
+                onRestartHoldChange={setIsRestartHoldActive}
                 canUndo={canUndo()}
                 isDailyChallenge={isDailyChallenge}
               />
@@ -1741,38 +1748,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
             </div>
 
-          {/* Toast container - positioned based on modal state */}
-          <div 
-            className="absolute inset-x-0 pointer-events-none" 
-            style={{ 
-              top: phase === 'gameOver' ? '50%' : '75vh', /* Center for modal toasts, below UI for gameplay toasts */
-              transform: 'translateY(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: phase === 'gameOver' ? 10000 : 9999,
-            }}
-          >
-            <Toaster 
-              containerStyle={{
-                position: 'relative',
-                width: '100vw',
-              }}
-              toastOptions={{
-                style: {
-                  textAlign: 'center',
-                  whiteSpace: 'nowrap',
-                  minWidth: 'auto',
-                  maxWidth: 'none',
-                  width: 'auto',
-                  padding: '12px 20px',
-                }
-              }}
-            />
-          </div>
-        {/* <footer className="p-4 sm:p-6 text-center text-sm text-gray-600">
-          © {new Date().getFullYear()} WAXLE - A Falling Tile Word Game
-        </footer>  */}
+          {/* Toasts temporarily disabled */}
         </div>
       </div>
 

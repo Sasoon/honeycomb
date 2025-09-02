@@ -38,6 +38,8 @@ export interface HexGridProps {
   lockAnimatingTiles?: string[]; // Array of tile IDs currently animating
   onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle - deprecated, now handled in overlay
   enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
+  isRestartHoldActive?: boolean; // When true, tiles should shake to indicate pending restart
+  isSettling?: boolean; // When true, tiles ease-out settle on new game
 }
 
 
@@ -54,6 +56,8 @@ const CellView = memo(function CellView({
   // borderColor, // Disabled - borders removed from selected tiles
   // drag handlers removed
   enableLayout = true,
+  isRestartHoldActive,
+  isSettling,
 }: {
   cell: HexCell;
   onClick: (cell: HexCell) => void;
@@ -67,8 +71,14 @@ const CellView = memo(function CellView({
   // borderColor?: string; // Disabled - borders removed from selected tiles
   // drag handlers removed
   enableLayout?: boolean;
+  isRestartHoldActive?: boolean;
+  isSettling?: boolean;
 }) {
   const layoutProps = enableLayout ? { layout: true } : {};
+  const shakeDelay = ((cell.position.row * 7 + cell.position.col * 3) % 5) * 0.03; // desync
+  const settleDelay = ((cell.position.row * 5 + cell.position.col * 2) % 7) * 0.02;
+  const applyShake = !!isRestartHoldActive;
+  const applySettle = !applyShake && !!isSettling;
   return (
     <motion.div
       key={cell.id}
@@ -77,11 +87,11 @@ const CellView = memo(function CellView({
       data-row={cell.position.row}
       data-col={cell.position.col}
       data-placed-this-turn={cell.placedThisTurn ? 'true' : 'false'}
-      className={`hex-grid__item ${containerClass}`}
+      className={`hex-grid__item ${containerClass} ${applyShake ? 'shake-tile' : ''} ${applySettle ? 'settle-tile' : ''}`}
       onClick={() => onClick(cell)}
       // drag handlers removed
       {...layoutProps}
-      style={{ position: 'relative' }}
+      style={{ position: 'relative', ...(applyShake ? { animationDelay: `${shakeDelay}s` } : {}), ...(applySettle ? { animationDelay: `${settleDelay}s` } : {}) }}
     >
       <div className="hex-grid__content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span className="letter-tile" style={{ fontWeight: 700, fontSize: '1.1rem', opacity: showLetter ? 1 : 0 }}>
@@ -138,6 +148,8 @@ const HexGrid = ({
   lockedTiles = [],
   lockAnimatingTiles = [],
   enableLayout = true,
+  isRestartHoldActive = false,
+  isSettling = false,
   // onTileLockToggle,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
@@ -345,6 +357,8 @@ const HexGrid = ({
                     isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
                     isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
                     enableLayout={enableLayout}
+                    isRestartHoldActive={isRestartHoldActive}
+                    isSettling={isSettling}
                     // showBorder={styles.showBorder} // Disabled - borders removed
                     // borderColor={styles.borderColor} // Disabled - borders removed
                     // drag handlers removed

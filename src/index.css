@@ -1041,3 +1041,40 @@ button {
 }
 
 
+
+/* Restart hold: subtle tile shake */
+@keyframes tileShake {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(-1px, 0) rotate(-0.6deg); }
+  50% { transform: translate(1px, 0) rotate(0.6deg); }
+  75% { transform: translate(-1px, 0) rotate(-0.4deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.shake-tile {
+  animation: tileShake 0.25s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shake-tile { animation: none; }
+}
+
+/* New game settle: ease-out pop and settle */
+@keyframes tileSettle {
+  0% { transform: translateY(-8px) scale(0.98); opacity: 0.0; }
+  60% { transform: translateY(2px) scale(1.02); opacity: 1; }
+  85% { transform: translateY(-1px) scale(0.997); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.settle-tile {
+  animation: tileSettle 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settle-tile { animation: none; }
+}
+
+

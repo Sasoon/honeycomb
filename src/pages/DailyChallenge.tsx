@@ -26,7 +26,6 @@ const DailyChallenge = () => {
   const [isCompleted, setIsCompleted] = useState(false);
   
   const { initializeDailyChallenge, isDailyChallenge } = useWaxleGameStore();
-  const dailyDate = useWaxleGameStore(state => state.dailyGameState.dailyDate);
   const [isPlayingChallenge, setIsPlayingChallenge] = useState(false);
   
   // Load daily seed on component mount

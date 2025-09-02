@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Trophy, Hourglass } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { calculateDisplayWordScore } from '../lib/gameUtils';
 import { CSSAnimatedCounter } from './CSSAnimatedCounter';
@@ -87,8 +87,9 @@ const WaxleMobileGameControls = ({
             // Tighter spacing when showing 6 tiles
             nextRows[0]?.length >= 6 ? "space-x-2" : "space-x-4"
           )}>
+            {/* Full labels for >=sm */}
             <div className={cn(
-              "flex items-center text-sm",
+              "hidden sm:flex items-center text-sm",
               nextRows[0]?.length >= 6 ? "space-x-2" : "space-x-3"
             )}>
               <div className="flex items-center space-x-1">
@@ -126,7 +127,44 @@ const WaxleMobileGameControls = ({
                 </div>
               </div>
             </div>
-            
+
+            {/* Icon-only for <sm */}
+            <div className="flex sm:hidden items-center space-x-3 text-text-secondary">
+              <div className="flex items-center space-x-1">
+                <Trophy size={14} className="text-amber" />
+                <span className="font-semibold tabular-nums text-xs">
+                  <CSSAnimatedCounter 
+                    value={score}
+                    duration={1.0}
+                    property="mobile-score-icon"
+                    className="tabular-nums"
+                    delay={0}
+                  />
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Hourglass size={14} className="text-amber" />
+                <span className="tabular-nums text-xs">
+                  <AnimatedTickingCounter 
+                    value={round}
+                    delay={200}
+                    className="tabular-nums"
+                  />
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <DynamicZapIcon 
+                  orbitsAvailable={freeOrbitsAvailable || 0}
+                  maxOrbits={2}
+                  size={14}
+                  className="flex-shrink-0"
+                  animationDelay={400}
+                />
+                <span className="text-xs">
+                  {freeOrbitsAvailable || 0}
+                </span>
+              </div>
+            </div>
             {/* Modern chevron */}
             <div className={cn(
               "p-1 rounded-lg bg-secondary/10 transition-all duration-200",
