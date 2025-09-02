@@ -3,11 +3,12 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Hash } from 'lucide-react';
+import { Hash, Undo2 } from 'lucide-react';
 import { CSSAnimatedCounter } from '../components/CSSAnimatedCounter';
 import { AnimatedTickingCounter } from '../components/AnimatedTickingCounter';
 import { DynamicZapIcon } from '../components/DynamicZapIcon';
 import { cn } from '../lib/utils';
+import { calculateDisplayWordScore } from '../lib/gameUtils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { areCellsAdjacent } from '../lib/waxleGameUtils';
@@ -301,6 +302,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     initializeGame,
     selectTile,
     submitWord,
+    undoLastAction,
+    canUndo,
     endRound,
     startPlayerPhase,
     endPlayerPhase,
@@ -866,6 +869,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   "bg-amber/10 border border-amber/30 rounded-xl p-3"
                 )}>
                   {currentWord}
+                  {currentWord.length >= 3 && validationState === true && (
+                    <span className="text-amber-dark ml-2">
+                      (+{calculateDisplayWordScore(currentWord, round, wordsThisRound.length, currentWord.length)})
+                    </span>
+                  )}
                 </div>
                 <div className="absolute -top-3 left-4">
                   <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
@@ -926,6 +934,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               freeOrbitsAvailable={freeOrbitsAvailable || 0}
               nextRows={nextRows}
               previewLevel={previewLevel}
+              isWordValid={validationState === true}
             />
           </div>
 
@@ -1364,6 +1373,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       return cell;
                     });
 
+                    // Push current state to history before orbit operation
+                    const { pushToHistory } = useWaxleGameStore.getState();
+                    pushToHistory('orbit');
+                    
                     // Decrement orbit count properly  
                     const newOrbitsAvailable = Math.max(0, (currentGameState.freeOrbitsAvailable || 0) - 1);
                     
@@ -1630,11 +1643,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50",
                     "h-10 px-6",
                     phase === 'player' && currentWord.length >= 3 && validationState === true
-                      ? "bg-amber hover:bg-amber-dark text-white hover:shadow-lg hover:shadow-amber/20"
+                      ? "bg-amber-light hover:bg-amber-dark text-white hover:shadow-lg hover:shadow-amber/20"
                       : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
                   )}
                 >
-                  Submit Word
+                  Submit
                 </button>
                 <button 
                   onClick={() => endPlayerPhase()} 
@@ -1649,6 +1662,21 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   )}
                 >
                   End Turn
+                </button>
+                <button 
+                  onClick={() => undoLastAction()} 
+                  disabled={!canUndo()}
+                  className={cn(
+                    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/50",
+                    "h-10 px-6",
+                    canUndo()
+                      ? "bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 text-text-primary hover:shadow-lg hover:shadow-secondary/10"
+                      : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
+                  )}
+                >
+                  <Undo2 className="w-4 h-4" />
+                  Undo
                 </button>
                 {!isDailyChallenge && (
                   <button 

@@ -54,6 +54,22 @@ interface GameModeState {
     dailyDate?: string;
     challengeStartTime?: number;
     seededRNG?: SeededRNG;
+    // Action history for undo functionality
+    actionHistory: Array<{
+        type: 'orbit' | 'word_submit' | 'lock_toggle';
+        previousState: {
+            grid: HexCell[];
+            freeOrbitsAvailable?: number;
+            score: number;
+            wordsThisRound: string[];
+            lockedTiles: string[];
+            selectedTiles: SelectedTile[];
+            currentWord: string;
+            totalWords: number;
+            tilesCleared: number;
+        };
+        timestamp: number;
+    }>;
 }
 
 // WAXLE game state - now contains separate states for Classic and Daily
@@ -96,6 +112,12 @@ interface WaxleGameState {
     // Lock mode actions
     toggleTileLock: (cellId: string) => void;
 
+    // Undo functionality
+    pushToHistory: (actionType: 'orbit' | 'word_submit' | 'lock_toggle') => void;
+    undoLastAction: () => void;
+    canUndo: () => boolean;
+    clearActionHistory: () => void;
+
     // Utility
     checkGameOver: () => boolean;
 }
@@ -126,6 +148,7 @@ const initialGameModeState: GameModeState = {
     lockMode: false,
     lockedTiles: [],
     lockAnimatingTiles: [],
+    actionHistory: [],
 };
 
 // Initial state
@@ -134,7 +157,7 @@ const initialState: Omit<WaxleGameState,
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'toggleTileLock' | 'checkGameOver'
+    'toggleTileLock' | 'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
 > = {
     classicGameState: { ...initialGameModeState },
     dailyGameState: { ...initialGameModeState },
@@ -332,6 +355,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     lockedTiles: [],
                     lockAnimatingTiles: [],
                 });
+
+                // Clear action history at round end since we can't undo across rounds
+                get().clearActionHistory();
 
                 // Progressive difficulty: +1 tile every 3 rounds (accounting for Round 1 offset)
                 let currentTilesPerDrop = 3;
@@ -592,6 +618,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
                 // No word limit in Tetris mode - players can submit multiple words per turn
 
+                // Push current state to history before making changes
+                get().pushToHistory('word_submit');
+
                 // Clear the tiles and apply gravity
                 const tilesToClear = state.selectedTiles.map(t => t.cellId);
                 const { newGrid, tilesCleared, moveSources } = clearTilesAndApplyGravity(state.grid, tilesToClear);
@@ -658,6 +687,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 
                 const clickedCell = state.grid.find(c => c.id === cellId);
                 if (!clickedCell || !clickedCell.letter || !clickedCell.isPlaced) return; // Only lock placed tiles
+                
+                // Push current state to history before lock operation
+                get().pushToHistory('lock_toggle');
                 
                 const currentLockedTiles = Array.isArray(state.lockedTiles) ? state.lockedTiles : [];
                 const selectedTileIds = state.selectedTiles.map(t => t.cellId);
@@ -733,6 +765,79 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     const count = validTilesToLock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);
                 }
+            },
+
+            // Undo functionality
+            pushToHistory: (actionType: 'orbit' | 'word_submit' | 'lock_toggle') => {
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
+                
+                // Create snapshot of current state
+                const snapshot = {
+                    grid: [...state.grid],
+                    freeOrbitsAvailable: state.freeOrbitsAvailable,
+                    score: state.score,
+                    wordsThisRound: [...state.wordsThisRound],
+                    lockedTiles: [...(state.lockedTiles || [])],
+                    selectedTiles: [...state.selectedTiles],
+                    currentWord: state.currentWord,
+                    totalWords: state.totalWords,
+                    tilesCleared: state.tilesCleared
+                };
+                
+                // Add to history
+                const newHistory = [...state.actionHistory, {
+                    type: actionType,
+                    previousState: snapshot,
+                    timestamp: Date.now()
+                }];
+                
+                // Limit history to last 10 actions for memory management
+                if (newHistory.length > 10) {
+                    newHistory.shift();
+                }
+                
+                updateCurrentGameState({ actionHistory: newHistory });
+            },
+
+            undoLastAction: () => {
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
+                
+                if (state.actionHistory.length === 0 || state.phase !== 'player') {
+                    return;
+                }
+                
+                // Get the last action
+                const lastAction = state.actionHistory[state.actionHistory.length - 1];
+                const newHistory = state.actionHistory.slice(0, -1);
+                
+                // Restore the previous state
+                updateCurrentGameState({
+                    grid: lastAction.previousState.grid,
+                    freeOrbitsAvailable: lastAction.previousState.freeOrbitsAvailable,
+                    score: lastAction.previousState.score,
+                    wordsThisRound: lastAction.previousState.wordsThisRound,
+                    lockedTiles: lastAction.previousState.lockedTiles,
+                    selectedTiles: lastAction.previousState.selectedTiles,
+                    currentWord: lastAction.previousState.currentWord,
+                    totalWords: lastAction.previousState.totalWords,
+                    tilesCleared: lastAction.previousState.tilesCleared,
+                    actionHistory: newHistory
+                });
+                
+                toastService.success(`${lastAction.type.replace('_', ' ')} undone`);
+            },
+
+            canUndo: () => {
+                const { getCurrentGameState } = get();
+                const state = getCurrentGameState();
+                return state.actionHistory.length > 0 && state.phase === 'player';
+            },
+
+            clearActionHistory: () => {
+                const { updateCurrentGameState } = get();
+                updateCurrentGameState({ actionHistory: [] });
             },
 
             checkGameOver: () => {

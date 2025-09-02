@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { calculateDisplayWordScore } from '../lib/gameUtils';
 import { CSSAnimatedCounter } from './CSSAnimatedCounter';
 import { AnimatedTickingCounter } from './AnimatedTickingCounter';
 import { DynamicZapIcon } from './DynamicZapIcon';
@@ -15,6 +16,7 @@ type WaxleMobileGameControlsProps = {
   freeOrbitsAvailable: number;
   nextRows: string[][];
   previewLevel: number;
+  isWordValid?: boolean;
 };
 
 const WaxleMobileGameControls = ({
@@ -25,7 +27,8 @@ const WaxleMobileGameControls = ({
   currentWord,
   freeOrbitsAvailable,
   nextRows,
-  previewLevel
+  previewLevel,
+  isWordValid
 }: WaxleMobileGameControlsProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -197,6 +200,11 @@ const WaxleMobileGameControls = ({
                     "bg-amber/10 rounded-xl py-2"
                   )}>
                     {currentWord}
+                    {currentWord.length >= 3 && isWordValid && (
+                      <span className="text-amber-dark ml-2">
+                        [{calculateDisplayWordScore(currentWord, round, wordsThisRound, currentWord.length)}]
+                      </span>
+                    )}
                   </p>
                 </div>
               )}

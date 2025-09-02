@@ -10,6 +10,46 @@ export const LETTER_FREQUENCY: { [key: string]: 'common' | 'medium' | 'uncommon'
     'K': 'uncommon', 'J': 'uncommon', 'X': 'uncommon', 'Q': 'uncommon', 'Z': 'uncommon',
 };
 
+// Letter scoring values based on rarity (Scrabble-like)
+export const LETTER_VALUES: { [key: string]: number } = {
+    'A': 1, 'E': 1, 'I': 1, 'O': 1, 'N': 1, 'R': 1, 'T': 1, 'L': 1, 'S': 1, 'U': 1,
+    'D': 2, 'G': 2,
+    'B': 3, 'C': 3, 'M': 3, 'P': 3,
+    'F': 4, 'H': 4, 'V': 4, 'W': 4, 'Y': 4,
+    'K': 5,
+    'J': 8, 'X': 8,
+    'Q': 10, 'Z': 10
+};
+
+// Calculate estimated word score for preview (matches actual game scoring)
+export const calculateDisplayWordScore = (
+    word: string, 
+    round: number = 1, 
+    wordsThisRound: number = 0,
+    estimatedTilesCleared: number = 0
+): number => {
+    if (!word || word.length < 3) return 0;
+    
+    // Base score is just word length (like actual game)
+    let score = word.length;
+    
+    // Round multiplier (like actual game)
+    score *= (1 + round * 0.1);
+    
+    // Tiles cleared bonus estimate (like actual game) 
+    // For preview, we estimate cleared tiles as word length since that's typical
+    const estimatedCleared = estimatedTilesCleared || word.length;
+    score += estimatedCleared * 10;
+    
+    // Combo multiplier (like actual game)
+    const isCombo = wordsThisRound > 0;
+    if (isCombo) {
+        score *= 1.5;
+    }
+    
+    return Math.floor(score);
+};
+
 // Target score to win
 export const TARGET_SCORE = 100;
 

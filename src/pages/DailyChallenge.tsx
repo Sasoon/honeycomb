@@ -116,11 +116,8 @@ const DailyChallenge = () => {
   };
   
   
-  // Check if already playing today's challenge
-  const isPlayingToday = isDailyChallenge && dailyDate === seedData?.date;
-  
-  // If playing the challenge, render the game
-  if (isPlayingChallenge || isPlayingToday) {
+  // If already in daily challenge mode, show game immediately to prevent flash
+  if (isDailyChallenge || isPlayingChallenge) {
     return (
       <WaxleGame
         onBackToDailyChallenge={handleBackToDailyPage}
@@ -224,11 +221,6 @@ const DailyChallenge = () => {
                     <>
                       <CheckCircle className="w-5 h-5 mr-2" />
                       Challenge Completed!
-                    </>
-                  ) : isPlayingToday ? (
-                    <>
-                      <Play className="w-5 h-5 mr-2" />
-                      Continue Today's Challenge
                     </>
                   ) : (
                     <>
