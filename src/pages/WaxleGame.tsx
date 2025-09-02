@@ -507,7 +507,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         
                  // Prevent top-row overlap: ensure one overlay per top-row entry at t=0
         const usedTopEntries = new Set<string>();
-        const topRowStartJitter = new Map<string, number>();
         const tilePaths = newlyFilled.map(cell => {
           // Use the exact path from the flood logic
           const p = floodPaths && floodPaths[cell.id];
