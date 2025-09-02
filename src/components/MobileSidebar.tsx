@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useRef, useEffect } from 'react';
+import { cn } from '../lib/utils';
 
 type MobileSidebarProps = {
   isOpen: boolean;
@@ -78,72 +79,108 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
   
   return (
     <>
-      {/* Backdrop overlay when menu is open */}
-      <div 
-        className={`fixed inset-0 bg-black z-40 md:hidden transition-all duration-300 ease-in-out pointer-events-none
-          ${isOpen ? 'bg-opacity-30 pointer-events-auto' : 'bg-opacity-0'}`}
-        style={{ top: 'var(--header-height)' }}
-        onClick={isOpen ? onClose : undefined}
-      />
+      {/* Fixed backdrop - only show when menu is open */}
+      {isOpen && (
+        <div 
+          className={cn(
+            "fixed inset-0 z-40 md:hidden",
+            "backdrop-blur-sm bg-black/40 transition-opacity duration-300"
+          )}
+          style={{ top: 'var(--header-height)' }}
+          onClick={onClose}
+        />
+      )}
       
+      {/* Modern sliding sidebar */}
       <div 
         ref={sidebarRef}
-        className={`mobile-sidebar transition-all duration-300 ease-in-out 
-          ${isOpen ? 'w-64' : 'w-0'} 
-          bg-secondary-light shadow-lg z-50 
-          fixed
-          left-0
-          flex flex-col overflow-hidden md:hidden`}
+        className={cn(
+          "mobile-sidebar transition-all duration-300 ease-out",
+          "bg-bg-primary/95 backdrop-blur-xl shadow-2xl shadow-secondary/20", 
+          "fixed left-0 flex flex-col overflow-hidden md:hidden z-50",
+          "border-r border-secondary/20",
+          isOpen ? "w-80" : "w-0"
+        )}
         style={{
           top: 'var(--header-height)',
           height: 'calc(100% - var(--header-height))'
         }}
       >
-        {/* Sidebar content */}
-        <div className={`${isOpen ? 'flex' : 'hidden'} flex-col h-full py-4 px-3 overflow-y-auto`}>
-        {/* Mobile navigation menu */}
-        <div className="block">
-          <nav className="flex flex-col space-y-2">
+        {/* Sidebar content - only render when open */}
+        {isOpen && (
+          <div className="flex flex-col h-full py-6 px-4 overflow-y-auto">
+            {/* Navigation with modern styling */}
+            <nav className="flex flex-col space-y-3">
             <Link 
               to="/classic" 
-              className={`${isActive('/classic') || isActive('/') 
-                ? 'bg-amber text-white' 
-                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
+              className={cn(
+                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
+                "flex items-center space-x-3",
+                isActive('/classic') || isActive('/') 
+                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
+                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
+              )}
               onClick={onClose}
             >
-              Classic
+              <span>🎯</span>
+              <span>Classic</span>
             </Link>
             <Link 
               to="/daily" 
-              className={`${isActive('/daily') 
-                ? 'bg-amber text-white' 
-                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
+              className={cn(
+                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
+                "flex items-center space-x-3",
+                isActive('/daily')
+                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
+                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
+              )}
               onClick={onClose}
             >
-              Daily
+              <span>📅</span>
+              <span>Daily</span>
             </Link>
             <Link 
               to="/leaderboard" 
-              className={`${isActive('/leaderboard') 
-                ? 'bg-amber text-white' 
-                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
+              className={cn(
+                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
+                "flex items-center space-x-3",
+                isActive('/leaderboard')
+                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
+                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
+              )}
               onClick={onClose}
             >
-              Leaderboard
+              <span>🏆</span>
+              <span>Leaderboard</span>
             </Link>
             <Link 
               to="/how-to-play" 
-              className={`${isActive('/how-to-play') 
-                ? 'bg-amber text-white' 
-                : 'text-primary hover:bg-highlight'} px-3 py-2 rounded-lg`}
+              className={cn(
+                "px-4 py-3 rounded-xl font-medium transition-all duration-200",
+                "flex items-center space-x-3",
+                isActive('/how-to-play')
+                  ? 'bg-amber text-white shadow-lg shadow-amber/20' 
+                  : 'text-text-primary hover:bg-secondary/10 hover:text-text-primary'
+              )}
               onClick={onClose}
             >
-              Tutorial
+              <span>❓</span>
+              <span>Tutorial</span>
             </Link>
           </nav>
+          
+          {/* Bottom spacer */}
+          <div className="flex-1" />
+          
+          {/* Optional footer content */}
+          <div className="pt-6 border-t border-secondary/20">
+            <p className="text-xs text-text-muted text-center">
+              Swipe left to close
+            </p>
+          </div>
         </div>
+        )}
       </div>
-    </div>
     </>
   );
 };

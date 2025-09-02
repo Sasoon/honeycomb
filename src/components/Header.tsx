@@ -1,4 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 type HeaderProps = {
   toggleSidebar: () => void;
@@ -17,70 +19,90 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-accent-light py-4 px-3 shadow-md sticky top-0 z-40">
-      <div>
+    <header className="bg-accent-light/95 backdrop-blur-sm py-4 px-4 shadow-lg shadow-secondary/10 sticky top-0 z-40 border-b border-accent/20">
+      <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
-          <div className="flex items-center">
-            {/* Hamburger menu for mobile/tablet - transforms to X when open */}
+          <div className="flex items-center space-x-4">
+            {/* Modern hamburger menu button */}
             <button 
-              className="text-white mr-4 md:hidden focus:outline-none"
+              className={cn(
+                "p-2 text-white md:hidden rounded-xl transition-all duration-200",
+                "hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30",
+                "active:scale-95"
+              )}
               onClick={handleMenuClick}
               aria-label={isSidebarOpen ? "Close menu" : "Open menu"}
             >
               {isSidebarOpen ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
+                <X size={20} />
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="3" y1="12" x2="21" y2="12"></line>
-                  <line x1="3" y1="6" x2="21" y2="6"></line>
-                  <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
+                <Menu size={20} />
               )}
             </button>
             
-            {/* Logo always visible */}
-            <Link to="/" className="text-white text-2xl font-bold flex items-center">
-            <span className="hidden md:inline">WAXLE</span>
+            {/* Logo */}
+            <Link 
+              to="/" 
+              className="text-white text-2xl font-bold flex items-center hover:opacity-90 transition-opacity"
+            >
+              <span className="hidden md:inline">WAXLE</span>
             </Link>
           </div>
           
-          {/* Center/Right - Navigation links only on desktop */}
-          <div className="flex items-center">
-            <Link to="/" className="text-white text-xl font-bold md:hidden">WAXLE</Link>
-            <nav className="hidden md:flex flex-wrap justify-center gap-2 ml-6">
+          {/* Center/Right - Navigation */}
+          <div className="flex items-center space-x-6">
+            {/* Mobile logo */}
+            <Link 
+              to="/" 
+              className="text-white text-xl font-bold md:hidden hover:opacity-90 transition-opacity"
+            >
+              WAXLE
+            </Link>
+            
+            {/* Desktop navigation with modern nav pills */}
+            <nav className="hidden md:flex items-center space-x-1">
               <Link 
                 to="/classic" 
-                className={`${isActive('/classic') || isActive('/') 
-                  ? 'bg-accent-dark text-white' 
-                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
+                className={cn(
+                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  isActive('/classic') || isActive('/') 
+                    ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
+                    : 'text-white hover:text-white hover:bg-accent-dark/50'
+                )}
               >
                 Classic
               </Link>
               <Link 
                 to="/daily" 
-                className={`${isActive('/daily') 
-                  ? 'bg-accent-dark text-white' 
-                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
+                className={cn(
+                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  isActive('/daily')
+                    ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
+                    : 'text-white hover:text-white hover:bg-accent-dark/50'
+                )}
               >
                 Daily
               </Link>
               <Link 
                 to="/leaderboard" 
-                className={`${isActive('/leaderboard') 
-                  ? 'bg-accent-dark text-white' 
-                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
+                className={cn(
+                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  isActive('/leaderboard')
+                    ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
+                    : 'text-white hover:text-white hover:bg-accent-dark/50'
+                )}
               >
                 Leaderboard
               </Link>
               <Link 
                 to="/how-to-play" 
-                className={`${isActive('/how-to-play') 
-                  ? 'bg-accent-dark text-white' 
-                  : 'text-white hover:bg-primary-light/70'} px-3 py-2 rounded-lg`}
+                className={cn(
+                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  isActive('/how-to-play')
+                    ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
+                    : 'text-white hover:text-white hover:bg-accent-dark/50'
+                )}
               >
                 Tutorial
               </Link>

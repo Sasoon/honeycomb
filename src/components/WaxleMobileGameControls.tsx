@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 type WaxleMobileGameControlsProps = {
   score: number;
@@ -25,21 +27,35 @@ const WaxleMobileGameControls = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="md:hidden w-full cursor-pointer">
-      {/* Compact Header - Always visible */}
+    <div className="md:hidden w-full">
+      {/* Modern Compact Header */}
       <div 
-        className="bg-primary-light shadow-md border-b border-secondary p-4 transition-all"
+        className={cn(
+          "bg-bg-primary/95 backdrop-blur-sm border border-secondary/20",
+          "rounded-2xl mx-2 my-2 p-4 shadow-lg shadow-secondary/10",
+          "transition-all duration-300 ease-out cursor-pointer",
+          "hover:shadow-xl hover:shadow-secondary/20",
+          "active:scale-[0.98]"
+        )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex justify-between items-center">
-          <div className="flex space-x-2 items-center">
-            {/* Next Drop Preview */}
+          <div className="flex items-center space-x-3">
+            {/* Next Drop Preview with modern styling */}
             {previewLevel > 0 && nextRows.length > 0 && (
-              <div className="flex items-center gap-2 bg-bg-secondary rounded-full px-3 py-1">
-                <span className="text-xs font-medium text-amber uppercase tracking-wide">NEXT</span>
+              <div className={cn(
+                "flex items-center gap-2",
+                "bg-amber/10 border border-amber/20",
+                "rounded-xl px-3 py-1.5"
+              )}>
+                <span className="text-xs font-medium text-amber uppercase tracking-wide">Next</span>
                 <div className="flex gap-1">
-                  {nextRows[0]?.map((letter, idx) => (
-                    <div key={idx} className="w-5 h-5 bg-secondary rounded border border-secondary-dark flex items-center justify-center text-xs font-semibold text-primary">
+                  {nextRows[0]?.slice(0, 4).map((letter, idx) => (
+                    <div key={idx} className={cn(
+                      "w-6 h-6 bg-bg-secondary border border-secondary/30",
+                      "rounded-lg flex items-center justify-center",
+                      "text-xs font-semibold text-text-primary"
+                    )}>
                       {letter}
                     </div>
                   ))}
@@ -48,68 +64,92 @@ const WaxleMobileGameControls = ({
             )}
           </div>
           
-          {/* Game Stats */}
-          <div className="flex space-x-2 text-sm items-center">
-            <div>
-              <span className="text-text-muted">Score:</span> <span className="text-amber font-semibold">{score}</span>
-            </div>
-            <div>
-              <span className="text-text-muted">Round:</span> <span className="text-amber font-semibold">{round}</span>
-            </div>
-            <div>
-              <span className="text-text-muted">Orbits:</span> <span className="text-amber font-semibold">{freeOrbitsAvailable || 0}</span>
+          {/* Modern Stats Display */}
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 text-sm">
+              <div className="flex items-center space-x-1">
+                <span className="text-text-secondary">Score</span>
+                <span className="font-semibold text-amber bg-amber/10 px-2 py-0.5 rounded-full text-xs">
+                  {score}
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-text-secondary">R{round}</span>
+                <span className="w-1 h-1 bg-secondary/40 rounded-full" />
+                <span className="text-text-secondary">{freeOrbitsAvailable || 0}⚡</span>
+              </div>
             </div>
             
-            {/* Expand/Collapse Indicator */}
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              viewBox="0 0 20 20" 
-              fill="currentColor" 
-              className={`w-4 h-4 text-amber-700 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-            >
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-            </svg>
+            {/* Modern chevron */}
+            <div className={cn(
+              "p-1 rounded-lg bg-secondary/10 transition-all duration-200",
+              isExpanded && "rotate-180"
+            )}>
+              <ChevronDown size={16} className="text-text-secondary" />
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Expandable Panel */}
+      {/* Modern Expandable Panel */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, type: "tween" }}
-            className="bg-secondary-light shadow-lg border border-secondary overflow-hidden mb-2"
+            initial={{ opacity: 0, height: 0, scale: 0.95 }}
+            animate={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.95 }}
+            transition={{ duration: 0.3, type: "spring", damping: 15 }}
+            className={cn(
+              "bg-bg-primary/95 backdrop-blur-sm border border-secondary/20",
+              "rounded-2xl mx-2 mb-2 shadow-xl shadow-secondary/20",
+              "overflow-hidden"
+            )}
           >
-            {/* Content */}
-            <div className="p-3">
-              <div>
-                  {/* Words Submitted */}
-                  <div className="mb-3 p-2 bg-success-light rounded-lg">
-                    <div className="text-sm font-medium text-primary mb-2">Words This Game ({wordsThisRound}):</div>
-                    {wordsThisRoundList.length > 0 ? (
-                      <div className="space-y-1 max-h-16 overflow-y-auto">
-                        {wordsThisRoundList.reverse().map((word, idx) => (
-                          <div key={idx} className="text-xs text-secondary-dark font-mono">
-                            {word}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-text-muted italic">No words submitted yet</div>
-                    )}
-                  </div>
-
-                  {/* Current Word Display */}
-                  {currentWord && (
-                    <div className="mb-3 p-2 bg-secondary rounded-lg">
-                      <h3 className="text-sm font-semibold text-primary mb-1">Current Word</h3>
-                      <p className="text-lg font-mono text-amber">{currentWord}</p>
-                    </div>
-                  )}
+            <div className="p-4 space-y-4">
+              {/* Words Submitted Section */}
+              <div className={cn(
+                "bg-success/10 border border-success/20",
+                "rounded-2xl p-4"
+              )}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-text-primary">Words Found</h3>
+                  <span className="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">
+                    {wordsThisRound}
+                  </span>
                 </div>
+                {wordsThisRoundList.length > 0 ? (
+                  <div className="space-y-1 max-h-20 overflow-y-auto">
+                    {wordsThisRoundList.slice().reverse().map((word, idx) => (
+                      <div key={idx} className={cn(
+                        "text-xs font-mono text-text-secondary",
+                        "bg-success/5 px-2 py-1 rounded-lg"
+                      )}>
+                        {word}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-text-muted italic text-center py-2">
+                    No words found yet
+                  </div>
+                )}
+              </div>
+
+              {/* Current Word Display */}
+              {currentWord && (
+                <div className={cn(
+                  "bg-amber/10 border border-amber/20",
+                  "rounded-2xl p-4"
+                )}>
+                  <h3 className="text-sm font-semibold text-text-primary mb-2">Current Word</h3>
+                  <p className={cn(
+                    "text-xl font-mono text-amber font-bold text-center",
+                    "bg-amber/10 rounded-xl py-2"
+                  )}>
+                    {currentWord}
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

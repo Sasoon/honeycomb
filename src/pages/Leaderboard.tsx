@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Trophy, Crown, Medal, Clock, Target, Hash } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { cn } from '../lib/utils';
 
 interface LeaderboardEntry {
   rank: number;
@@ -74,161 +78,211 @@ const Leaderboard = () => {
     });
   };
 
+  const getRankIcon = (rank: number) => {
+    switch(rank) {
+      case 1: return <Crown className="w-5 h-5 text-amber" />
+      case 2: return <Medal className="w-5 h-5 text-gray-400" />
+      case 3: return <Medal className="w-5 h-5 text-amber-600" />
+      default: return <Hash className="w-4 h-4 text-text-secondary" />
+    }
+  }
+
   return (
-    <div className="page-container page-container--wide">
-      <h1 className="page-title">Leaderboard</h1>
-
-      {/* Tab Navigation */}
-      <div className="flex bg-secondary rounded-lg p-1 content-spacing max-w-md mx-auto">
-        <button
-          onClick={() => setActiveTab('daily')}
-          className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'daily'
-              ? 'bg-secondary-light text-primary shadow-sm'
-              : 'text-text-secondary hover:text-text-primary'
-          }`}
-        >
-          Daily
-        </button>
-        <button
-          onClick={() => setActiveTab('alltime')}
-          className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'alltime'
-              ? 'bg-secondary-light text-primary shadow-sm'
-              : 'text-text-secondary hover:text-text-primary'
-          }`}
-        >
-          All Time
-        </button>
-      </div>
-
-      {/* Header Info */}
-      {leaderboardData && (
-        <div className="text-center content-spacing">
-          <h2 className="text-xl font-semibold mb-2">
-            {activeTab === 'daily' 
-              ? `Daily Challenge - ${new Date().toLocaleDateString(undefined, { 
-                  weekday: 'long',
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}`
-              : 'All-Time Best Scores'
-            }
-          </h2>
+    <div className="min-h-screen bg-bg-secondary">
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+        {/* Header Section */}
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center space-x-2">
+            <Trophy className="w-8 h-8 text-amber" />
+            <h1 className="text-4xl font-bold text-text-primary">Leaderboard</h1>
+          </div>
+          <p className="text-text-secondary">Compete with players around the world</p>
         </div>
-      )}
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber"></div>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="bg-accent-light border border-accent rounded-lg p-6 text-center">
-          <h3 className="text-lg font-semibold text-text-primary mb-2">Failed to Load Leaderboard</h3>
-          <p className="text-text-secondary mb-4">{error}</p>
-          <button 
-            onClick={() => loadLeaderboard(activeTab)}
-            className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      )}
-
-      {/* Leaderboard Table */}
-      {leaderboardData && !isLoading && !error && (
-        <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary overflow-hidden">
-          {leaderboardData.leaderboard.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-text-muted text-lg">No scores yet!</p>
-              <p className="text-text-muted mt-2 opacity-80">Be the first to complete today's challenge.</p>
+        {/* Modern Tab Navigation */}
+        <div className="flex justify-center">
+          <div className="bg-bg-primary/50 backdrop-blur-sm border border-secondary/20 rounded-2xl p-1 shadow-lg shadow-secondary/10">
+            <div className="flex">
+              <Button
+                variant={activeTab === 'daily' ? 'default' : 'ghost'}
+                size="default"
+                onClick={() => setActiveTab('daily')}
+                className={cn(
+                  "px-6 py-3 rounded-xl transition-all duration-200",
+                  activeTab === 'daily' && "shadow-lg shadow-amber/20"
+                )}
+              >
+                📅 Daily Challenge
+              </Button>
+              <Button
+                variant={activeTab === 'alltime' ? 'default' : 'ghost'}
+                size="default"
+                onClick={() => setActiveTab('alltime')}
+                className={cn(
+                  "px-6 py-3 rounded-xl transition-all duration-200",
+                  activeTab === 'alltime' && "shadow-lg shadow-amber/20"
+                )}
+              >
+                🏆 All Time
+              </Button>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-waxle-light">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-text-secondary">Rank</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-text-secondary">Player</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Score</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Round</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Words</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Longest</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Time</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-text-secondary">Submitted</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-secondary">
+          </div>
+        </div>
+
+        {/* Header Info */}
+        {leaderboardData && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-center">
+                {activeTab === 'daily' 
+                  ? `Daily Challenge - ${new Date().toLocaleDateString(undefined, { 
+                      weekday: 'long',
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}`
+                  : 'All-Time Champions'
+                }
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        )}
+
+        {/* Loading State */}
+        {isLoading && (
+          <Card>
+            <CardContent className="flex justify-center items-center py-16">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-2 border-amber/30 border-t-amber"></div>
+                <p className="text-text-secondary">Loading leaderboard...</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <Card>
+            <CardContent className="text-center py-8 space-y-4">
+              <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto">
+                <Trophy className="w-8 h-8 text-accent" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary mb-2">Failed to Load Leaderboard</h3>
+                <p className="text-text-secondary mb-4">{error}</p>
+                <Button 
+                  variant="destructive"
+                  onClick={() => loadLeaderboard(activeTab)}
+                >
+                  Try Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Modern Leaderboard */}
+        {leaderboardData && !isLoading && !error && (
+          <Card>
+            <CardContent className="p-0">
+              {leaderboardData.leaderboard.length === 0 ? (
+                <div className="text-center py-16 space-y-4">
+                  <div className="w-16 h-16 bg-amber/10 rounded-full flex items-center justify-center mx-auto">
+                    <Trophy className="w-8 h-8 text-amber" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-medium text-text-primary">No scores yet!</p>
+                    <p className="text-text-secondary">Be the first to complete today's challenge.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 p-6">
                   {leaderboardData.leaderboard.map((entry) => (
-                    <tr 
+                    <div 
                       key={`${entry.playerName}-${entry.submittedAt}`}
-                      className={`hover:bg-secondary ${
-                        entry.rank <= 3 ? 'bg-highlight-light' : ''
-                      }`}
+                      className={cn(
+                        "flex items-center p-4 rounded-2xl transition-all duration-200",
+                        "hover:bg-secondary/5 hover:shadow-lg hover:shadow-secondary/10",
+                        entry.rank <= 3 && "bg-amber/5 border border-amber/20 shadow-lg shadow-amber/10",
+                        entry.rank === 1 && "ring-2 ring-amber/30"
+                      )}
                     >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center">
-                          <span className={`text-lg font-bold ${
-                            entry.rank === 1 ? 'text-amber' :
-                            entry.rank === 2 ? 'text-text-secondary' :
-                            entry.rank === 3 ? 'text-highlight' :
-                            'text-text-primary'
-                          }`}>
-                            #{entry.rank}
-                          </span>
-                          {entry.rank <= 3 && (
-                            <span className="ml-2 text-lg">
-                              {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉'}
-                            </span>
-                          )}
+                      {/* Rank & Icon */}
+                      <div className="flex items-center space-x-3 min-w-16">
+                        <div className={cn(
+                          "flex items-center justify-center w-10 h-10 rounded-xl font-bold",
+                          entry.rank === 1 && "bg-amber/20 text-amber",
+                          entry.rank === 2 && "bg-secondary/20 text-text-primary", 
+                          entry.rank === 3 && "bg-amber/15 text-amber-600",
+                          entry.rank > 3 && "bg-secondary/10 text-text-secondary"
+                        )}>
+                          {entry.rank <= 3 ? getRankIcon(entry.rank) : `#${entry.rank}`}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-text-primary">
-                        {entry.playerName}
-                      </td>
-                      <td className="px-4 py-3 text-center font-bold text-amber">
-                        {entry.score.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-center text-text-secondary">
-                        {entry.round}
-                      </td>
-                      <td className="px-4 py-3 text-center text-text-secondary">
-                        {entry.totalWords}
-                      </td>
-                      <td className="px-4 py-3 text-center text-text-secondary font-mono">
-                        {entry.longestWord || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center text-text-secondary">
-                        {formatTimeSpent(entry.timeSpent)}
-                      </td>
-                      <td className="px-4 py-3 text-center text-text-muted text-sm">
-                        {formatDate(entry.submittedAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+                      </div>
 
-      {/* Refresh Button */}
-      {leaderboardData && !isLoading && (
-        <div className="text-center mt-6">
-          <button
-            onClick={() => loadLeaderboard(activeTab)}
-            className="px-6 py-2 bg-amber text-white rounded-lg hover:bg-amber-dark transition-colors"
-          >
-            Refresh
-          </button>
-        </div>
-      )}
+                      {/* Player Name */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-text-primary text-lg truncate">
+                          {entry.playerName}
+                        </h3>
+                        <div className="flex items-center space-x-2 text-sm text-text-secondary">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatDate(entry.submittedAt)}</span>
+                        </div>
+                      </div>
+
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 ml-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-amber">{entry.score.toLocaleString()}</div>
+                          <div className="text-xs text-text-secondary font-medium">Score</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-text-primary">{entry.round}</div>
+                          <div className="text-xs text-text-secondary font-medium">Round</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-semibold text-text-primary">{entry.totalWords}</div>
+                          <div className="text-xs text-text-secondary font-medium">Words</div>
+                        </div>
+                        <div className="text-center min-w-0">
+                          <div className="text-sm font-mono font-semibold text-text-primary truncate" title={entry.longestWord}>
+                            {entry.longestWord || '-'}
+                          </div>
+                          <div className="text-xs text-text-secondary font-medium">Longest</div>
+                        </div>
+                      </div>
+
+                      {/* Time Badge */}
+                      <div className="ml-4 hidden sm:block">
+                        <div className="bg-secondary/10 px-3 py-1 rounded-full">
+                          <span className="text-sm font-medium text-text-secondary">
+                            {formatTimeSpent(entry.timeSpent)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Modern Refresh Button */}
+        {leaderboardData && !isLoading && (
+          <div className="flex justify-center">
+            <Button
+              variant="secondary"
+              onClick={() => loadLeaderboard(activeTab)}
+              className="px-6 py-3"
+            >
+              <Target className="w-4 h-4 mr-2" />
+              Refresh Leaderboard
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

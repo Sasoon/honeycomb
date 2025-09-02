@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Target, Zap, Hash } from 'lucide-react';
+import { cn } from '../lib/utils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { areCellsAdjacent } from '../lib/waxleGameUtils';
@@ -733,83 +735,143 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   return (
     <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height">
       <div className="flex flex-col md:flex-row h-full">
-        {/* Tetris Game Sidebar */}
+        {/* Modern Desktop Game Sidebar */}
         <div 
           ref={sidebarRef}
-          className="hidden md:flex game-sidebar w-72 bg-secondary-light shadow-lg border border-secondary flex-col overflow-hidden"
+          className={cn(
+            "hidden md:flex game-sidebar w-72 flex-col overflow-hidden",
+            "bg-bg-primary/95 backdrop-blur-sm border-r border-secondary/20",
+            "shadow-2xl shadow-secondary/20"
+          )}
         >
-          {/* Sidebar content */}
-          <div className="hidden md:flex flex-col h-full py-4 px-3 overflow-y-auto">
+          {/* Modern Sidebar content */}
+          <div className="flex flex-col h-full p-6 overflow-y-auto space-y-6">
             
-            {/* Desktop game info */}
-            <div className="hidden md:block">
-             
-              {/* Game stats */}
-              <div className="flex justify-between mb-4 md:mb-6">
-                <div>
-                  <div className="text-sm text-primary">Score</div>
-                  <div className="text-2xl font-bold text-amber">{score}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-primary">Round</div>
-                  <div className="text-2xl font-bold text-amber">{round}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-primary">Orbits</div>
-                  <div className="text-lg font-bold text-amber">{freeOrbitsAvailable || 0}</div>
-                </div>
+            {/* Modern Game Stats */}
+            <div className="space-y-4">
+              {/* Primary Score Display */}
+              <div className={cn(
+                "bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20",
+                "rounded-2xl p-6 text-center shadow-lg shadow-amber/10"
+              )}>
+                <div className="text-4xl font-bold text-amber mb-2">{score}</div>
+                <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">Score</div>
               </div>
 
-                            {/* Next Drop Preview */}
-              {previewLevel > 0 && nextRows.length > 0 && (
-                <div className="bg-bg-secondary rounded-lg p-3 mb-4">
-                  <div className="text-sm font-medium inline-block text-amber mb-2">NEXT</div>
-                  <div className="flex gap-1.5">
-                    {nextRows[0]?.map((letter, idx) => (
-                      <div key={idx} className="w-6 h-6 bg-secondary rounded border border-secondary-dark flex items-center justify-center text-xs font-semibold text-primary shadow-sm">
+              {/* Stats Row */}
+              <div className="flex justify-between gap-4">
+                <div className={cn(
+                  "flex-1 bg-bg-secondary border border-secondary/20",
+                  "rounded-xl p-4 text-center"
+                )}>
+                  <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
+                    <Hash className="w-4 h-4" />
+                    <span>{round}</span>
+                  </div>
+                  <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Round</div>
+                </div>
+                <div className={cn(
+                  "flex-1 bg-bg-secondary border border-secondary/20",
+                  "rounded-xl p-4 text-center"
+                )}>
+                  <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
+                    <Zap className="w-4 h-4" />
+                    <span>{freeOrbitsAvailable || 0}</span>
+                  </div>
+                  <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Orbits</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modern Next Drop Preview */}
+            {previewLevel > 0 && nextRows.length > 0 && (
+              <div className={cn(
+                "bg-amber/10 border border-amber/20",
+                "rounded-2xl p-4"
+              )}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-text-primary">Next Drop</h3>
+                  <div className="bg-amber/20 text-amber px-2 py-1 rounded-full text-xs font-medium">
+                    Preview
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-center">
+                  {nextRows[0]?.map((letter, idx) => (
+                    <div key={idx} className={cn(
+                      "w-8 h-8 bg-bg-secondary border border-secondary/30",
+                      "rounded-xl flex items-center justify-center",
+                      "text-sm font-semibold text-text-primary shadow-sm"
+                    )}>
+                      {letter}
+                    </div>
+                  ))}
+                </div>
+                {previewLevel > 1 && nextRows[1] && (
+                  <div className="flex gap-2 justify-center mt-2 opacity-50">
+                    {nextRows[1]?.map((letter, idx) => (
+                      <div key={idx} className={cn(
+                        "w-6 h-6 bg-secondary/20 border border-secondary/20",
+                        "rounded-lg flex items-center justify-center",
+                        "text-xs font-medium text-text-secondary"
+                      )}>
                         {letter}
                       </div>
                     ))}
                   </div>
-                  {previewLevel > 1 && nextRows[1] && (
-                    <div className="flex gap-1 opacity-40">
-                      {nextRows[1]?.map((letter, idx) => (
-                        <div key={idx} className="w-5 h-5 bg-secondary-dark rounded border border-highlight flex items-center justify-center text-xs font-medium text-white">
-                          {letter}
-                        </div>
-                      ))}
+                )}
+              </div>
+            )}
+
+            {/* Modern Current Word Display */}
+            {currentWord && (
+              <div className={cn(
+                "bg-amber/10 border border-amber/20",
+                "rounded-2xl p-4"
+              )}>
+                <h3 className="text-sm font-semibold text-text-primary mb-3">Current Word</h3>
+                <p className={cn(
+                  "text-2xl font-mono text-amber font-bold text-center",
+                  "bg-amber/10 rounded-xl py-3 tracking-wider"
+                )}>
+                  {currentWord}
+                </p>
+              </div>
+            )}
+
+            {/* Modern Words Submitted */}
+            <div className={cn(
+              "bg-success/10 border border-success/20",
+              "rounded-2xl p-4"
+            )}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-text-primary">Words Found</h3>
+                <div className="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">
+                  {wordsThisRound.length}
+                </div>
+              </div>
+              {wordsThisRound.length > 0 ? (
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {wordsThisRound.slice(-8).reverse().map((word, idx) => (
+                    <div key={idx} className={cn(
+                      "text-sm font-mono text-text-secondary",
+                      "bg-success/5 px-3 py-2 rounded-lg",
+                      "border border-success/10"
+                    )}>
+                      {word}
+                    </div>
+                  ))}
+                  {wordsThisRound.length > 8 && (
+                    <div className="text-xs text-text-muted italic text-center py-2">
+                      ...and {wordsThisRound.length - 8} more words
                     </div>
                   )}
                 </div>
-              )}
-
-
-              {/* Current word display */}
-              {currentWord && (
-                <div className="bg-accent-light rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-primary mb-1">Current Word</h3>
-                  <p className="text-2xl font-mono tracking-wider text-amber">{currentWord}</p>
+              ) : (
+                <div className="text-center py-4">
+                  <Target className="w-8 h-8 text-success/30 mx-auto mb-2" />
+                  <div className="text-xs text-text-muted italic">No words found yet</div>
                 </div>
               )}
-
-              {/* Words Submitted */}
-              <div className="bg-success-light rounded-lg p-3 mb-4">
-                <div className="text-sm font-medium text-primary mb-2">Words This Game ({wordsThisRound.length}):</div>
-                {wordsThisRound.length > 0 ? (
-                  <div className="space-y-1 max-h-24 overflow-y-auto">
-                    {wordsThisRound.slice(-6).reverse().map((word, idx) => (
-                      <div key={idx} className="text-sm text-primary-dark font-mono">
-                        {word}
-                      </div>
-                    ))}
-                    {wordsThisRound.length > 6 && (
-                      <div className="text-xs text-secondary italic">...and {wordsThisRound.length - 6} more</div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-xs text-secondary italic">No words submitted yet</div>
-                )}
-              </div>
             </div>
           </div>
         </div>
