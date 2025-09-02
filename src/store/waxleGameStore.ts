@@ -19,59 +19,59 @@ export interface SelectedTile {
     position: number; // Order in which it was selected
 }
 
-// WAXLE game state
-interface WaxleGameState {
-    // Core game state
+// Individual game state that can be stored separately for Classic and Daily
+interface GameModeState {
     gameInitialized: boolean;
     phase: GamePhase;
     grid: HexCell[];
     gridSize: number;
     score: number;
     round: number;
-    gravityMoves?: Map<string, string>; // Optional map of post-score moves (to -> from)
-    floodPaths?: Record<string, { path: string[]; batch: number }>; // Paths for flood tile animations
-    tilesHiddenForAnimation?: string[]; // Tiles that should be hidden during animation
-    // Free utility actions
+    gravityMoves?: Map<string, string>;
+    floodPaths?: Record<string, { path: string[]; batch: number }>;
+    tilesHiddenForAnimation?: string[];
     freeMoveAvailable?: boolean;
-    freeOrbitsAvailable?: number; // Changed from boolean to number (2 per turn)
-    
-    // Lock mode state
-    lockMode?: boolean; // Whether lock mode is active
-    lockedTiles?: string[]; // Array of locked tile IDs
-    lockAnimatingTiles?: string[]; // Tiles currently animating lock/unlock
-
-    // Falling tiles mechanics
-    nextRows: string[][]; // Letters for upcoming rows
-    tilesPerDrop: number; // How many tiles drop each round
-    dropSpeed: number; // For future real-time mode
-
-    // Player state
+    freeOrbitsAvailable?: number;
+    lockMode?: boolean;
+    lockedTiles?: string[];
+    lockAnimatingTiles?: string[];
+    nextRows: string[][];
+    tilesPerDrop: number;
+    dropSpeed: number;
     selectedTiles: SelectedTile[];
     currentWord: string;
     isWordValid: boolean;
-
-    // Game progression
     wordsThisRound: string[];
     totalWords: number;
     tilesCleared: number;
     longestWord: string;
     biggestCombo: number;
-    wordsPerTurnLimit: number; // 0 = unlimited, > 0 = limited
-
-    // Special effects
-    slowModeRounds: number; // Rounds remaining with slower drops
-    previewLevel: number; // 1 = see next row, 2 = see next 2 rows
-
-    // Daily Challenge mode
-    isDailyChallenge: boolean;
+    wordsPerTurnLimit: number;
+    slowModeRounds: number;
+    previewLevel: number;
+    // Daily-specific fields (only used in daily state)
     dailySeed?: number;
     dailyDate?: string;
     challengeStartTime?: number;
     seededRNG?: SeededRNG;
+}
 
+// WAXLE game state - now contains separate states for Classic and Daily
+interface WaxleGameState {
+    // Separate game states
+    classicGameState: GameModeState;
+    dailyGameState: GameModeState;
+    
+    // Current mode tracking
+    isDailyChallenge: boolean;
+    
     // Persistence
     lastSaved: number;
 
+    // Helper functions for state management
+    getCurrentGameState: () => GameModeState;
+    updateCurrentGameState: (updates: Partial<GameModeState>) => void;
+    
     // Actions
     setGameState: (state: Partial<WaxleGameState>) => void;
     initializeGame: () => void;
@@ -100,45 +100,45 @@ interface WaxleGameState {
     checkGameOver: () => boolean;
 }
 
-// Initial state
-const initialState: Omit<WaxleGameState,
-    'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
-    'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
-    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'toggleTileLock' | 'checkGameOver'
-> = {
+// Initial game mode state
+const initialGameModeState: GameModeState = {
     gameInitialized: false,
     phase: 'player',
     grid: [],
     gridSize: 5,
     score: 0,
     round: 1,
-
     nextRows: [],
     tilesPerDrop: 3,
     dropSpeed: 1000,
-
     selectedTiles: [],
     currentWord: '',
     isWordValid: false,
-
     wordsThisRound: [],
     totalWords: 0,
     tilesCleared: 0,
     longestWord: '',
     biggestCombo: 0,
-    wordsPerTurnLimit: 0, // 0 = unlimited by default
-
+    wordsPerTurnLimit: 0,
     slowModeRounds: 0,
     previewLevel: 1,
     tilesHiddenForAnimation: [],
     lockMode: false,
     lockedTiles: [],
     lockAnimatingTiles: [],
+};
 
-    // Daily Challenge mode
+// Initial state
+const initialState: Omit<WaxleGameState,
+    'getCurrentGameState' | 'updateCurrentGameState' |
+    'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
+    'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
+    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
+    'toggleTileLock' | 'checkGameOver'
+> = {
+    classicGameState: { ...initialGameModeState },
+    dailyGameState: { ...initialGameModeState },
     isDailyChallenge: false,
-
     lastSaved: Date.now(),
 };
 
@@ -148,10 +148,34 @@ export const useWaxleGameStore = create<WaxleGameState>()(
         (set, get) => ({
             ...initialState,
 
+            // Helper function to get current game state (route-aware)
+            getCurrentGameState: () => {
+                const state = get();
+                const isDailyMode = window.location.pathname === '/daily';
+                return isDailyMode ? state.dailyGameState : state.classicGameState;
+            },
+
+            // Helper function to update current game state (route-aware)
+            updateCurrentGameState: (updates: Partial<GameModeState>) => {
+                const isDailyMode = window.location.pathname === '/daily';
+                if (isDailyMode) {
+                    set((prev) => ({
+                        ...prev,
+                        isDailyChallenge: true, // Keep flag synced
+                        dailyGameState: { ...prev.dailyGameState, ...updates }
+                    }));
+                } else {
+                    set((prev) => ({
+                        ...prev,
+                        isDailyChallenge: false, // Keep flag synced
+                        classicGameState: { ...prev.classicGameState, ...updates }
+                    }));
+                }
+            },
+
             setGameState: (state) => set((prev) => ({ ...prev, ...state })),
 
             initializeGame: () => {
-                const state = get();
                 const gridSize = 5; // Default grid size
                 const initialGrid = generateInitialGrid(gridSize);
 
@@ -170,27 +194,38 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
                 // Generate first drop preview (starts at 3 tiles for round 1)
                 const initialTilesPerDrop = 3;
-                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, state.seededRNG);
-                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, state.seededRNG);
+                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, undefined);
+                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, undefined);
 
-                set({
-                    gameInitialized: true,
-                    phase: 'player',
-                    round: 1,
-                    score: 0,
-                    grid: tilesWithLetters,
-                    gridSize: gridSize,
-                    nextRows: [firstDrop, secondDrop],
-                    tilesPerDrop: initialTilesPerDrop,
-                    selectedTiles: [],
-                    currentWord: '',
-                    wordsThisRound: [],
-                    freeMoveAvailable: false,
-                    freeOrbitsAvailable: 2, // 2 orbits per turn
-                    lockMode: false,
-                    lockedTiles: [],
-                    lockAnimatingTiles: [],
-                });
+                // Initialize classic game state (never daily challenge here)
+                set((prev) => ({
+                    ...prev,
+                    isDailyChallenge: false,
+                    classicGameState: {
+                        ...prev.classicGameState,
+                        gameInitialized: true,
+                        phase: 'player',
+                        round: 1,
+                        score: 0,
+                        grid: tilesWithLetters,
+                        gridSize: gridSize,
+                        nextRows: [firstDrop, secondDrop],
+                        tilesPerDrop: initialTilesPerDrop,
+                        selectedTiles: [],
+                        currentWord: '',
+                        wordsThisRound: [],
+                        freeMoveAvailable: false,
+                        freeOrbitsAvailable: 2,
+                        lockMode: false,
+                        lockedTiles: [],
+                        lockAnimatingTiles: [],
+                        totalWords: 0,
+                        tilesCleared: 0,
+                        longestWord: '',
+                        biggestCombo: 0,
+                        isWordValid: false,
+                    }
+                }));
             },
 
             initializeDailyChallenge: (seed: number, gameState: any, date: string) => {
@@ -213,80 +248,86 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Set the RNG state for future generations
                 seededRNG.setState(gameState.rngState);
                 
-                set({
-                    gameInitialized: true,
-                    phase: 'player',
-                    round: 1,
-                    score: 0,
-                    grid: tilesWithLetters,
-                    gridSize: gridSize,
-                    nextRows: [firstDrop, secondDrop],
-                    tilesPerDrop: 3, // Start with 3 tiles
-                    selectedTiles: [],
-                    currentWord: '',
-                    wordsThisRound: [],
-                    freeMoveAvailable: false,
-                    freeOrbitsAvailable: 2,
-                    lockMode: false,
-                    lockedTiles: [],
-                    lockAnimatingTiles: [],
-                    
-                    // Daily challenge specific
+                // Initialize daily challenge game state
+                set((prev) => ({
+                    ...prev,
                     isDailyChallenge: true,
-                    dailySeed: seed,
-                    dailyDate: date,
-                    challengeStartTime: Date.now(),
-                    seededRNG: seededRNG,
-                    
-                    // Reset stats
-                    totalWords: 0,
-                    tilesCleared: 0,
-                    longestWord: '',
-                    biggestCombo: 0,
-                });
+                    dailyGameState: {
+                        ...prev.dailyGameState,
+                        gameInitialized: true,
+                        phase: 'player',
+                        round: 1,
+                        score: 0,
+                        grid: tilesWithLetters,
+                        gridSize: gridSize,
+                        nextRows: [firstDrop, secondDrop],
+                        tilesPerDrop: 3,
+                        selectedTiles: [],
+                        currentWord: '',
+                        wordsThisRound: [],
+                        freeMoveAvailable: false,
+                        freeOrbitsAvailable: 2,
+                        lockMode: false,
+                        lockedTiles: [],
+                        lockAnimatingTiles: [],
+                        totalWords: 0,
+                        tilesCleared: 0,
+                        longestWord: '',
+                        biggestCombo: 0,
+                        isWordValid: false,
+                        // Daily challenge specific fields
+                        dailySeed: seed,
+                        dailyDate: date,
+                        challengeStartTime: Date.now(),
+                        seededRNG: seededRNG,
+                    }
+                }));
             },
 
             resetGame: () => {
                 set({
                     ...initialState,
-                    gameInitialized: true,
-                    // Explicitly clear daily challenge state
+                    classicGameState: {
+                        ...initialGameModeState,
+                        gameInitialized: false, // Allow re-initialization
+                    },
+                    dailyGameState: {
+                        ...initialGameModeState,
+                        gameInitialized: false,
+                    },
                     isDailyChallenge: false,
-                    dailySeed: undefined,
-                    dailyDate: undefined,
-                    challengeStartTime: undefined,
-                    seededRNG: undefined,
                 });
             },
 
             startPlayerPhase: () => {
                 console.log('[STORE] Starting player phase with 2 orbits');
-                set({
+                const { updateCurrentGameState } = get();
+                updateCurrentGameState({
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
-                    // Don't reset wordsThisRound here - keep accumulating words
                     freeMoveAvailable: false,
-                    freeOrbitsAvailable: 2, // Reset to 2 orbits per turn
-                    // Note: lockMode and lockedTiles are cleared at endRound start
+                    freeOrbitsAvailable: 2,
                     tilesHiddenForAnimation: [],
                 });
             },
 
             endPlayerPhase: () => {
-                const state = get();
-                if (state.phase !== 'player') return;
+                const { getCurrentGameState } = get();
+                const currentState = getCurrentGameState();
+                if (currentState.phase !== 'player') return;
                 // Advance to flood for this turn
                 get().endRound();
             },
 
             endRound: () => {
-                const state = get();
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
                 const newRound = state.round + 1;
 
                 // Clear lock mode and locked tiles immediately before flood starts
                 // This ensures visual indicators disappear before flood animation
-                set({
+                updateCurrentGameState({
                     lockMode: false,
                     lockedTiles: [],
                     lockAnimatingTiles: [],
@@ -342,7 +383,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     console.log(`[DEBUG] Top row full:`, topRowFull);
                     
                     // Toast removed - game over modal shows this information
-                    set({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
+                    updateCurrentGameState({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
                     return;
                 } else if (unplacedLetters.length > 0) {
                     // DEBUG: Log when tiles fail to place but game continues (top row not full)
@@ -395,7 +436,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
                     .map(cell => cell.id);
 
-                set({
+                updateCurrentGameState({
                     round: newRound,
                     tilesPerDrop: currentTilesPerDrop, // Progressive difficulty
                     phase: 'flood',
@@ -410,7 +451,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             selectTile: (cellId: string) => {
-                const state = get();
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
                 const cell = state.grid.find(c => c.id === cellId);
 
                 if (!cell || !cell.letter || state.phase !== 'player') return;
@@ -422,7 +464,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     const newSelected = state.selectedTiles.slice(0, existingIndex);
                     const newWord = newSelected.map(t => t.letter).join('');
 
-                    set({
+                    updateCurrentGameState({
                         selectedTiles: newSelected,
                         currentWord: newWord
                     });
@@ -430,10 +472,10 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     // Validate word asynchronously
                     if (newWord.length >= 3) {
                         wordValidator.validateWordAsync(newWord).then(isValid => {
-                            set({ isWordValid: isValid });
+                            updateCurrentGameState({ isWordValid: isValid });
                         });
                     } else {
-                        set({ isWordValid: false });
+                        updateCurrentGameState({ isWordValid: false });
                     }
                     return;
                 }
@@ -452,7 +494,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                                 letter: cell.letter,
                                 position: 0
                             }];
-                            set({
+                            updateCurrentGameState({
                                 selectedTiles: newSelected,
                                 currentWord: cell.letter,
                                 isWordValid: false
@@ -473,7 +515,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
                 const newWord = newSelected.map(t => t.letter).join('');
 
-                set({
+                updateCurrentGameState({
                     selectedTiles: newSelected,
                     currentWord: newWord
                 });
@@ -481,15 +523,16 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Validate word asynchronously
                 if (newWord.length >= 3) {
                     wordValidator.validateWordAsync(newWord).then(isValid => {
-                        set({ isWordValid: isValid });
+                        updateCurrentGameState({ isWordValid: isValid });
                     });
                 } else {
-                    set({ isWordValid: false });
+                    updateCurrentGameState({ isWordValid: false });
                 }
             },
 
             deselectTile: (cellId: string) => {
-                const state = get();
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
                 const tileIndex = state.selectedTiles.findIndex(t => t.cellId === cellId);
 
                 if (tileIndex === -1) return;
@@ -499,7 +542,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     const newSelected = state.selectedTiles.slice(0, -1);
                     const newWord = newSelected.map(t => t.letter).join('');
 
-                    set({
+                    updateCurrentGameState({
                         selectedTiles: newSelected,
                         currentWord: newWord
                     });
@@ -507,16 +550,17 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     // Validate word asynchronously
                     if (newWord.length >= 3) {
                         wordValidator.validateWordAsync(newWord).then(isValid => {
-                            set({ isWordValid: isValid });
+                            updateCurrentGameState({ isWordValid: isValid });
                         });
                     } else {
-                        set({ isWordValid: false });
+                        updateCurrentGameState({ isWordValid: false });
                     }
                 }
             },
 
             clearSelection: () => {
-                set({
+                const { updateCurrentGameState } = get();
+                updateCurrentGameState({
                     selectedTiles: [],
                     currentWord: '',
                     isWordValid: false
@@ -524,7 +568,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             submitWord: async () => {
-                const state = get();
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
 
                 if (state.currentWord.length < 3) {
                     toastService.error('Word must be at least 3 letters');
@@ -558,7 +603,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
 
                 // Update state
-                const updates: Partial<WaxleGameState> = {
+                const updates: Partial<GameModeState> = {
                     grid: newGrid,
                     wordsThisRound: [...state.wordsThisRound, state.currentWord],
                     totalWords: state.totalWords + 1,
@@ -578,7 +623,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     updates.longestWord = state.currentWord;
                 }
 
-                set(updates);
+                updateCurrentGameState(updates);
                 toastService.success(`+${wordScore} points!`);
                 haptics.success();
 
@@ -592,7 +637,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
             // New: move one tile to an adjacent empty cell, then end round
             moveTileOneStep: (_sourceCellId: string, _targetCellId: string) => {
-                const state = get();
+                const { getCurrentGameState } = get();
+                const state = getCurrentGameState();
                 if (state.phase !== 'player') return;
                 toastService.error('Move power is disabled');
                 return;
@@ -607,7 +653,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
 
             toggleTileLock: (cellId: string) => {
-                const state = get();
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
                 
                 const clickedCell = state.grid.find(c => c.id === cellId);
                 if (!clickedCell || !clickedCell.letter || !clickedCell.isPlaced) return; // Only lock placed tiles
@@ -629,7 +676,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
                     const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToUnlock])];
                     
-                    set({ 
+                    updateCurrentGameState({ 
                         lockAnimatingTiles: newAnimatingTiles,
                         selectedTiles: [],
                         currentWord: ''
@@ -637,11 +684,12 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     
                     // After 400ms, complete the unlock
                     setTimeout(() => {
-                        const currentState = get();
+                        const { getCurrentGameState, updateCurrentGameState } = get();
+                        const currentState = getCurrentGameState();
                         const newLockedTiles = (currentState.lockedTiles || []).filter(id => !validTilesToUnlock.includes(id));
                         const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToUnlock.includes(id));
                         
-                        set({
+                        updateCurrentGameState({
                             lockedTiles: newLockedTiles,
                             lockAnimatingTiles: newAnimatingTiles
                         });
@@ -663,7 +711,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
                     const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToLock])];
                     
-                    set({ 
+                    updateCurrentGameState({ 
                         lockAnimatingTiles: newAnimatingTiles,
                         selectedTiles: [],
                         currentWord: ''
@@ -671,11 +719,12 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     
                     // After 400ms, complete the lock
                     setTimeout(() => {
-                        const currentState = get();
+                        const { getCurrentGameState, updateCurrentGameState } = get();
+                        const currentState = getCurrentGameState();
                         const newLockedTiles = [...new Set([...(currentState.lockedTiles || []), ...validTilesToLock])];
                         const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToLock.includes(id));
                         
-                        set({
+                        updateCurrentGameState({
                             lockedTiles: newLockedTiles,
                             lockAnimatingTiles: newAnimatingTiles
                         });
@@ -696,29 +745,22 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             name: 'waxle-game',
             skipHydration: false,
             partialize: (state) => {
-                // Don't persist daily challenge game state or game over phase
-                if (state.isDailyChallenge) {
-                    // For daily challenges, only persist basic settings, not game state
-                    return {
-                        gameInitialized: false, // Force fresh start for daily challenges
-                        phase: 'player',
-                        grid: [],
-                        score: 0,
-                        round: 1,
-                        totalWords: 0,
-                        longestWord: '',
-                        isDailyChallenge: false, // Don't persist daily mode
-                        lastSaved: state.lastSaved,
-                    };
-                }
-                
-                // For regular games, persist everything except problematic fields
-                const { phase, isDailyChallenge, dailySeed, dailyDate, challengeStartTime, seededRNG, ...regularGameState } = state;
-                
+                // Persist both Classic and Daily states separately
                 return {
-                    ...regularGameState,
-                    phase: 'player', // Always start regular games in player phase, not gameOver
-                    isDailyChallenge: false, // Never persist daily challenge mode
+                    classicGameState: {
+                        ...state.classicGameState,
+                        phase: 'player', // Always start in player phase on load
+                        selectedTiles: [], // Clear UI state
+                        currentWord: '',
+                    },
+                    dailyGameState: {
+                        ...state.dailyGameState, 
+                        phase: 'player', // Always start in player phase on load
+                        selectedTiles: [], // Clear UI state
+                        currentWord: '',
+                    },
+                    isDailyChallenge: false, // Always start in Classic mode on load
+                    lastSaved: state.lastSaved,
                 };
             },
         }

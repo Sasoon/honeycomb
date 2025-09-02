@@ -261,6 +261,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [isOverCancel, setIsOverCancel] = useState<boolean>(false);
   const isOverCancelRef = useRef<boolean>(false);
 
+  // Get the store state separately to avoid infinite rerenders
+  const isDailyMode = location.pathname === '/daily';
+  const store = useWaxleGameStore();
+  const currentGameState = isDailyMode ? store.dailyGameState : store.classicGameState;
+
   const {
     gameInitialized,
     phase,
@@ -279,7 +284,15 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     lockMode,
     lockedTiles,
     lockAnimatingTiles,
-    toggleTileLock,
+    gridSize,
+    gravityMoves,
+    floodPaths,
+    tilesHiddenForAnimation: _unusedTiles,
+    dailyDate,
+    challengeStartTime,
+  } = currentGameState;
+
+  const {
     initializeGame,
     selectTile,
     submitWord,
@@ -287,17 +300,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     startPlayerPhase,
     endPlayerPhase,
     resetGame,
-    gridSize,
-    
-    // Daily challenge properties
-    isDailyChallenge,
-    dailyDate,
-    challengeStartTime,
-    
-    gravityMoves,
-    floodPaths,
-    tilesHiddenForAnimation: _unusedTiles,
-  } = useWaxleGameStore();
+    toggleTileLock,
+  } = store;
+
+  const isDailyChallenge = isDailyMode;
 
   useEffect(() => { 
     if (!gameInitialized) {
@@ -1173,7 +1179,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     const direction = lockedStepsRef.current > 0 ? 'cw' : 'ccw';
                     console.log(`[ORBIT-DRAG] Committing ${steps} ${direction} rotations (lockedSteps: ${lockedStepsRef.current})`);
 
-                    let currentGrid = useWaxleGameStore.getState().grid;
+                    const storeState = useWaxleGameStore.getState();
+                    let currentGrid = storeState.isDailyChallenge ? storeState.dailyGameState.grid : storeState.classicGameState.grid;
                     const plan = orbitPlanRef.current;
                     const pivot = currentGrid.find(c => c.id === selectedSingle.cellId);
                     if (!pivot || !plan || plan.pivotId !== pivot.id) {
@@ -1188,9 +1195,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       return;
                     }
 
-                    // Get current locked tiles
-                    const currentState = useWaxleGameStore.getState();
-                    const lockedTileIds = Array.isArray(currentState.lockedTiles) ? currentState.lockedTiles : [];
+                    // Get current locked tiles  
+                    const storeState2 = useWaxleGameStore.getState();
+                    const currentGameState = storeState2.isDailyChallenge ? storeState2.dailyGameState : storeState2.classicGameState;
+                    const lockedTileIds = Array.isArray(currentGameState.lockedTiles) ? currentGameState.lockedTiles : [];
                     console.log('[ORBIT-UI] Locked tiles:', lockedTileIds);
 
                     // Extract current state: letters and lock status  
@@ -1258,9 +1266,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     });
 
                     // Decrement orbit count properly  
-                    const newOrbitsAvailable = Math.max(0, (currentState.freeOrbitsAvailable || 0) - 1);
+                    const newOrbitsAvailable = Math.max(0, (currentGameState.freeOrbitsAvailable || 0) - 1);
                     
-                    useWaxleGameStore.setState({ 
+                    const { updateCurrentGameState } = useWaxleGameStore.getState();
+                    updateCurrentGameState({ 
                       grid: currentGrid, 
                       selectedTiles: [], 
                       currentWord: '', 
@@ -1334,7 +1343,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         
                         // Check if this tile is locked
                         const currentState = useWaxleGameStore.getState();
-                        const lockedTileIds = Array.isArray(currentState.lockedTiles) ? currentState.lockedTiles : [];
+                        const currentGameState = currentState.isDailyChallenge ? currentState.dailyGameState : currentState.classicGameState;
+                        const lockedTileIds = Array.isArray(currentGameState.lockedTiles) ? currentGameState.lockedTiles : [];
                         const isLocked = lockedTileIds.includes(cell.id);
                         
                         // Only move unlocked tiles during preview
