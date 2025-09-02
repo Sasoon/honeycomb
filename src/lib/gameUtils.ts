@@ -73,7 +73,7 @@ export const generateInitialGrid = (size: number, skipPrePlaced = false): HexCel
         if (centerTile) { // Only proceed if center tile exists
             // Find tiles adjacent to the center
             const adjacentTiles = centerTiles.filter(cell =>
-                isAdjacentToCell(cell, centerTile) &&
+                isAdjacent(cell, centerTile) &&
                 cell.id !== centerTile.id
             );
 
