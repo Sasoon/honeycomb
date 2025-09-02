@@ -224,7 +224,7 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
 
 type Overlay = { id: string; letter: string; x: number; y: number; pulse: number; isFinal?: boolean; rX?: number; rY?: number };
 
-type FxOverlay = { key: string; letter: string; x: number; y: number };
+type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'orbit' | 'move' };
 
 // (no-op placeholder removed)
 
@@ -440,7 +440,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         key: ovKey, 
                         letter: cell.letter, 
                         x: from.x, 
-                        y: from.y 
+                        y: from.y,
+                        kind: 'gravity'
                     }]);
                     
                     // Smooth staggered start within distance group
@@ -953,19 +954,28 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   <motion.div
                     key={fx.key}
                     initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1, rotateZ: 0 }}
-                    animate={{ 
-                      x: fx.x - cellSize.w / 2, 
-                      y: fx.y - cellSize.h / 2, 
+                    animate={fx.kind === 'gravity' ? {
+                      x: fx.x - cellSize.w / 2,
+                      y: fx.y - cellSize.h / 2,
+                      opacity: 1,
+                      scale: 1,
+                      rotateZ: 0
+                    } : {
+                      x: fx.x - cellSize.w / 2,
+                      y: fx.y - cellSize.h / 2,
                       opacity: 1,
                       // Deep magnetic slingshot: dramatic burst, bounce, damped wobble
                       scale: [1, 1.5, 0.6, 1.3, 0.5, 1],
                       rotateZ: [0, 6, -8, 4, -2, 0]
                     }}
                     exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ 
+                    transition={fx.kind === 'gravity' ? {
+                      duration: 0.2,
+                      ease: 'linear'
+                    } : {
                       duration: 1.2,
                       times: [0, 0.15, 0.35, 0.55, 0.75, 1],
-                      ease: "anticipate" // pronounced ease-in then snap & wobble
+                      ease: 'anticipate' // pronounced ease-in then snap & wobble
                     }}
                     style={{ position: 'absolute', left: 0, top: 0 }}
                   >
