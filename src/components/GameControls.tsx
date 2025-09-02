@@ -61,7 +61,7 @@ const GameControls = ({
     setSnapAnimating(false);
     setRestartProgress(0);
     holdStartRef.current = performance.now();
-    const durationMs = 3000;
+    const durationMs = 2000;
 
     const step = () => {
       if (!holdStartRef.current) return;
@@ -162,15 +162,13 @@ const GameControls = ({
         {/* Restart - Secondary Action (only if not daily challenge) */}
         {onRestart && (
           <button 
-            onMouseDown={startHold}
-            onMouseUp={cancelHold}
-            onMouseLeave={cancelHold}
-            onTouchStart={(e) => { e.preventDefault(); startHold(); }}
-            onTouchEnd={cancelHold}
-            onTouchCancel={cancelHold}
+            onPointerDown={startHold}
+            onPointerUp={cancelHold}
+            onPointerCancel={cancelHold}
+            onPointerLeave={cancelHold}
             disabled={!canRestart}
             className={cn(
-              "relative overflow-hidden inline-flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap rounded-xl text-sm font-xxl transition-all duration-300 ease-in-out",
+              "relative overflow-hidden inline-flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap rounded-xl text-sm font-xxl transition-all duration-300 ease-in-out touch-none select-none",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/50",
               fixedButtonDims,
               canRestart
@@ -180,7 +178,7 @@ const GameControls = ({
           >
             <RotateCw 
               className="w-4 h-4 sm:w-4 sm:h-4 transition-transform"
-              style={{ transform: `rotate(${(isHoldingRestart ? restartProgress * 360 : (snapAnimating ? snapDeg : 0))}deg)`, transition: snapAnimating ? 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none' }}
+              style={{ transform: `rotate(${(isHoldingRestart ? restartProgress * 360 : (snapAnimating ? snapDeg : 0))}deg)`, transition: snapAnimating ? 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none', willChange: 'transform' }}
             />
             <span className="hidden sm:inline">Restart</span>
           </button>
