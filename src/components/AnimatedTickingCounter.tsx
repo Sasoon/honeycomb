@@ -15,17 +15,17 @@ export const AnimatedTickingCounter = ({
 }: AnimatedTickingCounterProps) => {
   return (
     <div className={className}>
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout">
         <motion.div
           key={value}
-          initial={{ y: 20, opacity: 0 }}
+          initial={{ y: 10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -20, opacity: 0 }}
+          exit={{ y: -10, opacity: 0 }}
           transition={{
             type: "spring",
-            stiffness: 1200,
-            damping: 20,
-            duration: 0.05,
+            stiffness: 600,
+            damping: 35,
+            duration: 0.25,
             delay: delay / 1000 // Convert ms to seconds for Framer Motion
           }}
           className="flex items-center justify-center"

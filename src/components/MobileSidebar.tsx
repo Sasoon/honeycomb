@@ -129,10 +129,10 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
               duration: 0.3 
             }}
             className={cn(
-              "mobile-sidebar bg-bg-primary/95 backdrop-blur-xl", 
+              "mobile-sidebar bg-bg-primary/95 backdrop-blur-sm", 
               "fixed left-0 w-80 flex flex-col overflow-hidden md:hidden z-50",
               "shadow-2xl shadow-secondary/20",
-              "drop-shadow-lg"
+              "drop-shadow-lg border-r border-secondary/10"
             )}
             style={{
               top: `${headerHeight}px`,

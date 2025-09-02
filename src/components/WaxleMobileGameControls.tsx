@@ -45,20 +45,36 @@ const WaxleMobileGameControls = ({
       >
         <div className="flex justify-between items-center w-full">
           <div className="flex items-center space-x-3">
-            {/* Next Drop Preview with modern styling */}
+            {/* Next Drop Preview with responsive sizing */}
             {previewLevel > 0 && nextRows.length > 0 && (
               <div className={cn(
-                "flex items-center gap-2",
+                "flex items-center",
                 "bg-amber/10 border border-amber/20",
-                "rounded-xl px-3 py-1.5"
+                "rounded-xl py-1.5",
+                // Dynamic gap and padding based on tile count
+                nextRows[0]?.length >= 6 ? "gap-1 px-2" : "gap-2 px-3"
               )}>
-                <span className="text-xs font-medium text-amber uppercase tracking-wide">Next</span>
-                <div className="flex gap-1">
+                {/* Show abbreviated label with many tiles, full label otherwise */}
+                <span className={cn(
+                  "font-medium text-amber uppercase tracking-wide",
+                  nextRows[0]?.length >= 6 ? "text-[10px] hidden xs:inline" : "text-xs"
+                )}>
+                  {nextRows[0]?.length >= 6 ? "N" : "Next"}
+                </span>
+                <div className={cn(
+                  "flex",
+                  // Dynamic gap based on tile count
+                  nextRows[0]?.length >= 6 ? "gap-0.5" : "gap-1"
+                )}>
                   {nextRows[0]?.map((letter, idx) => (
                     <div key={idx} className={cn(
-                      "w-6 h-6 bg-bg-secondary border border-secondary/30",
+                      "bg-bg-secondary border border-secondary/30",
                       "rounded-lg flex items-center justify-center",
-                      "text-xs font-semibold text-text-primary"
+                      "font-semibold text-text-primary",
+                      // Responsive tile sizing
+                      nextRows[0]?.length >= 6 ? "w-4 h-4 text-[10px]" :
+                      nextRows[0]?.length >= 5 ? "w-5 h-5 text-xs" :
+                      "w-6 h-6 text-xs"
                     )}>
                       {letter}
                     </div>
@@ -69,8 +85,15 @@ const WaxleMobileGameControls = ({
           </div>
           
           {/* Modern Stats Display */}
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-3 text-sm">
+          <div className={cn(
+            "flex items-center",
+            // Tighter spacing when showing 6 tiles
+            nextRows[0]?.length >= 6 ? "space-x-2" : "space-x-4"
+          )}>
+            <div className={cn(
+              "flex items-center text-sm",
+              nextRows[0]?.length >= 6 ? "space-x-2" : "space-x-3"
+            )}>
               <div className="flex items-center space-x-1">
                 <span className="text-text-secondary">Score</span>
                 <span className="font-semibold text-amber bg-amber/10 px-2 py-0.5 rounded-full text-xs">

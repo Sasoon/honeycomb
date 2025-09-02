@@ -1620,27 +1620,33 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 ]}
               />
               
-              {/* UI Buttons - now in same container as grid */}
-              <div className="flex gap-2 flex-wrap items-center px-4 py-2 rounded-lg">
+              {/* UI Buttons with consistent site styling */}
+              <div className="flex gap-3 flex-wrap items-center justify-center">
                 <button 
                   onClick={() => submitWord()} 
                   disabled={currentWord.length < 3 || phase !== 'player' || validationState !== true} 
-                  className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                  className={cn(
+                    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50",
+                    "h-10 px-6",
                     phase === 'player' && currentWord.length >= 3 && validationState === true
-                      ? 'bg-amber-light hover:bg-amber text-white'
-                      : 'bg-secondary-dark text-text-muted cursor-not-allowed'
-                  }`}
+                      ? "bg-amber hover:bg-amber-dark text-white hover:shadow-lg hover:shadow-amber/20"
+                      : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
+                  )}
                 >
                   Submit Word
                 </button>
                 <button 
                   onClick={() => endPlayerPhase()} 
                   disabled={phase !== 'player'}
-                  className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                  className={cn(
+                    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                    "h-10 px-6",
                     phase === 'player'
-                      ? 'bg-accent hover:bg-accent-dark text-white'
-                      : 'bg-secondary-dark text-text-muted cursor-not-allowed'
-                  }`}
+                      ? "bg-accent hover:bg-accent-dark text-white hover:shadow-lg hover:shadow-accent/20"
+                      : "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
+                  )}
                 >
                   End Turn
                 </button>
@@ -1648,11 +1654,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   <button 
                     onClick={handleRestart} 
                     disabled={phase === 'flood' || phase === 'gravitySettle'}
-                    className={`py-1.5 px-3 text-sm font-medium rounded transition-colors ${
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/50",
+                      "h-10 px-6",
                       phase === 'flood' || phase === 'gravitySettle'
-                        ? 'bg-secondary-dark text-text-muted cursor-not-allowed'
-                        : 'bg-primary hover:bg-primary-dark text-white'
-                    }`}
+                        ? "disabled:pointer-events-none disabled:opacity-50 bg-secondary/10 text-text-muted"
+                        : "bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 text-text-primary hover:shadow-lg hover:shadow-secondary/10"
+                    )}
                   >
                     Restart
                   </button>
