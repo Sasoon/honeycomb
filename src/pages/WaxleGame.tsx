@@ -3,7 +3,10 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Hash } from 'lucide-react';
+import { Hash } from 'lucide-react';
+import { CSSAnimatedCounter } from '../components/CSSAnimatedCounter';
+import { AnimatedTickingCounter } from '../components/AnimatedTickingCounter';
+import { DynamicZapIcon } from '../components/DynamicZapIcon';
 import { cn } from '../lib/utils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
@@ -754,7 +757,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 "bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20",
                 "rounded-2xl p-6 text-center shadow-lg shadow-amber/10"
               )}>
-                <div className="text-4xl font-bold text-amber mb-2">{score}</div>
+                <div className="text-4xl font-bold text-amber mb-2">
+                  <CSSAnimatedCounter 
+                    value={score} 
+                    duration={1.0}
+                    property="score"
+                    className="tabular-nums"
+                  />
+                </div>
                 <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">Score</div>
               </div>
 
@@ -766,7 +776,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 )}>
                   <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
                     <Hash className="w-4 h-4" />
-                    <span>{round}</span>
+                    <AnimatedTickingCounter 
+                      value={round} 
+                      className="min-w-[24px] tabular-nums"
+                    />
                   </div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Round</div>
                 </div>
@@ -775,10 +788,18 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   "rounded-xl p-4 text-center"
                 )}>
                   <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
-                    <Zap className="w-4 h-4" />
+                    <DynamicZapIcon 
+                      orbitsAvailable={freeOrbitsAvailable || 0}
+                      maxOrbits={2}
+                      size={20}
+                      className="flex-shrink-0"
+                      animationDelay={0} // Wait for round counter animation to finish
+                    />
                     <span>{freeOrbitsAvailable || 0}</span>
                   </div>
-                  <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Orbits</div>
+                  <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">
+                    {(freeOrbitsAvailable || 0) === 1 ? 'Orbit' : 'Orbits'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -886,6 +907,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 </span>
               </div>
             </div>
+
           </div>
         </div>
 
