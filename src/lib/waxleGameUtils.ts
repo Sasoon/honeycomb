@@ -187,12 +187,12 @@ export function placeStartingTiles(
     _gridSize: number
 ): HexCell[] {
     const newGrid = grid.map(cell => ({ ...cell }));
-    
+
     // Find top row cells and sort by column for consistent placement
     const topRowCells = newGrid
         .filter(cell => cell.position.row === 0)
         .sort((a, b) => a.position.col - b.position.col);
-    
+
     // Place letters at top row first
     letters.forEach((letter, index) => {
         if (index < topRowCells.length) {
@@ -202,10 +202,10 @@ export function placeStartingTiles(
             (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
         }
     });
-    
+
     // Apply simple gravity to let them fall to bottom
     const { newGrid: settledGrid } = clearTilesAndApplyGravity(newGrid, []);
-    
+
     return settledGrid;
 }
 
@@ -214,7 +214,7 @@ export function applyFallingTiles(
     grid: HexCell[],
     fallingLetters: string[],
     gridSize: number
-): { newGrid: HexCell[]; placedCount: number; attemptedCount: number; finalPaths: Record<string, string[]>; unplacedLetters: string[] } {
+): { newGrid: HexCell[]; placedCount: number; attemptedCount: number; finalPaths: Record<string, { path: string[]; batch: number }>; unplacedLetters: string[] } {
     // Clone grid
     const newGrid = grid.map(cell => ({ ...cell }));
 
@@ -224,8 +224,8 @@ export function applyFallingTiles(
     // First apply gravity to existing tiles that were placed this turn
     applyGravityToExistingTiles(newGrid, gridSize);
 
-    // Now apply the simplified flood logic
-    const { placedTiles, finalPaths, unplacedLetters } = applySimpleFloodTiles(newGrid, fallingLetters, gridSize);
+    // Deep-slot flood logic (replaces wave logic)
+    const { placedTiles, finalPaths, unplacedLetters } = applyDeepFloodTiles(newGrid, fallingLetters, gridSize);
     const placedCount = placedTiles.length;
 
     return { newGrid, placedCount, attemptedCount: fallingLetters.length, finalPaths, unplacedLetters };
@@ -243,22 +243,22 @@ function applyGravityToExistingTiles(grid: HexCell[], gridSize: number): void {
 
         // Process from bottom to top to avoid conflicts
         for (let row = gridSize - 2; row >= 0; row--) {
-            const cellsInRow = grid.filter(cell => 
-                cell.position.row === row && 
-                cell.letter && 
-                cell.isPlaced && 
+            const cellsInRow = grid.filter(cell =>
+                cell.position.row === row &&
+                cell.letter &&
+                cell.isPlaced &&
                 (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn === true
             );
 
             cellsInRow.forEach(cell => {
                 const { finalCell } = findDeepestValidPathWithSteps(cell, grid);
-                
+
                 if (finalCell && finalCell.id !== cell.id) {
                     // Move the letter to its deepest valid position
                     finalCell.letter = cell.letter;
                     finalCell.isPlaced = true;
                     (finalCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
-                    
+
                     // Clear the original position
                     cell.letter = '';
                     cell.isPlaced = false;
@@ -285,10 +285,10 @@ function findDeepestValidPathWithSteps(startCell: HexCell, grid: HexCell[], occu
         }
 
         // Find all cells below that we can move to
-        const cellsBelow = grid.filter(belowCell => 
+        const cellsBelow = grid.filter(belowCell =>
             belowCell.position.row === cell.position.row + 1 &&
             isHexAdjacent(cell, belowCell) &&
-            !belowCell.letter && 
+            !belowCell.letter &&
             !belowCell.isPlaced &&
             !visited.has(belowCell.id) &&
             !(occupiedPaths && occupiedPaths.has(belowCell.id))
@@ -304,113 +304,68 @@ function findDeepestValidPathWithSteps(startCell: HexCell, grid: HexCell[], occu
 
     const initialVisited = new Set<string>([startCell.id]);
     exploreDeepest(startCell, [startCell], initialVisited);
-    
+
     return { finalCell: deepestCell, fullPath: bestPath };
 }
 
-// Wave-based flood logic - process tiles in waves of 3 to prevent phasing
-function applySimpleFloodTiles(
+// NEW: deep-slot flood algorithm replacing wave logic
+function applyDeepFloodTiles(
     grid: HexCell[],
     fallingLetters: string[],
     _gridSize: number
-): { placedTiles: HexCell[]; finalPaths: Record<string, string[]>; unplacedLetters: string[] } {
+): { placedTiles: HexCell[]; finalPaths: Record<string, { path: string[]; batch: number }>; unplacedLetters: string[] } {
     const placedTiles: HexCell[] = [];
-    const finalPaths: Record<string, string[]> = {};
+    const finalPaths: Record<string, { path: string[]; batch: number }> = {};
     const unplacedLetters: string[] = [];
 
-    // Get available entry points from top row
-    const topRowCells = grid.filter(cell => cell.position.row === 0);
-    const availableEntries = topRowCells.filter(cell => !cell.letter && !cell.isPlaced);
+    // Helper to compute deep for a single batch (<=3 letters)
+    const processBatch = (letters: string[], batchIdx: number) => {
+        // Build occupied set from current grid state (letters already placed)
+        const occupiedStatic = new Set<string>();
+        grid.forEach(c => {
+            if (c.letter && c.isPlaced) occupiedStatic.add(`${c.position.row},${c.position.col}`);
+        });
+        const batchOccupied = new Set<string>();
 
-    console.log(`[WAVE-FLOOD] Processing ${fallingLetters.length} tiles in waves with ${availableEntries.length} entry points`);
+        // Collect fresh empty top-row entries each batch
+        const topRowEmpty = grid
+            .filter(c => c.position.row === 0 && !c.letter && !c.isPlaced)
+            .sort((a, b) => a.position.col - b.position.col);
 
-    // Check if we have enough entry points for flood tiles
-    if (availableEntries.length === 0) {
-        // No entry points - all tiles fail to place
-        unplacedLetters.push(...fallingLetters);
-        console.log(`[WAVE-FLOOD] No entry points available - all tiles fail to place`);
-        return { placedTiles, finalPaths, unplacedLetters };
-    }
+        let entryIdx = 0;
 
-    // Process tiles in waves of 3
-    const waveSize = 3;
-    let waveNumber = 0;
-    
-    for (let i = 0; i < fallingLetters.length; i += waveSize) {
-        waveNumber++;
-        const waveLetters = fallingLetters.slice(i, i + waveSize);
-        
-        console.log(`[WAVE-FLOOD] Processing wave ${waveNumber} with ${waveLetters.length} tiles`);
-        
-        // Track occupied positions during this wave to prevent phasing
-        const waveOccupiedPaths = new Set<string>();
-        
-        // Process each tile in this wave
-        for (let j = 0; j < waveLetters.length; j++) {
-            const letter = waveLetters[j];
-            
-            // Get current available entries (excluding those used by previous tiles in this wave)
-            const currentEntries = topRowCells.filter(cell => 
-                !cell.letter && 
-                !cell.isPlaced && 
-                !waveOccupiedPaths.has(cell.id)
-            );
-            
-            if (currentEntries.length === 0) {
-                // No more entry points - remaining tiles in this wave and future waves fail
-                unplacedLetters.push(...waveLetters.slice(j));
-                unplacedLetters.push(...fallingLetters.slice(i + waveSize));
-                console.log(`[WAVE-FLOOD] Wave ${waveNumber}: No more entry points - ${waveLetters.length - j + fallingLetters.length - i - waveSize} tiles fail to place`);
-                return { placedTiles, finalPaths, unplacedLetters };
+        letters.forEach(letter => {
+            // skip used entries inside this batch
+            while (entryIdx < topRowEmpty.length && batchOccupied.has(topRowEmpty[entryIdx].id)) {
+                entryIdx++;
             }
-
-            // Find the entry point that leads to the deepest position without conflicting with wave paths
-            let bestEntryPoint: HexCell | null = null;
-            let bestFinalPosition: HexCell | null = null;
-            let bestFullPath: HexCell[] = [];
-            let deepestRow = -1;
-
-            for (const entry of currentEntries) {
-                const { finalCell, fullPath } = findDeepestValidPathWithSteps(entry, grid, waveOccupiedPaths);
-                if (finalCell && finalCell.position.row > deepestRow) {
-                    // Check if this path conflicts with any existing wave paths
-                    const pathConflicts = fullPath.some(cell => waveOccupiedPaths.has(cell.id));
-                    if (!pathConflicts) {
-                        deepestRow = finalCell.position.row;
-                        bestEntryPoint = entry;
-                        bestFinalPosition = finalCell;
-                        bestFullPath = fullPath;
-                    }
-                }
-            }
-
-            if (bestEntryPoint && bestFinalPosition && bestFullPath.length > 0) {
-                // Place the tile at its deepest valid position
-                bestFinalPosition.letter = letter;
-                bestFinalPosition.isPlaced = true;
-                (bestFinalPosition as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
-                
-                placedTiles.push(bestFinalPosition);
-                
-                // Create complete step-by-step path for animation with wave info
-                const pathWithWave = bestFullPath.map(cell => cell.id);
-                finalPaths[bestFinalPosition.id] = pathWithWave;
-                
-                // Mark all positions in this path as occupied for this wave
-                bestFullPath.forEach(pathCell => {
-                    waveOccupiedPaths.add(pathCell.id);
-                });
-                
-                console.log(`[WAVE-FLOOD] Wave ${waveNumber}: Placed '${letter}' with ${bestFullPath.length} step path from (${bestEntryPoint.position.row},${bestEntryPoint.position.col}) to (${bestFinalPosition.position.row},${bestFinalPosition.position.col})`);
-            } else {
-                // No valid position found for this tile
+            if (entryIdx >= topRowEmpty.length) {
                 unplacedLetters.push(letter);
-                console.log(`[WAVE-FLOOD] Wave ${waveNumber}: Failed to place '${letter}' - no valid non-conflicting position found`);
+                return;
             }
-        }
+            const entryCell = topRowEmpty[entryIdx];
+            batchOccupied.add(entryCell.id);
+
+            // occupied for path finding = static + batchOccupied path cells so far
+            const occupiedCombined = new Set<string>([...occupiedStatic, ...batchOccupied]);
+            const { finalCell, fullPath } = findDeepestValidPathWithSteps(entryCell, grid, occupiedCombined);
+            if (!finalCell) { unplacedLetters.push(letter); return; }
+
+            finalCell.letter = letter;
+            finalCell.isPlaced = true;
+            (finalCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
+            placedTiles.push(finalCell);
+            finalPaths[finalCell.id] = { path: fullPath.map(c => c.id), batch: batchIdx };
+            fullPath.forEach(c => batchOccupied.add(c.id));
+            // also update grid static occupancy for subsequent letters in later batches
+            occupiedStatic.add(`${finalCell.position.row},${finalCell.position.col}`);
+        });
+    };
+
+    for (let i = 0; i < fallingLetters.length; i += 3) {
+        processBatch(fallingLetters.slice(i, i + 3), Math.floor(i / 3));
     }
 
-    console.log(`[WAVE-FLOOD] Completed ${waveNumber} waves, placed ${placedTiles.length} out of ${fallingLetters.length} tiles`);
     return { placedTiles, finalPaths, unplacedLetters };
 }
 

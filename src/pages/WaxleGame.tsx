@@ -510,29 +510,28 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         const topRowStartJitter = new Map<string, number>();
         const tilePaths = newlyFilled.map(cell => {
           // Use the exact path from the flood logic
-          const pathIds = floodPaths && floodPaths[cell.id];
-          
+          const p = floodPaths && floodPaths[cell.id];
+          let pathIds: string[] | null = null;
+          if (Array.isArray(p)) {
+            pathIds = p;
+          } else if (p && Array.isArray((p as any).path)) {
+            pathIds = (p as any).path;
+          }
           if (!pathIds || pathIds.length === 0) {
             console.warn(`[FLOOD-ERROR] No path found for tile ${cell.id} in flood paths`);
             return null;
           }
+          let pathIdsCopy = [...pathIds];
           
           // Convert path IDs to centers, ensuring we follow the exact flood path
                      const pathCenters: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
 
            // Skip top-row duplicate at t=0 if multiple tiles share the same entry
-           const firstCell = grid.find(g => g.id === pathIds[0]);
-                        if (firstCell && firstCell.position.row === 0) {
-               const entryKey = `${firstCell.position.row},${firstCell.position.col}`;
-               if (usedTopEntries.has(entryKey)) {
-                 // Nudge this tile to start 1 step later visually (it will animate starting from next path center)
-                 pathIds.shift();
-                 // Add a small per-entry jitter so staggered starters look natural
-                 const prev = topRowStartJitter.get(entryKey) || 0;
-                 topRowStartJitter.set(entryKey, prev + 1);
-               }
-               usedTopEntries.add(entryKey);
-             }
+           const firstCell = grid.find(g => g.id === pathIdsCopy[0]);
+           if (firstCell && firstCell.position.row === 0) {
+             const entryKey = `${firstCell.position.row},${firstCell.position.col}`;
+             usedTopEntries.add(entryKey);
+           }
           
           for (const pathId of pathIds) {
             const pathCell = grid.find(g => g.id === pathId);
@@ -566,187 +565,117 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
           return { cell, pathCenters };
         }).filter(tp => tp !== null);
 
-        // Improved collision detection system that respects contiguous paths
-        const occupancy = new Map<string, Set<number>>(); // slotKey -> set of timeIndices (stepIndex + offset)
-        const tileOffsets = new Map<string, number>();
-        
-        // Sort tile paths by path length and starting position for better collision resolution
-        const sortedTilePaths = [...tilePaths].sort((a, b) => {
-          // Prioritize shorter paths first (they're more constrained)
-          const lengthDiff = a.pathCenters.length - b.pathCenters.length;
-          if (lengthDiff !== 0) return lengthDiff;
-          
-          // Then by starting column (left to right)
-          return a.pathCenters[0].col - b.pathCenters[0].col;
+        // ----- BATCH-AWARE OCCUPANCY / OFFSETS ----------------------------------
+        const batches = new Map<number, typeof tilePaths>();
+        tilePaths.forEach(tp => {
+          const batchIdx = (floodPaths && floodPaths[tp.cell.id] && (floodPaths[tp.cell.id] as any).batch) ?? 0;
+          (tp as any).batch = batchIdx;
+          if (!batches.has(batchIdx)) batches.set(batchIdx, [] as any);
+          (batches.get(batchIdx) as any).push(tp);
         });
-        
-        sortedTilePaths.forEach(tp => {
-          let offset = 0;
-          const maxOffset = 20; // Increased to handle more converging tiles
-          
-          while (offset < maxOffset) {
-            let conflict = false;
-            
-            // Check for conflicts along the entire path
-            for (let i = 0; i < tp.pathCenters.length; i++) {
-              const pc = tp.pathCenters[i];
-              const key = `${pc.row},${pc.col}`;
-              const timeIndex = i + offset;
-              const set = occupancy.get(key);
-              
-              if (set && set.has(timeIndex)) {
-                conflict = true;
+
+        const batchOffsets = new Map<string, number>();
+        const perBatchMaxDelay = new Map<number, number>();
+
+        batches.forEach((paths, batchIdx) => {
+          const occupancy = new Map<string, Set<number>>();
+          paths.sort((a: any, b: any) => a.pathCenters.length - b.pathCenters.length);
+          paths.forEach((tp: any) => {
+            let offset = 0;
+            const maxOffset = 20;
+            while (offset < maxOffset) {
+              let conflict = false;
+              for (let i = 0; i < tp.pathCenters.length; i++) {
+                const pc = tp.pathCenters[i];
+                const key = `${pc.row},${pc.col}`;
+                const tIdx = i + offset;
+                const set = occupancy.get(key);
+                if (set && set.has(tIdx)) { conflict = true; break; }
+              }
+              if (!conflict) {
+                for (let i = 0; i < tp.pathCenters.length; i++) {
+                  const pc = tp.pathCenters[i];
+                  if (pc.row === 0) continue;
+                  const key = `${pc.row},${pc.col}`;
+                  if (!occupancy.has(key)) occupancy.set(key, new Set());
+                  occupancy.get(key)!.add(i + offset);
+                }
+                batchOffsets.set(tp.cell.id, offset);
                 break;
               }
-              
-              // Additional check: ensure contiguous movement (no skipping over occupied slots)
-              if (i > 0) {
-                const prevPc = tp.pathCenters[i - 1];
-                const prevKey = `${prevPc.row},${prevPc.col}`;
-                const prevSet = occupancy.get(prevKey);
-                const prevTimeIndex = (i - 1) + offset;
-                
-                // Ensure previous step is clear before moving to current
-                if (prevSet && prevSet.has(prevTimeIndex + 1)) {
-                  conflict = true;
-                  break;
-                }
-              }
+              offset++;
             }
-            
-            if (!conflict) {
-                             // Reserve all positions in the path (except top row) with time buffers
-               for (let i = 0; i < tp.pathCenters.length; i++) {
-                 const pc = tp.pathCenters[i];
-                 if (pc.row <= 0) continue; // allow top-row reuse
-                 const key = `${pc.row},${pc.col}`;
-                 const timeIndex = i + offset;
-                 
-                 if (!occupancy.has(key)) occupancy.set(key, new Set<number>());
-                 occupancy.get(key)!.add(timeIndex);
-                 
-                 // Also reserve a buffer time to prevent phasing (3-frame buffer)
-                 occupancy.get(key)!.add(timeIndex + 1);
-                 occupancy.get(key)!.add(timeIndex + 2);
-                 occupancy.get(key)!.add(timeIndex + 3);
-               }
-              
-              tileOffsets.set(tp.cell.id, offset);
-              break;
-            }
-            
-            offset++;
-          }
-          
-          // Fallback: if no valid offset found, use the maximum offset
-          if (offset >= maxOffset) {
-            tileOffsets.set(tp.cell.id, maxOffset);
-          }
+            if (!batchOffsets.has(tp.cell.id)) batchOffsets.set(tp.cell.id, maxOffset);
+          });
+
+          // longest duration within this batch (steps)
+          const longestSteps = Math.max(...paths.map((p: any)=>p.pathCenters.length));
+          perBatchMaxDelay.set(batchIdx, (longestSteps-1)*perStep);
         });
+
+        // --------- SCHEDULING ----------------------------------------------------
+        let runningStart = 0;
+        const batchesSorted = [...batches.entries()].sort((a,b)=>a[0]-b[0]);
 
         let maxFinalDelay = 0;
 
-        if (debugAnim) {
-          console.log('[FLD] START scheduling', {
-            tiles: tilePaths.map(tp => ({ id: tp.cell.id, target: tp.cell.position, offset: tileOffsets.get(tp.cell.id) }))
-          });
-        }
+        batchesSorted.forEach(([batchIdx, batchPaths])=>{
+          (batchPaths as any).forEach(({ cell, pathCenters }: any)=>{
+            const offset = batchOffsets.get(cell.id) ?? 0;
+            const baseDelay = runningStart + offset*perStep;
 
-        // Use the sorted paths for consistent animation ordering
-        sortedTilePaths.forEach(({ cell, pathCenters }) => {
             const initial = pathCenters[0].center;
-            // Start overlays at the actual top row position, not above it
-            setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y, pulse: 0, rX: 0, rY: 0 }]);
-
-                         const offset = tileOffsets.get(cell.id) ?? 0;
-             let baseDelay = offset * perStep;
-
-             // Apply a mild jitter for tiles starting from the same top-row entry
-             const firstPathStep = pathCenters[0];
-             if (firstPathStep && firstPathStep.row === 0) {
-               const entryKey = `${firstPathStep.row},${firstPathStep.col}`;
-               const count = topRowStartJitter.get(entryKey) || 0;
-               if (count > 0) {
-                 baseDelay += Math.min(count * 40, 160); // cap jitter at 160ms
-               }
-             }
-            
-            if (debugAnim) {
-              console.log(`[FLOOD-DEBUG] Animating tile ${cell.id} with offset ${offset} along ${pathCenters.length} steps`);
+            const spawnOverlay = () => setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y, pulse: 0, rX: 0, rY: 0 }]);
+            if(batchIdx===0){
+              spawnOverlay();
+            } else {
+              const spawnT = window.setTimeout(spawnOverlay, runningStart);
+              timersRef.current.push(spawnT);
             }
 
-            // Animate each step of the contiguous path with consistent timing
-            pathCenters.forEach((pc, stepIndex) => {
-                const stepDelay = baseDelay + stepIndex * perStep;
-                
-                const arriveT = window.setTimeout(() => {
-                    if (debugAnim) {
-                      console.log(`[FLOOD-STEP] Tile ${cell.id} step ${stepIndex} at (${pc.row},${pc.col})`);
-                    }
-                    
-                    // Compute realistic recoil based on movement direction
-                    let rX = 0, rY = 0;
-                    if (stepIndex > 0) {
-                        const prevPc = pathCenters[stepIndex - 1];
-                        const dx = pc.center.x - prevPc.center.x;
-                        const dy = pc.center.y - prevPc.center.y;
-                        const mag = Math.max(1, Math.hypot(dx, dy));
-                        
-                        // Scale recoil based on cell size
-                        const ampX = Math.min(12, cellSize.w * 0.1);
-                        const ampY = Math.min(12, cellSize.h * 0.1);
-                        rX = -dx / mag * ampX;
-                        rY = -dy / mag * ampY;
-                    }
-                    
-                    setOverlays(prev => prev.map(o => 
-                        o.id === cell.id 
-                          ? { ...o, x: pc.center.x, y: pc.center.y, pulse: o.pulse + 1, rX, rY }
-                          : o
-                    ));
-                }, stepDelay);
-                timersRef.current.push(arriveT);
+            pathCenters.forEach((pc: any, stepIndex: number) => {
+              const stepDelay = baseDelay + stepIndex*perStep;
+              const arriveT = window.setTimeout(()=>{
+                let rX=0,rY=0;
+                if(stepIndex>0){
+                  const prevPc = pathCenters[stepIndex-1];
+                  const dx=pc.center.x-prevPc.center.x; const dy=pc.center.y-prevPc.center.y;
+                  const mag=Math.max(1,Math.hypot(dx,dy));
+                  const ampX=Math.min(12,cellSize.w*0.1); const ampY=Math.min(12,cellSize.h*0.1);
+                  rX=-dx/mag*ampX; rY=-dy/mag*ampY;
+                }
+                setOverlays(prev=>prev.map(o=>o.id===cell.id?{...o,x:pc.center.x,y:pc.center.y,pulse:o.pulse+1,rX,rY}:o));
+              },stepDelay);
+              timersRef.current.push(arriveT);
             });
 
-            // Final impact animation
-            const finalStepDelay = baseDelay + (pathCenters.length - 1) * perStep;
+            const finalStepDelay = baseDelay + (pathCenters.length-1)*perStep;
             const finalBounceDelay = finalStepDelay + stepMs;
-            
-            if (finalBounceDelay > maxFinalDelay) maxFinalDelay = finalBounceDelay;
-            
-            const bounceT = window.setTimeout(() => {
-                if (debugAnim) console.log(`[FLOOD-FINAL] Tile ${cell.id} final bounce`);
-                setOverlays(prev => prev.map(o => 
-                    o.id === cell.id 
-                      ? { ...o, isFinal: true, pulse: o.pulse + 1, rX: 0, rY: 0 } 
-                      : o
-                ));
-                // playSound('land'); // Sound removed
-                if (navigator.vibrate) navigator.vibrate(10);
+            if(finalBounceDelay>maxFinalDelay) maxFinalDelay=finalBounceDelay;
+            const bounceT = window.setTimeout(()=>{
+              setOverlays(prev=>prev.map(o=>o.id===cell.id?{...o,isFinal:true,pulse:o.pulse+1,rX:0,rY:0}:o));
+              if(navigator.vibrate) navigator.vibrate(10);
             }, finalBounceDelay);
             timersRef.current.push(bounceT);
 
-            // Clean up animation
             const cleanupDelay = finalBounceDelay + 100;
-            const doneT = window.setTimeout(() => {
-                if (debugAnim) {
-                  const finalPos = pathCenters[pathCenters.length - 1];
-                  console.log(`[FLOOD-DONE] Animation completed for tile ${cell.id} at (${finalPos.row}, ${finalPos.col})`);
-                }
-                
-                setOverlays(prev => prev.filter(o => o.id !== cell.id));
-                setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
+            const doneT = window.setTimeout(()=>{
+              setOverlays(prev=>prev.filter(o=>o.id!==cell.id));
+              setHiddenCellIds(prev=>prev.filter(id=>id!==cell.id));
             }, cleanupDelay);
             timersRef.current.push(doneT);
+          });
+
+          runningStart += (perBatchMaxDelay.get(batchIdx) ?? 0) + 160; // same buffer
         });
-        
+
         animationDoneSignal = () => {
-            const advanceDelay = tilePaths.length === 0 ? 120 : maxFinalDelay + 160;
-            const advanceT = window.setTimeout(() => {
-                if (debugAnim) console.log('[FLD] ADVANCE', { at: tNow() });
-                startPlayerPhase();
-            }, advanceDelay);
-            timersRef.current.push(advanceT);
+          const advanceDelay = tilePaths.length === 0 ? 120 : maxFinalDelay + 160;
+          const advanceT = window.setTimeout(() => {
+            if (debugAnim) console.log('[FLD] ADVANCE', { at: tNow() });
+            startPlayerPhase();
+          }, advanceDelay);
+          timersRef.current.push(advanceT);
         };
     }
     
