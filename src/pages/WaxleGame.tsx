@@ -783,40 +783,45 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               </div>
             </div>
 
-            {/* Modern Next Drop Preview */}
+            {/* Mobile-style Next Drop for Desktop */}
             {previewLevel > 0 && nextRows.length > 0 && (
-              <div className={cn(
-                "bg-amber/10 border border-amber/20",
-                "rounded-2xl p-4"
-              )}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-text-primary">Next Drop</h3>
-                  <div className="bg-amber/20 text-amber px-2 py-1 rounded-full text-xs font-medium">
-                    Preview
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-center">
-                  {nextRows[0]?.map((letter, idx) => (
-                    <div key={idx} className={cn(
-                      "w-8 h-8 bg-bg-secondary border border-secondary/30",
-                      "rounded-xl flex items-center justify-center",
-                      "text-sm font-semibold text-text-primary shadow-sm"
-                    )}>
-                      {letter}
-                    </div>
-                  ))}
-                </div>
-                {previewLevel > 1 && nextRows[1] && (
-                  <div className="flex gap-2 justify-center mt-2 opacity-50">
-                    {nextRows[1]?.map((letter, idx) => (
+              <div className="space-y-3">
+                <div className={cn(
+                  "flex items-center gap-2",
+                  "bg-amber/10 border border-amber/20",
+                  "rounded-xl px-3 py-2"
+                )}>
+                  <span className="text-xs font-medium text-amber uppercase tracking-wide">Next</span>
+                  <div className="flex gap-1">
+                    {nextRows[0]?.map((letter, idx) => (
                       <div key={idx} className={cn(
-                        "w-6 h-6 bg-secondary/20 border border-secondary/20",
+                        "w-6 h-6 bg-bg-secondary border border-secondary/30",
                         "rounded-lg flex items-center justify-center",
-                        "text-xs font-medium text-text-secondary"
+                        "text-xs font-semibold text-text-primary"
                       )}>
                         {letter}
                       </div>
                     ))}
+                  </div>
+                </div>
+                {previewLevel > 1 && nextRows[1] && (
+                  <div className={cn(
+                    "flex items-center gap-2 opacity-60",
+                    "bg-secondary/5 border border-secondary/10",
+                    "rounded-xl px-3 py-2"
+                  )}>
+                    <span className="text-xs font-medium text-text-muted uppercase tracking-wide">Then</span>
+                    <div className="flex gap-1">
+                      {nextRows[1]?.map((letter, idx) => (
+                        <div key={idx} className={cn(
+                          "w-5 h-5 bg-secondary/10 border border-secondary/20",
+                          "rounded flex items-center justify-center",
+                          "text-xs font-medium text-text-secondary"
+                        )}>
+                          {letter}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

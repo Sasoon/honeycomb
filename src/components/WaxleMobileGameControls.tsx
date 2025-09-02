@@ -28,14 +28,14 @@ const WaxleMobileGameControls = ({
 
   return (
     <div className="md:hidden w-full">
-      {/* Modern Compact Header */}
+      {/* Flush Compact Header */}
       <div 
         className={cn(
-          "bg-bg-primary/95 backdrop-blur-sm border border-secondary/20",
-          "rounded-2xl mx-2 my-2 p-4 shadow-lg shadow-secondary/10",
+          "bg-bg-primary/95 backdrop-blur-sm border-b border-secondary/20",
+          "p-4 shadow-lg shadow-secondary/10",
           "transition-all duration-300 ease-out cursor-pointer",
           "hover:shadow-xl hover:shadow-secondary/20",
-          "active:scale-[0.98]"
+          "active:bg-bg-secondary/50"
         )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -100,8 +100,8 @@ const WaxleMobileGameControls = ({
             exit={{ opacity: 0, height: 0, scale: 0.95 }}
             transition={{ duration: 0.3, type: "spring", damping: 15 }}
             className={cn(
-              "bg-bg-primary/95 backdrop-blur-sm border border-secondary/20",
-              "rounded-2xl mx-2 mb-2 shadow-xl shadow-secondary/20",
+              "bg-bg-primary/95 backdrop-blur-sm border-b border-secondary/20",
+              "shadow-xl shadow-secondary/20",
               "overflow-hidden"
             )}
           >

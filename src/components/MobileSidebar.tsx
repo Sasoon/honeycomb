@@ -91,7 +91,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
         />
       )}
       
-      {/* Modern sliding sidebar */}
+      {/* Modern sliding sidebar - hidden when closed */}
       <div 
         ref={sidebarRef}
         className={cn(
@@ -99,7 +99,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
           "bg-bg-primary/95 backdrop-blur-xl shadow-2xl shadow-secondary/20", 
           "fixed left-0 flex flex-col overflow-hidden md:hidden z-50",
           "border-r border-secondary/20",
-          isOpen ? "w-80" : "w-0"
+          isOpen ? "w-80 block" : "w-0 hidden"
         )}
         style={{
           top: 'var(--header-height)',

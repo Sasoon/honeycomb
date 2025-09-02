@@ -19,7 +19,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-accent-light/95 backdrop-blur-sm py-4 px-4 shadow-lg shadow-secondary/10 sticky top-0 z-40 border-b border-accent/20">
+    <header className="bg-accent-light backdrop-blur-sm py-4 px-4 shadow-lg shadow-secondary/10 sticky top-0 z-40 border-accent/20">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
