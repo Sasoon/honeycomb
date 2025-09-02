@@ -655,7 +655,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         // Use the sorted paths for consistent animation ordering
         sortedTilePaths.forEach(({ cell, pathCenters }) => {
             const initial = pathCenters[0].center;
-            setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y - cellSize.h * 1.2, pulse: 0, rX: 0, rY: 0 }]);
+            // Start overlays at the actual top row position, not above it
+            setOverlays(prev => [...prev, { id: cell.id, letter: cell.letter, x: initial.x, y: initial.y, pulse: 0, rX: 0, rY: 0 }]);
 
                          const offset = tileOffsets.get(cell.id) ?? 0;
              let baseDelay = offset * perStep;

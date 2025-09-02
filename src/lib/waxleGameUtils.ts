@@ -251,13 +251,13 @@ function applyGravityToExistingTiles(grid: HexCell[], gridSize: number): void {
             );
 
             cellsInRow.forEach(cell => {
-                const deepestPosition = findDeepestValidPosition(cell, grid);
+                const { finalCell } = findDeepestValidPathWithSteps(cell, grid);
                 
-                if (deepestPosition && deepestPosition.id !== cell.id) {
+                if (finalCell && finalCell.id !== cell.id) {
                     // Move the letter to its deepest valid position
-                    deepestPosition.letter = cell.letter;
-                    deepestPosition.isPlaced = true;
-                    (deepestPosition as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
+                    finalCell.letter = cell.letter;
+                    finalCell.isPlaced = true;
+                    (finalCell as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
                     
                     // Clear the original position
                     cell.letter = '';
@@ -270,21 +270,18 @@ function applyGravityToExistingTiles(grid: HexCell[], gridSize: number): void {
     }
 }
 
-// Find the deepest valid position for a tile to fall to using gravity
-function findDeepestValidPosition(startCell: HexCell, grid: HexCell[]): HexCell | null {
-    // Explore all possible paths from the start cell to find the absolute deepest position
+// Find the deepest valid position and return the full path to get there
+function findDeepestValidPathWithSteps(startCell: HexCell, grid: HexCell[], occupiedPaths?: Set<string>): { finalCell: HexCell | null; fullPath: HexCell[] } {
     let deepestCell = startCell;
     let deepestRow = startCell.position.row;
+    let bestPath: HexCell[] = [startCell];
 
-    const visited = new Set<string>();
-    
-    function exploreDeepest(cell: HexCell, currentVisited: Set<string>): void {
-        const newVisited = new Set([...currentVisited, cell.id]);
-
+    function exploreDeepest(cell: HexCell, currentPath: HexCell[], visited: Set<string>): void {
         // Update deepest if we found a deeper position
         if (cell.position.row > deepestRow) {
             deepestRow = cell.position.row;
             deepestCell = cell;
+            bestPath = [...currentPath];
         }
 
         // Find all cells below that we can move to
@@ -293,20 +290,25 @@ function findDeepestValidPosition(startCell: HexCell, grid: HexCell[]): HexCell 
             isHexAdjacent(cell, belowCell) &&
             !belowCell.letter && 
             !belowCell.isPlaced &&
-            !newVisited.has(belowCell.id)
+            !visited.has(belowCell.id) &&
+            !(occupiedPaths && occupiedPaths.has(belowCell.id))
         );
 
         // Recursively explore each possible path
         for (const belowCell of cellsBelow) {
-            exploreDeepest(belowCell, newVisited);
+            const newVisited = new Set([...visited, belowCell.id]);
+            const newPath = [...currentPath, belowCell];
+            exploreDeepest(belowCell, newPath, newVisited);
         }
     }
 
-    exploreDeepest(startCell, visited);
-    return deepestCell;
+    const initialVisited = new Set<string>([startCell.id]);
+    exploreDeepest(startCell, [startCell], initialVisited);
+    
+    return { finalCell: deepestCell, fullPath: bestPath };
 }
 
-// Simplified flood logic - process tiles sequentially with direct gravity
+// Wave-based flood logic - process tiles in waves of 3 to prevent phasing
 function applySimpleFloodTiles(
     grid: HexCell[],
     fallingLetters: string[],
@@ -320,64 +322,95 @@ function applySimpleFloodTiles(
     const topRowCells = grid.filter(cell => cell.position.row === 0);
     const availableEntries = topRowCells.filter(cell => !cell.letter && !cell.isPlaced);
 
-    console.log(`[SIMPLE-FLOOD] Processing ${fallingLetters.length} tiles with ${availableEntries.length} entry points`);
+    console.log(`[WAVE-FLOOD] Processing ${fallingLetters.length} tiles in waves with ${availableEntries.length} entry points`);
 
     // Check if we have enough entry points for flood tiles
     if (availableEntries.length === 0) {
         // No entry points - all tiles fail to place
         unplacedLetters.push(...fallingLetters);
-        console.log(`[SIMPLE-FLOOD] No entry points available - all tiles fail to place`);
+        console.log(`[WAVE-FLOOD] No entry points available - all tiles fail to place`);
         return { placedTiles, finalPaths, unplacedLetters };
     }
 
-    // Process tiles one by one
-    for (let i = 0; i < fallingLetters.length; i++) {
-        const letter = fallingLetters[i];
+    // Process tiles in waves of 3
+    const waveSize = 3;
+    let waveNumber = 0;
+    
+    for (let i = 0; i < fallingLetters.length; i += waveSize) {
+        waveNumber++;
+        const waveLetters = fallingLetters.slice(i, i + waveSize);
         
-        // Get current available entries (may change as tiles are placed)
-        const currentEntries = topRowCells.filter(cell => !cell.letter && !cell.isPlaced);
+        console.log(`[WAVE-FLOOD] Processing wave ${waveNumber} with ${waveLetters.length} tiles`);
         
-        if (currentEntries.length === 0) {
-            // No more entry points - remaining tiles fail to place
-            unplacedLetters.push(...fallingLetters.slice(i));
-            console.log(`[SIMPLE-FLOOD] No more entry points - ${fallingLetters.length - i} remaining tiles fail to place`);
-            break;
-        }
-
-        // Find the entry point that leads to the deepest possible position
-        let bestEntryPoint: HexCell | null = null;
-        let bestFinalPosition: HexCell | null = null;
-        let deepestRow = -1;
-
-        for (const entry of currentEntries) {
-            const finalPos = findDeepestValidPosition(entry, grid);
-            if (finalPos && finalPos.position.row > deepestRow) {
-                deepestRow = finalPos.position.row;
-                bestEntryPoint = entry;
-                bestFinalPosition = finalPos;
+        // Track occupied positions during this wave to prevent phasing
+        const waveOccupiedPaths = new Set<string>();
+        
+        // Process each tile in this wave
+        for (let j = 0; j < waveLetters.length; j++) {
+            const letter = waveLetters[j];
+            
+            // Get current available entries (excluding those used by previous tiles in this wave)
+            const currentEntries = topRowCells.filter(cell => 
+                !cell.letter && 
+                !cell.isPlaced && 
+                !waveOccupiedPaths.has(cell.id)
+            );
+            
+            if (currentEntries.length === 0) {
+                // No more entry points - remaining tiles in this wave and future waves fail
+                unplacedLetters.push(...waveLetters.slice(j));
+                unplacedLetters.push(...fallingLetters.slice(i + waveSize));
+                console.log(`[WAVE-FLOOD] Wave ${waveNumber}: No more entry points - ${waveLetters.length - j + fallingLetters.length - i - waveSize} tiles fail to place`);
+                return { placedTiles, finalPaths, unplacedLetters };
             }
-        }
 
-        if (bestEntryPoint && bestFinalPosition) {
-            // Place the tile at its deepest valid position
-            bestFinalPosition.letter = letter;
-            bestFinalPosition.isPlaced = true;
-            (bestFinalPosition as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
-            
-            placedTiles.push(bestFinalPosition);
-            
-            // Create simple path for animation (just entry to final)
-            finalPaths[bestFinalPosition.id] = [bestEntryPoint.id, bestFinalPosition.id];
-            
-            console.log(`[SIMPLE-FLOOD] Placed '${letter}' from (${bestEntryPoint.position.row},${bestEntryPoint.position.col}) to (${bestFinalPosition.position.row},${bestFinalPosition.position.col})`);
-        } else {
-            // No valid position found
-            unplacedLetters.push(letter);
-            console.log(`[SIMPLE-FLOOD] Failed to place '${letter}' - no valid position found`);
+            // Find the entry point that leads to the deepest position without conflicting with wave paths
+            let bestEntryPoint: HexCell | null = null;
+            let bestFinalPosition: HexCell | null = null;
+            let bestFullPath: HexCell[] = [];
+            let deepestRow = -1;
+
+            for (const entry of currentEntries) {
+                const { finalCell, fullPath } = findDeepestValidPathWithSteps(entry, grid, waveOccupiedPaths);
+                if (finalCell && finalCell.position.row > deepestRow) {
+                    // Check if this path conflicts with any existing wave paths
+                    const pathConflicts = fullPath.some(cell => waveOccupiedPaths.has(cell.id));
+                    if (!pathConflicts) {
+                        deepestRow = finalCell.position.row;
+                        bestEntryPoint = entry;
+                        bestFinalPosition = finalCell;
+                        bestFullPath = fullPath;
+                    }
+                }
+            }
+
+            if (bestEntryPoint && bestFinalPosition && bestFullPath.length > 0) {
+                // Place the tile at its deepest valid position
+                bestFinalPosition.letter = letter;
+                bestFinalPosition.isPlaced = true;
+                (bestFinalPosition as HexCell & { placedThisTurn?: boolean }).placedThisTurn = true;
+                
+                placedTiles.push(bestFinalPosition);
+                
+                // Create complete step-by-step path for animation with wave info
+                const pathWithWave = bestFullPath.map(cell => cell.id);
+                finalPaths[bestFinalPosition.id] = pathWithWave;
+                
+                // Mark all positions in this path as occupied for this wave
+                bestFullPath.forEach(pathCell => {
+                    waveOccupiedPaths.add(pathCell.id);
+                });
+                
+                console.log(`[WAVE-FLOOD] Wave ${waveNumber}: Placed '${letter}' with ${bestFullPath.length} step path from (${bestEntryPoint.position.row},${bestEntryPoint.position.col}) to (${bestFinalPosition.position.row},${bestFinalPosition.position.col})`);
+            } else {
+                // No valid position found for this tile
+                unplacedLetters.push(letter);
+                console.log(`[WAVE-FLOOD] Wave ${waveNumber}: Failed to place '${letter}' - no valid non-conflicting position found`);
+            }
         }
     }
 
-    console.log(`[SIMPLE-FLOOD] Placed ${placedTiles.length} out of ${fallingLetters.length} tiles`);
+    console.log(`[WAVE-FLOOD] Completed ${waveNumber} waves, placed ${placedTiles.length} out of ${fallingLetters.length} tiles`);
     return { placedTiles, finalPaths, unplacedLetters };
 }
 
