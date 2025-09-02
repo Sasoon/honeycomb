@@ -180,42 +180,41 @@ const WaxleGameOverModal = ({
             transition={{ type: "spring", damping: 15 }}
             className="bg-bg-primary rounded-3xl p-8 max-w-md w-full shadow-2xl border border-secondary/20 backdrop-blur-xl"
           >
-            <div className="text-center space-y-8">
+            <div className="text-center space-y-6">
               {/* Header */}
-              <div className="space-y-3">
-                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-amber to-amber-light rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="space-y-2">
+                <div className="mx-auto w-12 h-12 bg-gradient-to-br from-amber to-amber-light rounded-full flex items-center justify-center mb-3">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-semibold text-text-primary">Game Over!</h2>
+                <h2 className="text-xl font-semibold text-text-primary">Game Complete!</h2>
+                <p className="text-text-secondary text-sm">Here's how you performed</p>
               </div>
               
-              {/* Primary Score Display */}
-              <div className="relative">
-                <div className="bg-gradient-to-br from-bg-primary to-bg-secondary border border-secondary/20 rounded-2xl p-8 shadow-sm">
-                  <div className="text-4xl font-bold text-amber mb-2">{score}</div>
-                  <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">Final Score</div>
-                </div>
+              {/* Compact Score Display */}
+              <div className="bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20 rounded-xl p-4 shadow-sm">
+                <div className="text-2xl font-bold text-amber mb-1">{score}</div>
+                <div className="text-text-secondary text-xs font-medium uppercase tracking-wide">Final Score</div>
               </div>
 
-              {/* Stats Row */}
-              <div className="flex justify-center gap-6">
-                <div className="text-center space-y-2">
-                  <div className="text-xl font-semibold text-text-primary">{totalWords}</div>
+              {/* Compact Stats Row */}
+              <div className="flex justify-center gap-4">
+                <div className="text-center space-y-1">
+                  <div className="text-lg font-semibold text-text-primary">{totalWords}</div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Words</div>
                 </div>
                 <div className="w-px bg-secondary/20"></div>
-                <div className="text-center space-y-2">
-                  <div className="text-xl font-semibold text-text-primary">{round}</div>
+                <div className="text-center space-y-1">
+                  <div className="text-lg font-semibold text-text-primary">{round}</div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Rounds</div>
                 </div>
                 <div className="w-px bg-secondary/20"></div>
-                <div className="text-center space-y-2 min-w-0 max-w-24">
-                  <div className="text-lg font-semibold text-text-primary truncate" title={longestWord}>
+                <div className="text-center space-y-1 min-w-0 max-w-20">
+                  <div className="text-sm font-semibold text-text-primary truncate" title={longestWord}>
                     {longestWord || 'N/A'}
                   </div>
-                  <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Best Word</div>
+                  <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Best</div>
                 </div>
               </div>
 

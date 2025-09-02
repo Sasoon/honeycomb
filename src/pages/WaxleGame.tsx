@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Target, Zap, Hash } from 'lucide-react';
+import { Zap, Hash } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import HexGrid, { HexCell } from '../components/HexGrid';
@@ -827,56 +827,53 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               </div>
             )}
 
-            {/* Modern Current Word Display */}
+            {/* Compact Current Word Display */}
             {currentWord && (
-              <div className={cn(
-                "bg-amber/10 border border-amber/20",
-                "rounded-2xl p-4"
-              )}>
-                <h3 className="text-sm font-semibold text-text-primary mb-3">Current Word</h3>
-                <p className={cn(
-                  "text-2xl font-mono text-amber font-bold text-center",
-                  "bg-amber/10 rounded-xl py-3 tracking-wider"
+              <div className="space-y-2">
+                <span className="text-xs font-medium text-amber uppercase tracking-wide">Current</span>
+                <div className={cn(
+                  "text-lg font-mono text-amber font-bold text-center",
+                  "bg-amber/10 border border-amber/30 rounded-xl py-2 px-3"
                 )}>
                   {currentWord}
-                </p>
+                </div>
               </div>
             )}
 
-            {/* Modern Words Submitted */}
-            <div className={cn(
-              "bg-success/10 border border-success/20",
-              "rounded-2xl p-4"
-            )}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-text-primary">Words Found</h3>
+            {/* Compact Words Found */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-success uppercase tracking-wide">Found</span>
                 <div className="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">
                   {wordsThisRound.length}
                 </div>
               </div>
-              {wordsThisRound.length > 0 ? (
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {wordsThisRound.slice(-8).reverse().map((word, idx) => (
-                    <div key={idx} className={cn(
-                      "text-sm font-mono text-text-secondary",
-                      "bg-success/5 px-3 py-2 rounded-lg",
-                      "border border-success/10"
-                    )}>
-                      {word}
-                    </div>
-                  ))}
-                  {wordsThisRound.length > 8 && (
-                    <div className="text-xs text-text-muted italic text-center py-2">
-                      ...and {wordsThisRound.length - 8} more words
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <Target className="w-8 h-8 text-success/30 mx-auto mb-2" />
-                  <div className="text-xs text-text-muted italic">No words found yet</div>
-                </div>
-              )}
+              <div className={cn(
+                "bg-success/10 border border-success/20",
+                "rounded-xl p-3"
+              )}>
+                {wordsThisRound.length > 0 ? (
+                  <div className="space-y-1 max-h-28 overflow-y-auto">
+                    {wordsThisRound.slice(-8).reverse().map((word, idx) => (
+                      <div key={idx} className={cn(
+                        "text-sm font-mono text-text-secondary",
+                        "bg-success/5 px-2 py-1 rounded-lg"
+                      )}>
+                        {word}
+                      </div>
+                    ))}
+                    {wordsThisRound.length > 8 && (
+                      <div className="text-xs text-text-muted italic text-center py-1">
+                        +{wordsThisRound.length - 8} more
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-3">
+                    <div className="text-xs text-text-muted italic">No words found yet</div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

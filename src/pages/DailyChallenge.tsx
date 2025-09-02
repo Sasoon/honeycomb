@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import { Clock, Trophy, Play, CheckCircle, RotateCcw } from 'lucide-react';
 import { useWaxleGameStore } from '../store/waxleGameStore';
+import { Button } from '../components/ui/Button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { cn } from '../lib/utils';
 import WaxleGame from './WaxleGame';
 
 interface DailySeedData {
@@ -125,81 +129,141 @@ const DailyChallenge = () => {
   }
   
   return (
-    <>
-      <div className="page-container page-container--standard">
-        <h1 className="page-title">Daily</h1>
-      
-      {isLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber"></div>
-        </div>
-      ) : error ? (
-        <div className="bg-accent-light border border-accent rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-text-primary mb-2">Failed to Load Challenge</h2>
-          <p className="text-text-secondary mb-4">{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-dark transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      ) : (
-        <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6">
-          <div className="text-center mb-6">
-            <div className="text-xl font-semibold">Today's Challenge</div>
-            <div className="text-2xl font-bold text-amber">
-              {todayLabel}
-            </div>
-          </div>
-          
-          <div className="mb-6">
-            <div className="text-sm text-text-muted mb-1">Next challenge in:</div>
-            <div className="text-3xl font-mono font-bold text-center">{countdown}</div>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="bg-waxle-light rounded-lg p-4">
-              <h2 className="font-semibold mb-2">Today's Challenge Rules:</h2>
-              <ul className="text-sm space-y-1 list-disc list-inside">
-                <li>Standard game rules apply</li>
-                <li>Everyone gets the same starting grid</li>
-                <li>Complete with the fewest turns to top the leaderboard</li>
-              </ul>
-            </div>
-            
-            <button 
-              onClick={handleStartChallenge}
-              disabled={!seedData || isCompleted}
-              className={`w-full py-3 text-white font-semibold rounded-lg transition-colors ${
-                isCompleted 
-                  ? 'bg-success cursor-not-allowed' 
-                  : 'bg-amber hover:bg-amber-dark disabled:bg-gray-400 disabled:cursor-not-allowed'
-              }`}
-            >
-              {isCompleted 
-                ? '✅ Challenge Completed!' 
-                : isPlayingToday 
-                  ? 'Continue Today\'s Challenge' 
-                  : 'Start Today\'s Challenge'}
-            </button>
-            
-            {isCompleted && (
-              <div className="bg-success-light border border-success rounded-lg p-4 text-center">
-                <p className="text-text-primary mb-2">🎉 Great job completing today's challenge!</p>
-                <a 
-                  href="/leaderboard" 
-                  className="inline-block px-4 py-2 bg-success text-white rounded-lg hover:bg-success-dark transition-colors"
-                >
-                  View Leaderboard
-                </a>
+    <div className="min-h-screen bg-bg-secondary">
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+        {isLoading ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-2 border-amber/30 border-t-amber"></div>
+              <p className="text-text-secondary">Loading today's challenge...</p>
+            </CardContent>
+          </Card>
+        ) : error ? (
+          <Card>
+            <CardContent className="text-center py-8 space-y-4">
+              <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto">
+                <RotateCcw className="w-8 h-8 text-accent" />
               </div>
-            )}
+              <div>
+                <h2 className="text-xl font-semibold text-text-primary mb-2">Failed to Load Challenge</h2>
+                <p className="text-text-secondary mb-4">{error}</p>
+                <Button 
+                  variant="destructive"
+                  onClick={() => window.location.reload()}
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {/* Challenge Info Card */}
+            <Card>
+              <CardHeader>
+                <div className="text-center space-y-2">
+                  <CardTitle className="flex items-center justify-center space-x-2">
+                    <span>Today's Challenge</span>
+                  </CardTitle>
+                  <div className="text-2xl font-bold text-amber">
+                    {todayLabel}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Countdown Section */}
+                <div className="text-center space-y-3">
+                  <div className="flex items-center justify-center space-x-2 text-text-secondary">
+                    <Clock className="w-4 h-4" />
+                    <span className="text-sm font-medium">Next challenge in</span>
+                  </div>
+                  <div className={cn(
+                    "text-3xl font-mono font-bold text-center",
+                    "bg-bg-secondary rounded-2xl py-4 px-6",
+                    "border border-secondary/20"
+                  )}>
+                    {countdown}
+                  </div>
+                </div>
+
+                {/* Rules Section */}
+                <div className={cn(
+                  "bg-amber/5 border border-amber/20",
+                  "rounded-2xl p-6 space-y-4"
+                )}>
+                  <div className="flex items-center space-x-2">
+                    <Trophy className="w-5 h-5 text-amber" />
+                    <h3 className="font-semibold text-text-primary">Challenge Rules</h3>
+                  </div>
+                  <ul className="space-y-2 text-sm text-text-secondary">
+                    <li className="flex items-start space-x-2">
+                      <span className="w-1.5 h-1.5 bg-amber rounded-full mt-2 flex-shrink-0"></span>
+                      <span>Standard game rules apply</span>
+                    </li>
+                    <li className="flex items-start space-x-2">
+                      <span className="w-1.5 h-1.5 bg-amber rounded-full mt-2 flex-shrink-0"></span>
+                      <span>Everyone gets the same starting grid</span>
+                    </li>
+                    <li className="flex items-start space-x-2">
+                      <span className="w-1.5 h-1.5 bg-amber rounded-full mt-2 flex-shrink-0"></span>
+                      <span>Complete with the fewest turns to top the leaderboard</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Action Button */}
+                <Button
+                  onClick={handleStartChallenge}
+                  disabled={!seedData || isCompleted}
+                  variant={isCompleted ? "success" : "default"}
+                  size="lg"
+                  className="w-full"
+                >
+                  {isCompleted ? (
+                    <>
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      Challenge Completed!
+                    </>
+                  ) : isPlayingToday ? (
+                    <>
+                      <Play className="w-5 h-5 mr-2" />
+                      Continue Today's Challenge
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5 mr-2" />
+                      Start Today's Challenge
+                    </>
+                  )}
+                </Button>
+
+                {/* Completion Success */}
+                {isCompleted && (
+                  <div className={cn(
+                    "bg-success/10 border border-success/20",
+                    "rounded-2xl p-6 text-center space-y-4"
+                  )}>
+                    <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto">
+                      <Trophy className="w-8 h-8 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-text-primary mb-3 font-medium">🎉 Great job completing today's challenge!</p>
+                      <Button variant="success" asChild>
+                        <a href="/leaderboard">
+                          <Trophy className="w-4 h-4 mr-2" />
+                          View Leaderboard
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        </div>
-      )}
+        )}
       </div>
-    </>
+    </div>
   );
 };
 
