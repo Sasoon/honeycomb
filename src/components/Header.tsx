@@ -21,8 +21,8 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   return (
     <header className="bg-accent-light backdrop-blur-sm py-4 px-4 shadow-lg shadow-secondary/10 sticky top-0 z-40 border-accent/20 transition-[background-color,box-shadow,border-color] duration-300 ease-in-out">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center">
-          {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
+        <div className="flex justify-between items-center relative">
+          {/* Left side - Hamburger on mobile */}
           <div className="flex items-center space-x-4">
             {/* Modern hamburger menu button */}
             <button 
@@ -40,25 +40,21 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                 <Menu size={20} />
               )}
             </button>
-            
-            {/* Logo */}
-            <Link 
-              to="/" 
-              className="text-white text-2xl font-bold flex items-center hover:opacity-90 transition-opacity"
-            >
-              <span className="hidden md:inline">WAXLE</span>
-            </Link>
           </div>
           
-          {/* Center/Right - Navigation */}
+          {/* Animated WAXLE logo - slides smoothly from right (mobile) to left (desktop) */}
+          <Link 
+            to="/" 
+            className="waxle-logo text-white font-bold flex items-center hover:opacity-90 absolute left-full md:left-0 transform -translate-x-full md:translate-x-0 transition-[left,transform,font-size] duration-500 ease-in-out text-xl md:text-2xl z-10"
+            style={{
+              willChange: 'left, transform, font-size'
+            }}
+          >
+            WAXLE
+          </Link>
+          
+          {/* Right - Navigation */}
           <div className="flex items-center space-x-6">
-            {/* Mobile logo */}
-            <Link 
-              to="/" 
-              className="text-white text-xl font-bold md:hidden hover:opacity-90 transition-opacity"
-            >
-              WAXLE
-            </Link>
             
             {/* Desktop navigation with modern nav pills */}
             <nav className="hidden md:flex items-center space-x-1">
