@@ -19,6 +19,7 @@ const buttonVariants = cva(
         sm: "h-8 px-3 text-xs",
         lg: "h-12 px-8 text-base",
         icon: "h-10 w-10",
+        gameControl: "h-[40px] w-[40px] sm:h-10 sm:w-[120px] px-1 sm:px-2",
       },
     },
     defaultVariants: {

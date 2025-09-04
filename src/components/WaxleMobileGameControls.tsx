@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Trophy, Hourglass } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { calculateDisplayWordScore } from '../lib/gameUtils';
-import { CSSAnimatedCounter } from './CSSAnimatedCounter';
-import { AnimatedTickingCounter } from './AnimatedTickingCounter';
+import { OptimizedCounter } from './OptimizedCounter';
 import { DynamicZapIcon } from './DynamicZapIcon';
 
 type WaxleMobileGameControlsProps = {
@@ -95,10 +94,10 @@ const WaxleMobileGameControls = ({
               <div className="flex items-center space-x-1">
                 <span className="text-text-secondary">Score</span>
                 <span className="font-semibold text-amber bg-amber/10 px-2 py-0.5 rounded-full text-xs">
-                  <CSSAnimatedCounter 
+                  <OptimizedCounter 
                     value={score} 
                     duration={1.0}
-                    property="mobile-score"
+                    animationType="ticker"
                     className="tabular-nums"
                     delay={0}
                   />
@@ -106,8 +105,9 @@ const WaxleMobileGameControls = ({
               </div>
               <div className="flex items-center space-x-1">
                 <span className="text-text-secondary flex items-center">
-                  R<AnimatedTickingCounter 
-                    value={round} 
+                  R<OptimizedCounter 
+                    value={round}
+                    animationType="tick" 
                     className="tabular-nums"
                     delay={200}
                   />
@@ -133,10 +133,10 @@ const WaxleMobileGameControls = ({
               <div className="flex items-center space-x-1">
                 <Trophy size={14} className="text-amber" />
                 <span className="font-semibold tabular-nums text-xs">
-                  <CSSAnimatedCounter 
+                  <OptimizedCounter 
                     value={score}
                     duration={1.0}
-                    property="mobile-score-icon"
+                    animationType="ticker"
                     className="tabular-nums"
                     delay={0}
                   />
@@ -145,8 +145,9 @@ const WaxleMobileGameControls = ({
               <div className="flex items-center space-x-1">
                 <Hourglass size={14} className="text-amber" />
                 <span className="tabular-nums text-xs">
-                  <AnimatedTickingCounter 
+                  <OptimizedCounter 
                     value={round}
+                    animationType="tick"
                     delay={200}
                     className="tabular-nums"
                   />

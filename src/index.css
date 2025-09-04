@@ -67,6 +67,9 @@ body {
   
   /* Content padding */
   --padding-page: clamp(1rem, 4vw, 2rem); /* Responsive padding */
+  
+  /* Layout variables */
+  --header-height: 68px; /* Default header height, updated by JS */
 }
 
 html {
@@ -1037,6 +1040,169 @@ button {
     animation: none;
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Mobile Sidebar Performance Optimizations */
+.mobile-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.mobile-sidebar-backdrop.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mobile-sidebar {
+  position: fixed;
+  left: 0;
+  width: 320px;
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+}
+
+.mobile-sidebar.show {
+  transform: translateX(0);
+}
+
+.mobile-sidebar-content {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1) 100ms,
+              transform 200ms cubic-bezier(0.4, 0, 0.2, 1) 100ms;
+}
+
+.mobile-sidebar.show .mobile-sidebar-content {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.mobile-sidebar-nav-item {
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mobile-sidebar.show .mobile-sidebar-nav-item:nth-child(1) {
+  animation: slideInNav 200ms cubic-bezier(0.4, 0, 0.2, 1) 150ms forwards;
+}
+
+.mobile-sidebar.show .mobile-sidebar-nav-item:nth-child(2) {
+  animation: slideInNav 200ms cubic-bezier(0.4, 0, 0.2, 1) 200ms forwards;
+}
+
+.mobile-sidebar.show .mobile-sidebar-nav-item:nth-child(3) {
+  animation: slideInNav 200ms cubic-bezier(0.4, 0, 0.2, 1) 250ms forwards;
+}
+
+.mobile-sidebar.show .mobile-sidebar-nav-item:nth-child(4) {
+  animation: slideInNav 200ms cubic-bezier(0.4, 0, 0.2, 1) 300ms forwards;
+}
+
+@keyframes slideInNav {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.mobile-sidebar-footer {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1) 350ms,
+              transform 200ms cubic-bezier(0.4, 0, 0.2, 1) 350ms;
+}
+
+.mobile-sidebar.show .mobile-sidebar-footer {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Transition utility classes for common patterns */
+.transition-standard {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-smooth {
+  transition: all 300ms ease-in-out;
+}
+
+.transition-spring {
+  transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Optimized Counter Animations (replaces all counter components) */
+.counter-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.counter-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Ticker animation for smooth counting (scores) */
+.counter-ticker {
+  /* No transition needed - JavaScript handles the smooth counting */
+}
+
+/* Slide animation for scores (longer, smoother) */
+.counter-slide {
+  transition: opacity var(--counter-duration, 0.25s) cubic-bezier(0.25, 0.1, 0.25, 1),
+              transform var(--counter-duration, 0.25s) cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.counter-slide.entering {
+  animation: counterSlideEnter var(--counter-duration, 0.25s) cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+@keyframes counterSlideEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Tick animation for round numbers (snappier, more responsive) */
+.counter-tick {
+  transition: opacity var(--counter-duration, 0.25s) cubic-bezier(0.68, -0.55, 0.265, 1.55),
+              transform var(--counter-duration, 0.25s) cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.counter-tick.entering {
+  animation: counterTickEnter var(--counter-duration, 0.25s) cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes counterTickEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

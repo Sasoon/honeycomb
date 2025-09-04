@@ -3,8 +3,7 @@ import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hash } from 'lucide-react';
-import { CSSAnimatedCounter } from '../components/CSSAnimatedCounter';
-import { AnimatedTickingCounter } from '../components/AnimatedTickingCounter';
+import { OptimizedCounter } from '../components/OptimizedCounter';
 import { DynamicZapIcon } from '../components/DynamicZapIcon';
 import { cn } from '../lib/utils';
 import { calculateDisplayWordScore } from '../lib/gameUtils';
@@ -868,10 +867,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 "rounded-2xl p-6 text-center shadow-lg shadow-amber/10"
               )}>
                 <div className="text-4xl font-bold text-amber mb-2">
-                  <CSSAnimatedCounter 
+                  <OptimizedCounter 
                     value={score} 
                     duration={1.0}
-                    property="score"
+                    animationType="ticker"
                     className="tabular-nums"
                     delay={0}
                   />
@@ -887,8 +886,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 )}>
                   <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
                     <Hash className="w-4 h-4" />
-                    <AnimatedTickingCounter 
+                    <OptimizedCounter 
                       value={round} 
+                      animationType="tick"
                       className="min-w-[24px] tabular-nums"
                       delay={200}
                     />
