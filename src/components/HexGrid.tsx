@@ -143,7 +143,6 @@ const HexGrid = ({
   lockedTiles = [],
   lockAnimatingTiles = [],
   enableLayout = true,
-  isRestartHoldActive = false,
   isSettling = false,
   // onTileLockToggle,
 }: HexGridProps) => {
@@ -352,7 +351,6 @@ const HexGrid = ({
                     isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
                     isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
                     enableLayout={enableLayout}
-                    isRestartHoldActive={isRestartHoldActive}
                     isSettling={isSettling}
                     // showBorder={styles.showBorder} // Disabled - borders removed
                     // borderColor={styles.borderColor} // Disabled - borders removed

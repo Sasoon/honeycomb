@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Undo2, RotateCw } from 'lucide-react';
 import { Button } from './ui/Button';
 
