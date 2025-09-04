@@ -101,7 +101,9 @@ async function getDailyLeaderboard(isLocal, context, limit) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=5' // Cache for 5 seconds - fast updates after score submission
+        'Cache-Control': 'no-cache, no-store, must-revalidate', // No caching for real-time updates
+        'Pragma': 'no-cache',
+        'Expires': '0'
       }
     }
   );
@@ -160,7 +162,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=10' // Cache for 10 seconds - faster updates for all-time leaderboard
+        'Cache-Control': 'public, max-age=30' // Cache for 30 seconds - all-time changes less frequently
       }
     }
   );
