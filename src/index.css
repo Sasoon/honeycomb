@@ -1253,23 +1253,6 @@ button {
 
 
 
-/* Restart hold: subtle tile shake */
-@keyframes tileShake {
-  0% { transform: translate(0, 0) rotate(0deg); }
-  25% { transform: translate(-1px, 0) rotate(-0.6deg); }
-  50% { transform: translate(1px, 0) rotate(0.6deg); }
-  75% { transform: translate(-1px, 0) rotate(-0.4deg); }
-  100% { transform: translate(0, 0) rotate(0deg); }
-}
-
-.shake-tile {
-  animation: tileShake 0.25s linear infinite;
-  will-change: transform;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shake-tile { animation: none; }
-}
 
 /* New game settle: ease-out pop and settle */
 @keyframes tileSettle {

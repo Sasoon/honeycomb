@@ -13,7 +13,6 @@ type GameControlsProps = {
   onEndTurn: () => void;
   onUndo: () => void;
   onRestart?: () => void;
-  onRestartHoldChange?: (active: boolean) => void;
   
   // Conditionals
   canUndo: boolean;
@@ -29,8 +28,7 @@ const GameControls = ({
   onUndo,
   onRestart,
   canUndo,
-  isDailyChallenge,
-  onRestartHoldChange
+  isDailyChallenge
 }: GameControlsProps) => {
   const isPlayerPhase = phase === 'player';
   const canSubmit = currentWord.length >= 3 && isPlayerPhase && validationState === true;
@@ -39,65 +37,22 @@ const GameControls = ({
 
   // Removed fixed dimensions - now handled by Button component gameControl size
 
-  // Press-and-hold restart state
-  const [isHoldingRestart, setIsHoldingRestart] = useState(false);
-  const [restartProgress, setRestartProgress] = useState(0); // 0..1
-  const holdStartRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const [snapAnimating, setSnapAnimating] = useState(false);
-  const [snapDeg, setSnapDeg] = useState(0);
+  // Restart confirmation state
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
 
-  useEffect(() => {
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
 
-  const startHold = () => {
+  const handleRestartClick = () => {
     if (!onRestart || !canRestart) return;
-    setIsHoldingRestart(true);
-    onRestartHoldChange?.(true);
-    setSnapAnimating(false);
-    setRestartProgress(0);
-    holdStartRef.current = performance.now();
-    const durationMs = 2000;
-
-    const step = () => {
-      if (!holdStartRef.current) return;
-      const elapsed = performance.now() - holdStartRef.current;
-      const p = Math.min(1, elapsed / durationMs);
-      setRestartProgress(p);
-      if (p >= 1) {
-        // Fire and reset
-        setIsHoldingRestart(false);
-        onRestartHoldChange?.(false);
-        holdStartRef.current = null;
-        rafRef.current = null;
-        onRestart?.();
-        return;
-      }
-      rafRef.current = requestAnimationFrame(step);
-    };
-    rafRef.current = requestAnimationFrame(step);
+    setShowRestartConfirm(true);
   };
 
-  const cancelHold = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    holdStartRef.current = null;
-    const currentDeg = restartProgress * 360;
-    setIsHoldingRestart(false);
-    onRestartHoldChange?.(false);
-    if (currentDeg > 0) {
-      // Animate snap back to 0deg
-      setSnapAnimating(true);
-      setSnapDeg(currentDeg);
-      requestAnimationFrame(() => {
-        setSnapDeg(0);
-      });
-      window.setTimeout(() => setSnapAnimating(false), 350);
-    }
-    setRestartProgress(0);
+  const confirmRestart = () => {
+    setShowRestartConfirm(false);
+    onRestart?.();
+  };
+
+  const cancelRestart = () => {
+    setShowRestartConfirm(false);
   };
 
   return (
@@ -146,23 +101,35 @@ const GameControls = ({
         {/* Restart - Secondary Action (only if not daily challenge) */}
         {onRestart && (
           <Button 
-            onPointerDown={startHold}
-            onPointerUp={cancelHold}
-            onPointerCancel={cancelHold}
-            onPointerLeave={cancelHold}
+            onClick={handleRestartClick}
             disabled={!canRestart}
             variant="secondary"
             size="gameControl"
-            className="relative overflow-hidden gap-1 sm:gap-2 touch-none select-none"
+            className="gap-1 sm:gap-2"
           >
-            <RotateCw 
-              className="w-4 h-4 sm:w-4 sm:h-4 transition-transform"
-              style={{ transform: `rotate(${(isHoldingRestart ? restartProgress * 360 : (snapAnimating ? snapDeg : 0))}deg)`, transition: snapAnimating ? 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none', willChange: 'transform' }}
-            />
+            <RotateCw className="w-4 h-4 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Restart</span>
           </Button>
         )}
       </div>
+      
+      {/* Restart Confirmation Modal */}
+      {showRestartConfirm && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" onClick={cancelRestart}>
+          <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-text-primary mb-3">Restart Game?</h3>
+            <p className="text-text-secondary mb-6">Your current progress will be lost. Are you sure you want to restart?</p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="secondary" onClick={cancelRestart} className="px-4">
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmRestart} className="px-4">
+                Restart
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

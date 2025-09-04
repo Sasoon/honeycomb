@@ -839,7 +839,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   
 
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
-  const [isRestartHoldActive, setIsRestartHoldActive] = useState(false);
 
   return (
     <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-[height,padding] duration-300 ease-in-out relative">
@@ -1830,7 +1829,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 lockAnimatingTiles={lockAnimatingTiles}
                 onTileLockToggle={toggleTileLock}
                 enableLayout={!isTransitioning}
-                isRestartHoldActive={isRestartHoldActive}
                 isSettling={isSettling}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,
@@ -1850,7 +1848,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 onEndTurn={() => endPlayerPhase()}
                 onUndo={() => undoLastAction()}
                 onRestart={!isDailyChallenge ? handleRestart : undefined}
-                onRestartHoldChange={setIsRestartHoldActive}
                 canUndo={canUndo()}
                 isDailyChallenge={isDailyChallenge}
               />
