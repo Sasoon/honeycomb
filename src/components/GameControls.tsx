@@ -101,9 +101,9 @@ const GameControls = ({
   };
 
   return (
-    <div className="game-controls-container transition-all duration-300 ease-in-out">
+    <div className="game-controls-container transition-[transform,opacity] duration-300 ease-in-out">
       {/* Primary Actions - Always visible */}
-      <div className="flex gap-2 sm:gap-3 items-center justify-center transition-all duration-300 ease-in-out">
+      <div className="flex gap-2 sm:gap-3 items-center justify-center transition-[transform,opacity] duration-300 ease-in-out">
         {/* End Turn - Primary Action (first) */}
         <Button 
           onClick={onEndTurn}
@@ -130,7 +130,7 @@ const GameControls = ({
       </div>
 
       {/* Secondary Actions Row */}
-      <div className="flex gap-2 sm:gap-3 items-center justify-center mt-2 sm:mt-3 transition-all duration-300 ease-in-out">
+      <div className="flex gap-2 sm:gap-3 items-center justify-center mt-2 sm:mt-3 transition-[transform,opacity] duration-300 ease-in-out">
         {/* Undo - Secondary Action */}
         <Button 
           onClick={onUndo}

@@ -136,7 +136,7 @@ export const DynamicZapIcon = ({
                 height={24 * fillPercentage / 100} 
                 fill="white"
                 className={cn(
-                  "transition-all duration-300 ease-out",
+                  "transition-[height] duration-300 ease-out",
                   isRecharging && "animate-pulse"
                 )}
               />
@@ -157,7 +157,7 @@ export const DynamicZapIcon = ({
             {/* Background icon (empty state) */}
             <IconComponent 
               size={size}
-              className="stroke-[1] fill-none transition-all duration-300 text-amber"
+              className="stroke-[1] fill-none transition-[stroke,fill] duration-300 text-amber"
               style={{
                 opacity: (orbitsAvailable === 0 && !showEmptyState) ? 0.4 : 1,
                 color: (orbitsAvailable === 0 && !showEmptyState) ? '#6B7280' : '#F59E0B' // gray-500 or amber
@@ -170,7 +170,7 @@ export const DynamicZapIcon = ({
                 size={size}
                 className={cn(
                   "absolute inset-0 text-amber stroke-[1]",
-                  isRecharging ? "transition-all duration-[800ms] ease-in-out animate-pulse" : "transition-all duration-300"
+                  isRecharging ? "transition-[opacity] duration-[800ms] ease-in-out animate-pulse" : "transition-[opacity] duration-300"
                 )}
                 style={{
                   fill: '#F59E0B', // amber

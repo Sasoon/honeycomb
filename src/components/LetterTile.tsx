@@ -22,7 +22,7 @@ const LetterTile: React.FC<LetterTileProps> = ({
         "text-2xl font-bold text-text-primary",
         "bg-bg-primary border border-secondary/20",
         "rounded-2xl shadow-sm",
-        "transition-all duration-200 ease-out",
+        "transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out",
         "hover:shadow-lg hover:shadow-secondary/10",
         "hover:border-secondary/30",
         "cursor-pointer select-none",

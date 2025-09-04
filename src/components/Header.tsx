@@ -19,7 +19,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
   };
   
   return (
-    <header className="bg-accent-light backdrop-blur-sm py-4 px-4 shadow-lg shadow-secondary/10 sticky top-0 z-40 border-accent/20 transition-all duration-300 ease-in-out">
+    <header className="bg-accent-light backdrop-blur-sm py-4 px-4 shadow-lg shadow-secondary/10 sticky top-0 z-40 border-accent/20 transition-[background-color,box-shadow,border-color] duration-300 ease-in-out">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center">
           {/* Left side - Hamburger on mobile/tablet, Logo on desktop */}
@@ -27,7 +27,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
             {/* Modern hamburger menu button */}
             <button 
               className={cn(
-                "p-2 text-white md:hidden rounded-xl transition-all duration-200",
+                "p-2 text-white md:hidden rounded-xl transition-[background-color,transform] duration-200",
                 "hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30",
                 "active:scale-95"
               )}
@@ -65,7 +65,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/classic" 
                 className={cn(
-                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
                   isActive('/classic') || isActive('/') 
                     ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
                     : 'text-white hover:text-white hover:bg-accent-dark/50'
@@ -76,7 +76,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/daily" 
                 className={cn(
-                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
                   isActive('/daily')
                     ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
                     : 'text-white hover:text-white hover:bg-accent-dark/50'
@@ -87,7 +87,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/leaderboard" 
                 className={cn(
-                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
                   isActive('/leaderboard')
                     ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
                     : 'text-white hover:text-white hover:bg-accent-dark/50'
@@ -98,7 +98,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
               <Link 
                 to="/how-to-play" 
                 className={cn(
-                  "px-4 py-2 rounded-xl font-medium transition-all duration-200 text-sm",
+                  "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
                   isActive('/how-to-play')
                     ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
                     : 'text-white hover:text-white hover:bg-accent-dark/50'

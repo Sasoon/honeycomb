@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
+import { useRef, useEffect, useState, useCallback, useLayoutEffect, startTransition, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 // Sound functionality removed for Tetris variant
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +8,15 @@ import { DynamicZapIcon } from '../components/DynamicZapIcon';
 import { cn } from '../lib/utils';
 import { calculateDisplayWordScore } from '../lib/gameUtils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
+
+// Performance optimization: Debounce utility for resize handler
+const debounce = <T extends (...args: any[]) => void>(func: T, wait: number): T => {
+  let timeout: NodeJS.Timeout;
+  return ((...args: any[]) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  }) as T;
+};
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { areCellsAdjacent } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
@@ -251,6 +260,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(false);
+  const [isGridRepositioning, setIsGridRepositioning] = useState(false);
+  const [gridAnimationPhase, setGridAnimationPhase] = useState<'horizontal' | 'vertical' | 'none' | 'synchronized' | 'vertical-first' | 'horizontal-second'>('none');
   const operationInProgressRef = useRef<boolean>(false);
   const orbitPlanRef = useRef<{
     pivotId: string;
@@ -706,9 +717,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     };
   }, [phase, grid, previousGrid, cellSize.h, startPlayerPhase, gravityMoves, floodPaths, endRound]);
 
-  // Screen size detection with staggered animation orchestration
-  useEffect(() => {
-    const checkScreenSize = () => {
+  // Performance optimization: Memoize resize handler
+  const checkScreenSize = useCallback(() => {
       const newIsDesktop = window.innerWidth >= 768;
       
       // Initialize on first load
@@ -719,29 +729,80 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         return;
       }
       
-      // Handle transitions
+      // Handle transitions with batched state updates for better performance
       if (newIsDesktop !== isDesktop && !isTransitioning) {
-        setIsTransitioning(true);
+        // Batch initial state updates to prevent multiple re-renders
+        startTransition(() => {
+          setIsTransitioning(true);
+          setIsGridRepositioning(true);
+          setIsDesktop(newIsDesktop);
+          
+          if (newIsDesktop) {
+            // Mobile → Desktop: Staggered reverse animation sequence
+            setGridAnimationPhase('vertical-first'); // Phase 1: Vertical movement first
+            setShowMobileControls(false);
+          } else {
+            // Desktop → Mobile: Staggered animation sequence  
+            setGridAnimationPhase('horizontal'); // Phase 1: Horizontal slide with controls entrance
+            setShowDesktopSidebar(false);
+            setShowMobileControls(true);
+          }
+        });
         
         if (newIsDesktop) {
-          // Mobile → Desktop: Hide mobile controls; sidebar will be shown after exit animation completes
-          setShowMobileControls(false);
+          // Phase 2: After vertical movement, trigger horizontal slide
+          setTimeout(() => {
+            setGridAnimationPhase('horizontal-second');
+          }, 50); // Small delay to ensure vertical starts first
+          
+          // After both animations complete, show sidebar and reset
+          setTimeout(() => {
+            startTransition(() => {
+              setShowDesktopSidebar(true);
+              setIsGridRepositioning(false);
+              setGridAnimationPhase('none');
+            });
+          }, 650); // 300ms vertical + 50ms gap + 300ms horizontal
         } else {
-          // Desktop → Mobile: Hide sidebar; mobile controls will be shown after exit animation completes  
-          setShowDesktopSidebar(false);
+          // Phase 2: After horizontal movement, adjust vertical position
+          setTimeout(() => {
+            setGridAnimationPhase('vertical');
+          }, 50); // Small delay to ensure horizontal starts first
+          
+          // Complete transition
+          setTimeout(() => {
+            startTransition(() => {
+              setIsGridRepositioning(false);
+              setGridAnimationPhase('none');
+            });
+          }, 600); // Total time for both phases
         }
-        
-        setIsDesktop(newIsDesktop);
       }
-    };
+    }, [isDesktop, isTransitioning, showDesktopSidebar, showMobileControls]);
     
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, [isDesktop, isTransitioning, showDesktopSidebar, showMobileControls]);
+    // Screen size detection with debounced resize handler
+    useEffect(() => {
+      // Performance optimization: Debounce resize handler to prevent excessive calls
+      const debouncedCheckScreenSize = debounce(checkScreenSize, 150);
+      
+      checkScreenSize(); // Initial call
+      window.addEventListener('resize', debouncedCheckScreenSize);
+      return () => window.removeEventListener('resize', debouncedCheckScreenSize);
+    }, [checkScreenSize]);
 
+  // Performance optimization: Memoize expensive calculations
   const hasSelection = currentWord.length > 0;
-  const validationState = currentWord.length >= 3 ? isWordValid : undefined;
+  const validationState = useMemo(() => 
+    currentWord.length >= 3 ? isWordValid : undefined, 
+    [currentWord.length, isWordValid]
+  );
+  
+  const currentWordScore = useMemo(() => 
+    currentWord.length >= 3 && validationState === true
+      ? calculateDisplayWordScore(currentWord, round, wordsThisRound.length, currentWord.length)
+      : 0,
+    [currentWord, round, wordsThisRound.length, validationState]
+  );
 
   // Default selection for words
   const handleCellClick = useCallback((cell: HexCell) => {
@@ -781,7 +842,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [isRestartHoldActive, setIsRestartHoldActive] = useState(false);
 
   return (
-    <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-all duration-300 ease-in-out relative">
+    <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-[height,padding] duration-300 ease-in-out relative">
       {/* Mobile Game Controls - Outside flex container to prevent layout shifts */}
       <div className={cn("absolute top-0 left-0 right-0 z-10", isDesktop ? "hidden" : "block")}>
         <AnimatePresence
@@ -823,7 +884,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       </div>
       
       <div className={cn(
-        "flex h-full transition-all duration-300 ease-in-out",
+        "flex h-full transition-[width,transform] duration-300 ease-in-out",
         (isDesktop || showDesktopSidebar || isTransitioning) ? "flex-row" : "flex-col"
       )}>
         {/* Modern Desktop Game Sidebar with Optimized Animation */}
@@ -978,7 +1039,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   {currentWord}
                   {currentWord.length >= 3 && validationState === true && (
                     <span className="text-amber-dark ml-2">
-                      (+{calculateDisplayWordScore(currentWord, round, wordsThisRound.length, currentWord.length)})
+                      (+{currentWordScore})
                     </span>
                   )}
                 </div>
@@ -1693,7 +1754,16 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
             {/* Grid and UI Buttons container */}
             <div 
-              className={`grid-container relative transition-all duration-300 ease-in-out ${phase === 'flood' ? 'flood-phase' : ''}`}
+              className={cn(
+                "grid-container relative",
+                phase === 'flood' ? 'flood-phase' : '',
+                isGridRepositioning ? 'grid-container-transitioning' : 'transition-[left,top,transform] duration-300 ease-in-out',
+                gridAnimationPhase === 'horizontal' && 'grid-horizontal-phase',
+                gridAnimationPhase === 'vertical' && 'grid-vertical-phase', 
+                gridAnimationPhase === 'synchronized' && 'grid-synchronized-phase',
+                gridAnimationPhase === 'vertical-first' && 'grid-vertical-first-phase',
+                gridAnimationPhase === 'horizontal-second' && 'grid-horizontal-second-phase'
+              )}
               style={{ 
                 position: 'absolute',
                 // On mobile, account for mobile controls height (68px) + header (68px) = 136px total offset  

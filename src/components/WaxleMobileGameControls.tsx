@@ -38,7 +38,7 @@ const WaxleMobileGameControls = ({
         className={cn(
           "bg-bg-primary/95 backdrop-blur-sm border-b border-secondary/20",
           "px-4 shadow-lg shadow-secondary/10",
-          "transition-all duration-300 ease-out cursor-pointer",
+          "transition-[background-color,box-shadow] duration-300 ease-out cursor-pointer",
           "hover:shadow-xl hover:shadow-secondary/20",
           "active:bg-bg-secondary/50",
           "h-[68px] flex items-center"
@@ -168,7 +168,7 @@ const WaxleMobileGameControls = ({
             </div>
             {/* Modern chevron */}
             <div className={cn(
-              "p-1 rounded-lg bg-secondary/10 transition-all duration-200",
+              "p-1 rounded-lg bg-secondary/10 transition-[background-color,transform] duration-200",
               isExpanded && "rotate-180"
             )}>
               <ChevronDown size={16} className="text-text-secondary" />

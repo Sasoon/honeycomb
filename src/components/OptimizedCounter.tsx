@@ -22,7 +22,7 @@ export const OptimizedCounter = ({
   const [isAnimating, setIsAnimating] = useState(false);
   const prevValueRef = useRef(value);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   
   useEffect(() => {
     if (value !== prevValueRef.current) {
