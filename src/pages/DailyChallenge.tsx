@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, Trophy, Play, CheckCircle, RotateCcw } from 'lucide-react';
+import { Clock, Play, CheckCircle, RotateCcw } from 'lucide-react';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
