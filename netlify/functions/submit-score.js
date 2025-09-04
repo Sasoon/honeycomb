@@ -1,42 +1,44 @@
 import { getStore } from '@netlify/blobs';
 
-export default async function handler(event, context) {
-
-  // Only allow POST requests
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, error: 'Method not allowed' })
-    };
-  }
-
+export default async function handler(request, context) {
   try {
-    const { playerName, score, round, totalWords, longestWord, timeSpent, date } = JSON.parse(event.body);
+    if (request.method !== 'POST') {
+      return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    let parsed;
+    try {
+      parsed = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid JSON body' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { playerName, score, round, totalWords, longestWord, timeSpent, date } = parsed;
 
     // Validate required fields
     if (!playerName || score === undefined || !round || !date) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          error: 'Missing required fields: playerName, score, round, date'
-        })
-      };
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Missing required fields: playerName, score, round, date'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     // Sanitize player name
     const sanitizedName = sanitizePlayerName(playerName);
     if (!sanitizedName) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          error: 'Invalid player name'
-        })
-      };
+      return new Response(JSON.stringify({ success: false, error: 'Invalid player name' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     // Date validation: allow both UTC and local YYYY-MM-DD
@@ -46,28 +48,20 @@ export default async function handler(event, context) {
     const isToday = date === utcToday || date === localToday;
 
     if (!isToday) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          error: 'Can only submit scores for today\'s challenge'
-        })
-      };
+      return new Response(JSON.stringify({ success: false, error: 'Can only submit scores for today\'s challenge' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     // Basic score validation (relaxed upper bound)
     const numericScore = parseInt(score);
     const numericRound = parseInt(round);
     if (numericScore < 0 || numericScore > 1000000 || numericRound < 1 || numericRound > 100) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          error: 'Invalid score or round values'
-        })
-      };
+      return new Response(JSON.stringify({ success: false, error: 'Invalid score or round values' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const isLocal = !context.site?.id;
@@ -90,45 +84,38 @@ export default async function handler(event, context) {
     };
 
     // Use runtime-injected site context for blobs
-    const dailyStore = getStore({
-      name: 'leaderboard-daily',
-      consistency: 'strong'
-    });
+    const dailyStore = getStore('leaderboard-daily');
 
     let existingScore;
     try {
-      existingScore = await dailyStore.get(playerKey, { type: 'json' });
-    } catch (error) {
+      existingScore = await dailyStore.get(playerKey, { type: 'json', consistency: 'strong' });
+    } catch {
       // No existing score, which is fine
     }
 
     // Only update if new score is better
     if (existingScore && existingScore.score >= scoreEntry.score) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: true,
-          message: 'Score not improved',
-          existingScore: existingScore.score,
-          newScore: scoreEntry.score
-        })
-      };
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Score not improved',
+        existingScore: existingScore.score,
+        newScore: scoreEntry.score
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     // Save to daily leaderboard
     await dailyStore.set(playerKey, JSON.stringify(scoreEntry));
 
     // Update all-time leaderboard if this is a new personal best
-    const allTimeStore = getStore({
-      name: 'leaderboard-alltime',
-      consistency: 'strong'
-    });
+    const allTimeStore = getStore('leaderboard-alltime');
 
     let allTimeBest;
     try {
-      allTimeBest = await allTimeStore.get(allTimeKey, { type: 'json' });
-    } catch (error) {
+      allTimeBest = await allTimeStore.get(allTimeKey, { type: 'json', consistency: 'strong' });
+    } catch {
       // No existing all-time score
     }
 
@@ -147,30 +134,25 @@ export default async function handler(event, context) {
     // Get player's rank in daily leaderboard (reads the index with strong consistency)
     const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score);
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        success: true,
-        scoreEntry,
-        dailyRank,
-        isPersonalBest
-      })
-    };
+    return new Response(JSON.stringify({
+      success: true,
+      scoreEntry,
+      dailyRank,
+      isPersonalBest
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error('Error in submit-score function:', error);
 
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        success: false,
-        error: 'Failed to submit score'
-      })
-    };
+    return new Response(JSON.stringify({ success: false, error: 'Failed to submit score' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-};
+}
 
 // Sanitize player name
 function sanitizePlayerName(name) {
@@ -188,7 +170,7 @@ function sanitizePlayerName(name) {
 async function updateDailyIndex({ isLocal, date, entry }) {
   const keyPrefix = isLocal ? 'dev_' : '';
   const indexKey = `${keyPrefix}${date}`;
-  const indexStore = getStore({ name: 'leaderboard-daily-index' });
+  const indexStore = getStore('leaderboard-daily-index');
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -246,7 +228,7 @@ async function updateDailyIndex({ isLocal, date, entry }) {
 async function updateAllTimeIndex({ isLocal, entry }) {
   const keyPrefix = isLocal ? 'dev_' : '';
   const indexKey = `${keyPrefix}all`;
-  const indexStore = getStore({ name: 'leaderboard-alltime-index' });
+  const indexStore = getStore('leaderboard-alltime-index');
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -299,7 +281,7 @@ async function updateAllTimeIndex({ isLocal, entry }) {
 async function getDailyRank(isLocal, date, playerScore) {
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
-    const store = getStore({ name: 'leaderboard-daily-index' });
+    const store = getStore('leaderboard-daily-index');
     const data = await store.get(`${keyPrefix}${date}`, { type: 'json', consistency: 'strong' });
 
     if (!data || !Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {
