@@ -183,31 +183,6 @@ const DailyChallenge = () => {
                   </div>
                 </div>
 
-                {/* Rules Section */}
-                <div className={cn(
-                  "bg-amber/5 border border-amber/20",
-                  "rounded-2xl p-6 space-y-4"
-                )}>
-                  <div className="flex items-center space-x-2">
-                    <Trophy className="w-5 h-5 text-amber" />
-                    <h3 className="font-semibold text-text-primary">Challenge Rules</h3>
-                  </div>
-                  <ul className="space-y-2 text-sm text-text-secondary">
-                    <li className="flex items-start space-x-2">
-                      <span className="w-1.5 h-1.5 bg-amber rounded-full mt-2 flex-shrink-0"></span>
-                      <span>Standard game rules apply</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="w-1.5 h-1.5 bg-amber rounded-full mt-2 flex-shrink-0"></span>
-                      <span>Everyone gets the same starting grid</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="w-1.5 h-1.5 bg-amber rounded-full mt-2 flex-shrink-0"></span>
-                      <span>Complete with the fewest turns to top the leaderboard</span>
-                    </li>
-                  </ul>
-                </div>
-
                 {/* Action Button */}
                 <Button
                   onClick={handleStartChallenge}
@@ -235,14 +210,9 @@ const DailyChallenge = () => {
                     "bg-success/10 border border-success/20",
                     "rounded-2xl p-6 text-center space-y-4"
                   )}>
-                    <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto">
-                      <Trophy className="w-8 h-8 text-success" />
-                    </div>
                     <div>
-                      <p className="text-text-primary mb-3 font-medium">🎉 Great job completing today's challenge!</p>
                       <Button variant="success" asChild>
                         <a href="/leaderboard">
-                          <Trophy className="w-4 h-4 mr-2" />
                           View Leaderboard
                         </a>
                       </Button>

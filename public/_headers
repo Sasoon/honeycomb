@@ -1,0 +1,8 @@
+# Netlify CDN Cache Control for Leaderboard API
+/api/get-leaderboard
+  Cache-Control: no-cache, no-store, must-revalidate
+  CDN-Cache-Control: no-cache
+  Netlify-CDN-Cache-Control: no-cache
+  Pragma: no-cache
+  Expires: 0
+  Vary: *

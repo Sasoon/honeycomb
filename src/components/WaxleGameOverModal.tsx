@@ -188,8 +188,7 @@ const WaxleGameOverModal = ({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-semibold text-text-primary">Game Complete!</h2>
-                <p className="text-text-secondary text-sm">Here's how you performed</p>
+                <h2 className="text-xl font-semibold text-text-primary">Challenge complete!</h2>
               </div>
               
               {/* Compact Score Display */}
@@ -211,7 +210,7 @@ const WaxleGameOverModal = ({
                 </div>
                 <div className="w-px bg-secondary/20"></div>
                 <div className="text-center space-y-1 min-w-0 max-w-20">
-                  <div className="text-sm font-semibold text-text-primary truncate" title={longestWord}>
+                  <div className="text-lg font-semibold text-text-primary truncate" title={longestWord}>
                     {longestWord || 'N/A'}
                   </div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Best</div>
@@ -221,10 +220,6 @@ const WaxleGameOverModal = ({
               {/* Daily Challenge Submission */}
               {isDailyChallenge && !hasAlreadySubmitted && (
                 <div className="space-y-4">
-                  <div className="text-center space-y-2">
-                    <h3 className="text-lg font-semibold text-text-primary">Join the Leaderboard</h3>
-                    <p className="text-sm text-text-secondary">Enter your name to compete with other players</p>
-                  </div>
                   <div className="space-y-3">
                     <input
                       type="text"
@@ -308,7 +303,7 @@ const WaxleGameOverModal = ({
                       <span>Share</span>
                     </button>
                     <a
-                      href={`/leaderboard?t=${Date.now()}`}
+                      href={`/leaderboard?fresh=${Date.now()}&submitted=true`}
                       className="flex-1 text-center bg-primary hover:bg-primary-dark text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 flex items-center justify-center space-x-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -340,17 +335,6 @@ const WaxleGameOverModal = ({
                     </button>
                   </>
                 )}
-              </div>
-              
-              <div className="pt-2 border-t border-secondary/10">
-                <p className="text-xs text-text-muted text-center">
-                  {isDailyChallenge 
-                    ? hasAlreadySubmitted 
-                      ? 'Challenge complete • New challenge tomorrow'
-                      : 'Compete with players worldwide'
-                    : 'Tap outside to close • Press Play Again to continue'
-                  }
-                </p>
               </div>
             </div>
           </motion.div>

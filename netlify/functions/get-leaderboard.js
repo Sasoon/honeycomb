@@ -102,8 +102,11 @@ async function getDailyLeaderboard(isLocal, context, limit) {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache, no-store, must-revalidate', // No caching for real-time updates
+        'CDN-Cache-Control': 'no-cache', // Netlify CDN bypass
+        'Netlify-CDN-Cache-Control': 'no-cache', // Netlify-specific bypass
         'Pragma': 'no-cache',
-        'Expires': '0'
+        'Expires': '0',
+        'Vary': '*' // Prevent any caching based on request parameters
       }
     }
   );

@@ -36,7 +36,18 @@ const Leaderboard = () => {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/get-leaderboard?type=${type}&limit=10&t=${Date.now()}`);
+      // Add extra cache busting for fresh submissions
+      const url = new URL(window.location.href);
+      const isJustSubmitted = url.searchParams.get('submitted') === 'true';
+      const cacheBreaker = isJustSubmitted ? `fresh=${Date.now()}&rand=${Math.random()}` : `t=${Date.now()}`;
+      
+      const response = await fetch(`/api/get-leaderboard?type=${type}&limit=10&${cacheBreaker}`, {
+        cache: 'no-store', // Force no browser caching
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to load leaderboard: ${response.statusText}`);
