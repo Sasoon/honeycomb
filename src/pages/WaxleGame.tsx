@@ -1492,6 +1492,12 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       return;
                     }
 
+                    // Store original letter positions for comparison
+                    const originalLetterPositions = new Map<string, string>();
+                    neighborStates.forEach(({ cell, letter }) => {
+                      originalLetterPositions.set(cell.id, letter);
+                    });
+
                     // Rotate unlocked letters
                     let rotatedLetters = [...unlockedLetters];
                     for (let i = 0; i < steps; i++) {
@@ -1520,6 +1526,30 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         rotatedIndex++;
                       }
                     });
+
+                    // Check if any tiles actually moved to new positions
+                    let actualMovement = false;
+                    for (const [cellId, newLetter] of neighborIdToNewLetter.entries()) {
+                      const originalLetter = originalLetterPositions.get(cellId);
+                      if (originalLetter !== newLetter) {
+                        actualMovement = true;
+                        break;
+                      }
+                    }
+
+                    if (!actualMovement) {
+                      console.log('[ORBIT-UI] No actual movement detected - tiles returned to original positions');
+                      toastService.error('No tiles moved - orbit canceled');
+                      
+                      // Clean up orbit drag state properly
+                      setIsDragging(false);
+                      setIsOverCancel(false);
+                      setCurrentDragAngle(0);
+                      setLockedSteps(0);
+                      lockedStepsRef.current = 0;
+                      operationInProgressRef.current = false;
+                      return;
+                    }
 
                     currentGrid = currentGrid.map(cell => {
                       const finalLetter = neighborIdToNewLetter.get(cell.id);
@@ -1615,6 +1645,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         const lockedTileIds = Array.isArray(currentGameState.lockedTiles) ? currentGameState.lockedTiles : [];
                         const isLocked = lockedTileIds.includes(cell.id);
                         
+                        // Detect if tile is in original position
+                        let isInOriginalPosition = false;
+                        const originalX = center.x - cellSize.w / 2;
+                        const originalY = center.y - cellSize.h / 2;
+                        
                         // Only move unlocked tiles during preview
                         if (plan && !isLocked) {
                           const presentIdx = plan.neighborIdToPresentIndex.get(cell.id);
@@ -1631,11 +1666,16 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                               if (targetCtr) {
                                 drawX = targetCtr.x - cellSize.w / 2;
                                 drawY = targetCtr.y - cellSize.h / 2;
+                                
+                                // Check if target position is same as original position
+                                isInOriginalPosition = (Math.abs(drawX - originalX) < 1 && Math.abs(drawY - originalY) < 1);
                               }
                             }
                           }
+                        } else {
+                          // Locked tiles are always in original position
+                          isInOriginalPosition = true;
                         }
-                        // If locked, drawX/drawY remain at original center position
 
                         // Border stroke disabled - no borders on orbiting tiles
                         // const borderColor = 'transparent'; // No border stroke - unused
@@ -1657,15 +1697,15 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
                               background: isLocked 
                                 ? 'rgba(251, 146, 60, 0.3)' // Orange for locked tiles
-                                : isOverCancel ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)',
+                                : isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)', // Grey for original position
                               zIndex: 59,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontSize: '1rem',
                               fontWeight: 'bold',
-                              color: isOverCancel ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)',
-                              boxShadow: isOverCancel ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)'
+                              color: isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)', // Grey text for original position
+                              boxShadow: isOverCancel || isInOriginalPosition ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)' // Grey shadow for original position
                             }}
                           >
                             {/* SVG hexagonal border overlay - DISABLED */}
