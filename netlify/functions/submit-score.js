@@ -39,11 +39,13 @@ export default async function handler(event, context) {
       };
     }
 
-    // Get today's date string
-    const today = new Date().toISOString().split('T')[0];
+    // Date validation: allow both UTC and local YYYY-MM-DD
+    const now = new Date();
+    const utcToday = now.toISOString().split('T')[0];
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isToday = date === utcToday || date === localToday;
 
-    // Validate that the submission is for today's challenge
-    if (date !== today) {
+    if (!isToday) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -54,8 +56,10 @@ export default async function handler(event, context) {
       };
     }
 
-    // Basic score validation
-    if (score < 0 || score > 10000 || round < 1 || round > 100) {
+    // Basic score validation (relaxed upper bound)
+    const numericScore = parseInt(score);
+    const numericRound = parseInt(round);
+    if (numericScore < 0 || numericScore > 1000000 || numericRound < 1 || numericRound > 100) {
       return {
         statusCode: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -76,8 +80,8 @@ export default async function handler(event, context) {
 
     const scoreEntry = {
       playerName: sanitizedName,
-      score: parseInt(score),
-      round: parseInt(round),
+      score: numericScore,
+      round: numericRound,
       totalWords: parseInt(totalWords) || 0,
       longestWord: longestWord || '',
       timeSpent: parseInt(timeSpent) || 0,
@@ -85,13 +89,9 @@ export default async function handler(event, context) {
       submittedAt: timestamp
     };
 
-    // Initialize stores with explicit site ID - try without token first
-    const siteID = context.site?.id || process.env.NETLIFY_SITE_ID || 'a1b92087-b54c-4d15-8194-e44eb6c57e27';
-    console.log('Blob config - Site ID:', siteID);
-
+    // Use runtime-injected site context for blobs
     const dailyStore = getStore({
       name: 'leaderboard-daily',
-      siteID: siteID,
       consistency: 'strong'
     });
 
@@ -122,7 +122,6 @@ export default async function handler(event, context) {
     // Update all-time leaderboard if this is a new personal best
     const allTimeStore = getStore({
       name: 'leaderboard-alltime',
-      siteID: siteID,
       consistency: 'strong'
     });
 
@@ -140,13 +139,13 @@ export default async function handler(event, context) {
     }
 
     // Update strongly-consistent daily index and compute player's rank from it
-    await updateDailyIndex({ siteID, isLocal, date, entry: scoreEntry });
+    await updateDailyIndex({ isLocal, date, entry: scoreEntry });
 
     // Also update strongly-consistent all-time index
-    await updateAllTimeIndex({ siteID, isLocal, entry: scoreEntry });
+    await updateAllTimeIndex({ isLocal, entry: scoreEntry });
 
     // Get player's rank in daily leaderboard (reads the index with strong consistency)
-    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, siteID);
+    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score);
 
     return {
       statusCode: 200,
@@ -186,10 +185,10 @@ function sanitizePlayerName(name) {
 }
 
 // Maintain a strongly-consistent daily index for instant reads after writes
-async function updateDailyIndex({ siteID, isLocal, date, entry }) {
+async function updateDailyIndex({ isLocal, date, entry }) {
   const keyPrefix = isLocal ? 'dev_' : '';
   const indexKey = `${keyPrefix}${date}`;
-  const indexStore = getStore({ name: 'leaderboard-daily-index', siteID });
+  const indexStore = getStore({ name: 'leaderboard-daily-index' });
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -244,10 +243,10 @@ async function updateDailyIndex({ siteID, isLocal, date, entry }) {
 }
 
 // Maintain a strongly-consistent all-time index for instant reads after writes
-async function updateAllTimeIndex({ siteID, isLocal, entry }) {
+async function updateAllTimeIndex({ isLocal, entry }) {
   const keyPrefix = isLocal ? 'dev_' : '';
   const indexKey = `${keyPrefix}all`;
-  const indexStore = getStore({ name: 'leaderboard-alltime-index', siteID });
+  const indexStore = getStore({ name: 'leaderboard-alltime-index' });
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -297,10 +296,10 @@ async function updateAllTimeIndex({ siteID, isLocal, entry }) {
 }
 
 // Get player's rank in daily leaderboard
-async function getDailyRank(isLocal, date, playerScore, siteId) {
+async function getDailyRank(isLocal, date, playerScore) {
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
-    const store = getStore({ name: 'leaderboard-daily-index', siteID: siteId });
+    const store = getStore({ name: 'leaderboard-daily-index' });
     const data = await store.get(`${keyPrefix}${date}`, { type: 'json', consistency: 'strong' });
 
     if (!data || !Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {
