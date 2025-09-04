@@ -410,6 +410,14 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     
                     // Toast removed - game over modal shows this information
                     updateCurrentGameState({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
+                    
+                    // Mark daily challenge as completed when game ends
+                    if (get().isDailyChallenge && get().getCurrentGameState().dailyDate) {
+                        const completedKey = `waxle-daily-completed-${get().getCurrentGameState().dailyDate}`;
+                        localStorage.setItem(completedKey, 'true');
+                        console.log(`Daily challenge completed for ${get().getCurrentGameState().dailyDate}`);
+                    }
+                    
                     return;
                 } else if (unplacedLetters.length > 0) {
                     // DEBUG: Log when tiles fail to place but game continues (top row not full)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Crown, Medal, Clock, Target, Hash } from 'lucide-react';
+import { Trophy, Clock, Target } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { cn } from '../lib/utils';
@@ -78,14 +78,6 @@ const Leaderboard = () => {
     });
   };
 
-  const getRankIcon = (rank: number) => {
-    switch(rank) {
-      case 1: return <Crown className="w-5 h-5 text-amber" />
-      case 2: return <Medal className="w-5 h-5 text-gray-400" />
-      case 3: return <Medal className="w-5 h-5 text-amber-600" />
-      default: return <Hash className="w-4 h-4 text-text-secondary" />
-    }
-  }
 
   return (
     <div className="min-h-screen bg-bg-secondary">
@@ -207,16 +199,16 @@ const Leaderboard = () => {
                         entry.rank === 1 && "ring-2 ring-amber/30"
                       )}
                     >
-                      {/* Rank & Icon */}
-                      <div className="flex items-center space-x-3 min-w-16">
+                      {/* Rank */}
+                      <div className="flex items-center min-w-8">
                         <div className={cn(
-                          "flex items-center justify-center w-10 h-10 rounded-xl font-bold",
+                          "flex items-center justify-center w-8 h-8 rounded-lg font-bold text-sm",
                           entry.rank === 1 && "bg-amber/20 text-amber",
                           entry.rank === 2 && "bg-secondary/20 text-text-primary", 
                           entry.rank === 3 && "bg-amber/15 text-amber-600",
                           entry.rank > 3 && "bg-secondary/10 text-text-secondary"
                         )}>
-                          {entry.rank <= 3 ? getRankIcon(entry.rank) : `#${entry.rank}`}
+                          {entry.rank}
                         </div>
                       </div>
 
@@ -234,33 +226,25 @@ const Leaderboard = () => {
                       {/* Stats Grid */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 ml-4">
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-amber">{entry.score.toLocaleString()}</div>
+                          <div className="h-8 flex items-center justify-center text-2xl font-bold text-amber">{entry.score.toLocaleString()}</div>
                           <div className="text-xs text-text-secondary font-medium">Score</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-text-primary">{entry.round}</div>
+                          <div className="h-8 flex items-center justify-center text-lg font-semibold text-text-primary">{entry.round}</div>
                           <div className="text-xs text-text-secondary font-medium">Round</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-text-primary">{entry.totalWords}</div>
+                          <div className="h-8 flex items-center justify-center text-lg font-semibold text-text-primary">{entry.totalWords}</div>
                           <div className="text-xs text-text-secondary font-medium">Words</div>
                         </div>
-                        <div className="text-center min-w-0">
-                          <div className="text-sm font-mono font-semibold text-text-primary truncate" title={entry.longestWord}>
+                        <div className="text-center">
+                          <div className="h-8 flex items-center justify-center text-sm font-mono font-semibold text-text-primary truncate" title={entry.longestWord}>
                             {entry.longestWord || '-'}
                           </div>
                           <div className="text-xs text-text-secondary font-medium">Longest</div>
                         </div>
                       </div>
 
-                      {/* Time Badge */}
-                      <div className="ml-4 hidden sm:block">
-                        <div className="bg-secondary/10 px-3 py-1 rounded-full">
-                          <span className="text-sm font-medium text-text-secondary">
-                            {formatTimeSpent(entry.timeSpent)}
-                          </span>
-                        </div>
-                      </div>
                     </div>
                   ))}
                 </div>
