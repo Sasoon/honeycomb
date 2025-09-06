@@ -251,6 +251,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [fxOverlays, setFxOverlays] = useState<FxOverlay[]>([]);
   const timersRef = useRef<number[]>([]);
+  const uiTimersRef = useRef<number[]>([]);
+  const transitionTokenRef = useRef(0);
+  const desiredIsDesktopRef = useRef<boolean | null>(null);
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
   const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -729,56 +732,72 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         return;
       }
       
-      // Handle transitions with batched state updates for better performance
-      if (newIsDesktop !== isDesktop && !isTransitioning) {
-        // Batch initial state updates to prevent multiple re-renders
-        startTransition(() => {
-          setIsTransitioning(true);
-          setIsGridRepositioning(true);
-          setIsDesktop(newIsDesktop);
-          
-          if (newIsDesktop) {
-            // Mobile → Desktop: Staggered reverse animation sequence
-            setGridAnimationPhase('vertical-first'); // Phase 1: Vertical movement first
-            setShowMobileControls(false);
-          } else {
-            // Desktop → Mobile: Staggered animation sequence  
-            setGridAnimationPhase('horizontal'); // Phase 1: Horizontal slide with controls entrance
-            setShowDesktopSidebar(false);
-            setShowMobileControls(true);
-          }
-        });
+      if (newIsDesktop === isDesktop) return;
+
+      // Cancel any pending UI transition timers
+      uiTimersRef.current.forEach(t => window.clearTimeout(t));
+      uiTimersRef.current = [];
+
+      // Bump transition token and record desired target
+      transitionTokenRef.current += 1;
+      const token = transitionTokenRef.current;
+      desiredIsDesktopRef.current = newIsDesktop;
+      
+      // Handle transitions with batched state updates (interruptible)
+      startTransition(() => {
+        setIsTransitioning(true);
+        setIsGridRepositioning(true);
+        setIsDesktop(newIsDesktop);
         
         if (newIsDesktop) {
-          // Phase 2: After vertical movement, trigger horizontal slide
-          setTimeout(() => {
-            setGridAnimationPhase('horizontal-second');
-          }, 50); // Small delay to ensure vertical starts first
-          
-          // After both animations complete, show sidebar and reset
-          setTimeout(() => {
-            startTransition(() => {
-              setShowDesktopSidebar(true);
-              setIsGridRepositioning(false);
-              setGridAnimationPhase('none');
-            });
-          }, 650); // 300ms vertical + 50ms gap + 300ms horizontal
+          // Mobile → Desktop: Staggered reverse animation sequence
+          setGridAnimationPhase('vertical-first'); // Phase 1: Vertical movement first
+          setShowMobileControls(false);
         } else {
-          // Phase 2: After horizontal movement, adjust vertical position
-          setTimeout(() => {
-            setGridAnimationPhase('vertical');
-          }, 50); // Small delay to ensure horizontal starts first
-          
-          // Complete transition
-          setTimeout(() => {
-            startTransition(() => {
-              setIsGridRepositioning(false);
-              setGridAnimationPhase('none');
-            });
-          }, 600); // Total time for both phases
+          // Desktop → Mobile: Staggered animation sequence  
+          setGridAnimationPhase('horizontal'); // Phase 1: Horizontal slide with controls entrance
+          setShowDesktopSidebar(false);
+          setShowMobileControls(true);
         }
+      });
+      
+      if (newIsDesktop) {
+        // Phase 2: After vertical movement, trigger horizontal slide
+        const t1 = window.setTimeout(() => {
+          if (transitionTokenRef.current !== token) return;
+          setGridAnimationPhase('horizontal-second');
+        }, 50); // Small delay to ensure vertical starts first
+        uiTimersRef.current.push(t1);
+        
+        // After both animations complete, show sidebar and reset
+        const t2 = window.setTimeout(() => {
+          if (transitionTokenRef.current !== token) return;
+          startTransition(() => {
+            setShowDesktopSidebar(true);
+            setIsGridRepositioning(false);
+            setGridAnimationPhase('none');
+          });
+        }, 650); // 300ms vertical + 50ms gap + 300ms horizontal
+        uiTimersRef.current.push(t2);
+      } else {
+        // Phase 2: After horizontal movement, adjust vertical position
+        const t1 = window.setTimeout(() => {
+          if (transitionTokenRef.current !== token) return;
+          setGridAnimationPhase('vertical');
+        }, 50); // Small delay to ensure horizontal starts first
+        uiTimersRef.current.push(t1);
+        
+        // Complete transition
+        const t2 = window.setTimeout(() => {
+          if (transitionTokenRef.current !== token) return;
+          startTransition(() => {
+            setIsGridRepositioning(false);
+            setGridAnimationPhase('none');
+          });
+        }, 600); // Total time for both phases
+        uiTimersRef.current.push(t2);
       }
-    }, [isDesktop, isTransitioning, showDesktopSidebar, showMobileControls]);
+    }, [isDesktop, showDesktopSidebar, showMobileControls]);
     
     // Screen size detection with debounced resize handler
     useEffect(() => {
@@ -787,7 +806,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       
       checkScreenSize(); // Initial call
       window.addEventListener('resize', debouncedCheckScreenSize);
-      return () => window.removeEventListener('resize', debouncedCheckScreenSize);
+      return () => {
+        window.removeEventListener('resize', debouncedCheckScreenSize);
+        uiTimersRef.current.forEach(t => window.clearTimeout(t));
+        uiTimersRef.current = [];
+      };
     }, [checkScreenSize]);
 
   // Performance optimization: Memoize expensive calculations
@@ -846,7 +869,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       <div className={cn("absolute top-0 left-0 right-0 z-10", isDesktop ? "hidden" : "block")}>
         <AnimatePresence
           onExitComplete={() => {
-            if (isDesktop) {
+            if (desiredIsDesktopRef.current) {
               setShowDesktopSidebar(true);
               setIsTransitioning(false);
             }
@@ -890,7 +913,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         <AnimatePresence
           onExitComplete={() => {
             // Sidebar finished exiting → we are in mobile view now.
-            if (!isDesktop) {
+            if (desiredIsDesktopRef.current === false) {
               setShowMobileControls(true);
               setIsTransitioning(false);
             }
