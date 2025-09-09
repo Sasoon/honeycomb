@@ -65,15 +65,23 @@ const DailyChallenge = () => {
     loadDailySeed();
   }, []);
   
-  // Calculate time until next day's challenge
+  // Calculate time until next day's challenge (UTC midnight)
   useEffect(() => {
     const calculateCountdown = () => {
       const now = new Date();
-      const tomorrow = new Date(now);
-      tomorrow.setDate(now.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
       
-      const diff = tomorrow.getTime() - now.getTime();
+      // Get today's UTC midnight
+      const todayMidnight = new Date(now);
+      todayMidnight.setUTCHours(0, 0, 0, 0);
+      
+      // Get tomorrow's UTC midnight
+      const tomorrowMidnight = new Date(todayMidnight);
+      tomorrowMidnight.setUTCDate(tomorrowMidnight.getUTCDate() + 1);
+      
+      // Use tomorrow if we're past today's midnight
+      const target = now >= todayMidnight ? tomorrowMidnight : todayMidnight;
+      
+      const diff = target.getTime() - now.getTime();
       
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -98,7 +106,25 @@ const DailyChallenge = () => {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    timeZone: 'UTC'
   });
+  
+  // Helper to get local reset time
+  const getLocalResetTime = () => {
+    const utcMidnight = new Date();
+    utcMidnight.setUTCHours(24, 0, 0, 0);
+    
+    // Get timezone like "Australia/Sydney" and extract city name
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const city = timeZone.split('/').pop()?.replace(/_/g, ' ') || 'your timezone';
+    
+    const time = utcMidnight.toLocaleTimeString(undefined, { 
+      hour: 'numeric', 
+      minute: '2-digit'
+    });
+    
+    return `${time} ${city} time`;
+  };
   
   const handleStartChallenge = () => {
     if (!seedData || isCompleted) return;
@@ -176,6 +202,9 @@ const DailyChallenge = () => {
                   <div className="flex items-center justify-center space-x-2 text-text-secondary">
                     <Clock className="w-4 h-4" />
                     <span className="text-sm font-medium">Next challenge in</span>
+                  </div>
+                  <div className="text-xs text-text-secondary/70">
+                    Resets daily at {getLocalResetTime()}
                   </div>
                   <div className={cn(
                     "text-3xl font-mono font-bold text-center",
