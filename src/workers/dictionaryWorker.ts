@@ -1,49 +1,81 @@
 // Dictionary Web Worker
-// Loads the large JSON off the main thread and responds to queries
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - JSON imports are handled by Vite
-import wordsSmall from '../lib/enable1.json';
-// @ts-ignore
-import blacklistArr from '../lib/offensive_words.json';
-// @ts-ignore
-import wordsLarge from '../lib/words_dictionary.json';
+// Loads the large JSON from public folder at runtime to avoid build memory issues
 
 type Dictionary = Record<string, number>;
 
-function toDictionary(raw: any): Dictionary {
-    const dict: Dictionary = {};
-    if (Array.isArray(raw)) {
-        for (const w of raw) if (typeof w === 'string') dict[w.toLowerCase()] = 1;
-    } else if (raw && typeof raw === 'object') {
-        for (const k of Object.keys(raw)) dict[k.toLowerCase()] = 1;
+// Global state for loaded dictionaries
+let dictionary: Dictionary | null = null;
+let blacklist: Set<string> | null = null;
+let loadingPromise: Promise<void> | null = null;
+
+async function loadDictionaries(): Promise<void> {
+    if (loadingPromise) return loadingPromise;
+    
+    loadingPromise = (async () => {
+        try {
+            // Fetch dictionaries from public folder
+            const [dictResponse, blacklistResponse] = await Promise.all([
+                fetch('/dictionary.json'),
+                fetch('/offensive_words.json')
+            ]);
+            
+            if (!dictResponse.ok || !blacklistResponse.ok) {
+                throw new Error('Failed to fetch dictionary files');
+            }
+            
+            const [dictData, blacklistData] = await Promise.all([
+                dictResponse.json(),
+                blacklistResponse.json()
+            ]);
+            
+            // Convert dictionary to normalized format
+            dictionary = {};
+            if (dictData && typeof dictData === 'object') {
+                for (const key of Object.keys(dictData)) {
+                    dictionary[key.toLowerCase()] = 1;
+                }
+            }
+            
+            // Convert blacklist to Set
+            blacklist = new Set<string>();
+            if (Array.isArray(blacklistData)) {
+                for (const word of blacklistData) {
+                    if (typeof word === 'string') {
+                        blacklist.add(word.toLowerCase());
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load dictionaries:', error);
+            dictionary = {};
+            blacklist = new Set();
+        }
+    })();
+    
+    return loadingPromise;
+}
+
+// Prefix index for suggestions - built after dictionary loads
+let prefixIndex: Map<string, string[]> | null = null;
+
+function buildPrefixIndex(): void {
+    if (!dictionary || prefixIndex) return;
+    
+    prefixIndex = new Map<string, string[]>();
+    for (const w of Object.keys(dictionary)) {
+        if (w.length < 3) continue;
+        const key = w.slice(0, 2);
+        if (!prefixIndex.has(key)) prefixIndex.set(key, []);
+        const arr = prefixIndex.get(key)!;
+        if (arr.length < 500) arr.push(w); // cap per-bucket to bound memory
     }
-    return dict;
-}
-
-// Prefer large dictionary; fallback to small
-const dictionary: Dictionary = Object.keys(wordsLarge || {}).length > 0 ? toDictionary(wordsLarge) : toDictionary(wordsSmall);
-const blacklist = new Set<string>((blacklistArr as unknown as string[]).map(w => w.toLowerCase()));
-
-// Performance optimization: Pre-compute word count for logging
-const WORD_COUNT = Object.keys(dictionary).length;
-// Guard console in prod builds
-declare const importMetaEnvDev: boolean | undefined;
-// @ts-ignore
-const __DEV__ = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
-if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log(`[DictionaryWorker] Loaded ${WORD_COUNT.toLocaleString()} words`);
-}
-
-// Build a small prefix index (first 2 letters)
-const prefixIndex = new Map<string, string[]>();
-for (const w of Object.keys(dictionary)) {
-    if (w.length < 3) continue;
-    const key = w.slice(0, 2);
-    if (!prefixIndex.has(key)) prefixIndex.set(key, []);
-    const arr = prefixIndex.get(key)!;
-    if (arr.length < 500) arr.push(w); // cap per-bucket to bound memory
+    
+    // Guard console in prod builds
+    const __DEV__ = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
+    if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log(`[DictionaryWorker] Loaded ${Object.keys(dictionary).length.toLocaleString()} words`);
+    }
 }
 
 interface BaseMessage {
@@ -62,48 +94,77 @@ interface SuggestionsMessage extends BaseMessage {
     limit?: number;
 }
 
-self.addEventListener('message', (event: MessageEvent<BaseMessage | ValidateMessage | SuggestionsMessage>) => {
+self.addEventListener('message', async (event: MessageEvent<BaseMessage | ValidateMessage | SuggestionsMessage>) => {
     const msg = event.data;
 
     if (!msg || typeof msg !== 'object' || typeof (msg as any).type !== 'string') return;
 
     switch (msg.type) {
         case 'preload': {
-            // Simply acknowledge readiness
-            (self as unknown as Worker).postMessage({ id: msg.id, type: 'preload', ready: true });
+            try {
+                await loadDictionaries();
+                buildPrefixIndex();
+                (self as unknown as Worker).postMessage({ id: msg.id, type: 'preload', ready: true });
+            } catch (error) {
+                (self as unknown as Worker).postMessage({ id: msg.id, type: 'preload', ready: false, error: error instanceof Error ? error.message : 'Failed to load' });
+            }
             break;
         }
         case 'validate': {
             const { id, word } = msg as ValidateMessage;
             const normalized = (word || '').toLowerCase();
-            const isValid = !!normalized && normalized.length >= 3 && (normalized in dictionary) && !blacklist.has(normalized);
-            (self as unknown as Worker).postMessage({ id, type: 'validate', isValid });
+            
+            try {
+                await loadDictionaries();
+                const isValid = !!normalized && 
+                               normalized.length >= 3 && 
+                               dictionary && 
+                               (normalized in dictionary) && 
+                               blacklist && 
+                               !blacklist.has(normalized);
+                (self as unknown as Worker).postMessage({ id, type: 'validate', isValid });
+            } catch (error) {
+                (self as unknown as Worker).postMessage({ id, type: 'validate', isValid: false });
+            }
             break;
         }
         case 'suggestions': {
             const { id, prefix, limit = 5 } = msg as SuggestionsMessage;
             const normalizedPrefix = (prefix || '').toLowerCase();
+            
             if (!normalizedPrefix || normalizedPrefix.length < 2) {
                 (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: [] });
                 break;
             }
-            let candidates: string[] = [];
-            const bucket = prefixIndex.get(normalizedPrefix.slice(0, 2));
-            if (bucket && bucket.length) {
-                for (let i = 0; i < bucket.length && candidates.length < limit; i++) {
-                    const w = bucket[i];
-                    if (w.startsWith(normalizedPrefix) && !blacklist.has(w)) candidates.push(w);
-                }
-            } else {
-                // Fallback: scan dictionary keys but break early
-                for (const w of Object.keys(dictionary)) {
-                    if (w.startsWith(normalizedPrefix) && !blacklist.has(w)) {
-                        candidates.push(w);
-                        if (candidates.length >= limit) break;
+            
+            try {
+                await loadDictionaries();
+                buildPrefixIndex();
+                
+                let candidates: string[] = [];
+                if (prefixIndex) {
+                    const bucket = prefixIndex.get(normalizedPrefix.slice(0, 2));
+                    if (bucket && bucket.length) {
+                        for (let i = 0; i < bucket.length && candidates.length < limit; i++) {
+                            const w = bucket[i];
+                            if (w.startsWith(normalizedPrefix) && blacklist && !blacklist.has(w)) {
+                                candidates.push(w);
+                            }
+                        }
+                    } else if (dictionary) {
+                        // Fallback: scan dictionary keys but break early
+                        for (const w of Object.keys(dictionary)) {
+                            if (w.startsWith(normalizedPrefix) && blacklist && !blacklist.has(w)) {
+                                candidates.push(w);
+                                if (candidates.length >= limit) break;
+                            }
+                        }
                     }
                 }
+                (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: candidates.slice(0, limit) });
+            } catch (error) {
+                (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: [] });
             }
-            (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: candidates.slice(0, limit) });
             break;
         }
     }

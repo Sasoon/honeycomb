@@ -196,13 +196,21 @@ class WordValidator {
         this.isLoading = true;
         this.dictionaryPromise = (async () => {
             try {
-                // Prefer the larger dictionary; fallback to enable1 if needed
-                const [dictModule, blModule] = await Promise.all([
-                    import('./words_dictionary.json').catch(() => import('./enable1.json')),
-                    import('./offensive_words.json')
+                // Fetch dictionaries from public folder (same as worker)
+                const [dictResponse, blResponse] = await Promise.all([
+                    fetch('/dictionary.json'),
+                    fetch('/offensive_words.json')
+                ]);
+                
+                if (!dictResponse.ok || !blResponse.ok) {
+                    throw new Error('Failed to fetch dictionary files');
+                }
+
+                const [rawDict, blList] = await Promise.all([
+                    dictResponse.json(),
+                    blResponse.json()
                 ]);
 
-                const rawDict = (dictModule as any).default;
                 let dict: Dictionary = {};
                 if (Array.isArray(rawDict)) {
                     // Array of words
@@ -219,8 +227,7 @@ class WordValidator {
                 }
 
                 this.dictionary = dict;
-                const blList = ((blModule as any).default as unknown as string[]) || [];
-                this.blacklist = new Set(blList.map(w => w.toLowerCase()));
+                this.blacklist = new Set((blList as unknown as string[]).map(w => w.toLowerCase()));
                 if (import.meta.env.DEV) {
                     // eslint-disable-next-line no-console
                     console.log(`Dictionary loaded (${Object.keys(this.dictionary).length}) with blacklist (${this.blacklist.size})`);
