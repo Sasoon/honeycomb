@@ -3,9 +3,9 @@
 // enable1.json   : { "word": 1, ... }
 // offensive_words.json : [ "word1", "word2", ... ]
 
-// Cache to store validated words for performance (limit size to avoid memory issues)
+// Cache to store validated words for performance (increased for larger dictionary)
 const validWordCache = new Map<string, boolean>();
-const MAX_CACHE_SIZE = 1000;
+const MAX_CACHE_SIZE = 5000;
 
 // Define dictionary type
 type Dictionary = Record<string, number>;
@@ -115,7 +115,8 @@ class WordValidator {
 
     private addToCache(word: string, isValid: boolean): void {
         if (validWordCache.size >= MAX_CACHE_SIZE) {
-            const keysToDelete = Array.from(validWordCache.keys()).slice(0, MAX_CACHE_SIZE / 5);
+            // More efficient cache cleanup - clear 20% of oldest entries
+            const keysToDelete = Array.from(validWordCache.keys()).slice(0, Math.floor(MAX_CACHE_SIZE * 0.2));
             keysToDelete.forEach(key => validWordCache.delete(key));
         }
         validWordCache.set(word, isValid);

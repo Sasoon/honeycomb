@@ -12,6 +12,10 @@ type Dictionary = Record<string, number>;
 const dictionary: Dictionary = words as Dictionary;
 const blacklist = new Set<string>((blacklistArr as unknown as string[]).map(w => w.toLowerCase()));
 
+// Performance optimization: Pre-compute word count for logging
+const WORD_COUNT = Object.keys(dictionary).length;
+console.log(`[DictionaryWorker] Loaded ${WORD_COUNT.toLocaleString()} words`);
+
 interface BaseMessage {
     id: number;
     type: 'preload' | 'validate' | 'suggestions';
@@ -53,9 +57,16 @@ self.addEventListener('message', (event: MessageEvent<BaseMessage | ValidateMess
                 (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: [] });
                 break;
             }
-            const suggestions = Object.keys(dictionary)
-                .filter(w => w.startsWith(normalizedPrefix) && w.length >= 3 && !blacklist.has(w))
-                .slice(0, limit);
+            
+            // Performance optimization: Early exit when we have enough suggestions
+            const suggestions: string[] = [];
+            for (const word of Object.keys(dictionary)) {
+                if (word.startsWith(normalizedPrefix) && word.length >= 3 && !blacklist.has(word)) {
+                    suggestions.push(word);
+                    if (suggestions.length >= limit) break; // Early exit
+                }
+            }
+            
             (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions });
             break;
         }

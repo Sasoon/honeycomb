@@ -90,13 +90,29 @@ function boardContainsLetter(grid: HexCell[], letter: string): boolean {
 
 function weightedSample(weights: Record<string, number>, count: number, seededRNG?: SeededRNG): string[] {
     const result: string[] = [];
-    const letters = Object.keys(weights);
+    const availableLetters = [...Object.keys(weights)];
+    
     for (let i = 0; i < count; i++) {
-        const total = letters.reduce((sum, l) => sum + weights[l], 0);
+        // Remove already selected letters from available pool to prevent duplicates
+        const currentWeights: Record<string, number> = {};
+        availableLetters.forEach(letter => {
+            if (!result.includes(letter)) {
+                currentWeights[letter] = weights[letter];
+            }
+        });
+        
+        // If we've used all letters, stop (shouldn't happen with 26 letters and typical counts)
+        if (Object.keys(currentWeights).length === 0) break;
+        
+        const total = Object.values(currentWeights).reduce((sum, w) => sum + w, 0);
         let r = (seededRNG ? seededRNG.next() : Math.random()) * total;
-        for (const l of letters) {
-            r -= weights[l];
-            if (r <= 0) { result.push(l); break; }
+        
+        for (const l of Object.keys(currentWeights)) {
+            r -= currentWeights[l];
+            if (r <= 0) { 
+                result.push(l); 
+                break; 
+            }
         }
     }
     return result;
