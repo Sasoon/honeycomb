@@ -359,16 +359,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Clear action history at round end since we can't undo across rounds
                 get().clearActionHistory();
 
-                // Progressive difficulty: +1 tile every 3 rounds (accounting for Round 1 offset)
-                let currentTilesPerDrop = 3;
-                if (newRound >= 11) {
-                    currentTilesPerDrop = 6; // Cap at 6 tiles (Round 11+)
-                } else if (newRound >= 8) {
-                    currentTilesPerDrop = 5; // Round 8-10: 5 tiles
-                } else if (newRound >= 5) {
-                    currentTilesPerDrop = 4; // Round 5-7: 4 tiles  
-                }
-                // Round 2-4: 3 tiles (default, Round 1 has no flood)
+                // Progressive difficulty: +1 tile every 5 rounds, no cap
+                const currentTilesPerDrop = 3 + Math.floor((newRound - 1) / 5);
                 
                 console.log(`[STORE] Round ${newRound}: ${currentTilesPerDrop} tiles per drop`);
 
@@ -431,25 +423,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const nextRound1 = newRound + 1;
                 const nextRound2 = newRound + 2;
                 
-                // Calculate tile count for next round (accounting for Round 1 offset)
-                let tilesForNextRound1 = 3;
-                if (nextRound1 >= 11) {
-                    tilesForNextRound1 = 6; // Cap at 6 tiles
-                } else if (nextRound1 >= 8) {
-                    tilesForNextRound1 = 5; // Round 8-10: 5 tiles
-                } else if (nextRound1 >= 5) {
-                    tilesForNextRound1 = 4; // Round 5-7: 4 tiles
-                }
-                
-                // Calculate tile count for round after next (accounting for Round 1 offset)
-                let tilesForNextRound2 = 3;
-                if (nextRound2 >= 11) {
-                    tilesForNextRound2 = 6; // Cap at 6 tiles
-                } else if (nextRound2 >= 8) {
-                    tilesForNextRound2 = 5; // Round 8-10: 5 tiles
-                } else if (nextRound2 >= 5) {
-                    tilesForNextRound2 = 4; // Round 5-7: 4 tiles
-                }
+                // Calculate tile count for future rounds using same formula
+                const tilesForNextRound1 = 3 + Math.floor((nextRound1 - 1) / 5);
+                const tilesForNextRound2 = 3 + Math.floor((nextRound2 - 1) / 5);
 
                 // Shift the queue: nextRows[1] becomes nextRows[0] (making forecast accurate)
                 let nextDrop1 = state.nextRows[1] || generateDropLettersSmart(tilesForNextRound1, newGrid, false, state.seededRNG);

@@ -125,24 +125,6 @@ const Leaderboard = () => {
           </div>
         </div>
 
-        {/* Header Info */}
-        {leaderboardData && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center">
-                {activeTab === 'daily' 
-                  ? `Daily Challenge - ${new Date().toLocaleDateString(undefined, { 
-                      weekday: 'long',
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}`
-                  : 'All-Time Champions'
-                }
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        )}
 
         {/* Loading State */}
         {isLoading && (
