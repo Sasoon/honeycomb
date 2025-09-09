@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, Play, CheckCircle, RotateCcw } from 'lucide-react';
+import { Clock, Play, CheckCircle, RotateCcw, Trophy } from 'lucide-react';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -184,75 +184,67 @@ const DailyChallenge = () => {
           </Card>
         ) : (
           <div className="space-y-6">
-            {/* Challenge Info Card */}
-            <Card>
-              <CardHeader>
-                <div className="text-center space-y-2">
-                  <CardTitle className="flex items-center justify-center space-x-2">
-                    <span>Today's Challenge</span>
-                  </CardTitle>
-                  <div className="text-2xl font-bold text-amber">
-                    {todayLabel}
+            <Card className="max-w-md mx-auto">
+              <CardContent className="p-8 text-center space-y-6">
+                {/* Header with icon */}
+                <div className="space-y-3">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-amber/10 rounded-2xl mb-2">
+                    <Trophy className="w-8 h-8 text-amber" />
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Countdown Section */}
-                <div className="text-center space-y-3">
-                  <div className="flex items-center justify-center space-x-2 text-text-secondary">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-sm font-medium">Next challenge in</span>
-                  </div>
-                  <div className="text-xs text-text-secondary/70">
-                    Resets daily at {getLocalResetTime()}
-                  </div>
-                  <div className={cn(
-                    "text-3xl font-mono font-bold text-center",
-                    "bg-bg-secondary rounded-2xl py-4 px-6",
-                    "border border-secondary/20"
-                  )}>
-                    {countdown}
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-bold text-text-primary">Daily Challenge</h2>
+                    <p className="text-text-secondary">{todayLabel}</p>
                   </div>
                 </div>
 
-                {/* Action Button */}
-                <Button
-                  onClick={handleStartChallenge}
-                  disabled={!seedData || isCompleted}
-                  variant={isCompleted ? "success" : "default"}
-                  size="lg"
-                  className="w-full"
-                >
-                  {isCompleted ? (
-                    <>
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Challenge Completed!
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-5 h-5 mr-2" />
-                      Start Today's Challenge
-                    </>
-                  )}
-                </Button>
-
-                {/* Completion Success */}
+                {/* Success message for completed challenges */}
                 {isCompleted && (
-                  <div className={cn(
-                    "bg-success/10 border border-success/20",
-                    "rounded-2xl p-6 text-center space-y-4"
-                  )}>
-                    <div>
-                      <Button variant="success" asChild>
-                        <a href="/leaderboard">
-                          View Leaderboard
-                        </a>
-                      </Button>
+                  <div className="bg-success/10 border border-success/20 rounded-xl p-3">
+                    <div className="flex items-center justify-center gap-2 text-success">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="font-medium">Challenge Completed!</span>
                     </div>
                   </div>
                 )}
+
+                {/* Primary action */}
+                {isCompleted ? (
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="w-full bg-amber hover:bg-amber/90 text-white border-amber hover:border-amber/90"
+                    asChild
+                  >
+                    <a href="/leaderboard">
+                      View Leaderboard
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleStartChallenge}
+                    disabled={!seedData}
+                    variant="default"
+                    size="lg"
+                    className="w-full"
+                  >
+                    <Play className="w-5 h-5 mr-2" />
+                    Start Challenge
+                  </Button>
+                )}
+
+                {/* Countdown info */}
+                <div className="pt-4 border-t border-secondary/10 space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-sm text-text-secondary">
+                    <Clock className="w-4 h-4" />
+                    <span>Next puzzle in <span className="font-mono font-semibold text-text-primary">{countdown}</span></span>
+                  </div>
+                  <p className="text-xs text-text-secondary/70">
+                    Resets at {getLocalResetTime()}
+                  </p>
+                </div>
               </CardContent>
             </Card>
+
           </div>
         )}
       </div>
