@@ -3,18 +3,48 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - JSON imports are handled by Vite
-import words from '../lib/enable1.json';
+import wordsSmall from '../lib/enable1.json';
 // @ts-ignore
 import blacklistArr from '../lib/offensive_words.json';
+// @ts-ignore
+import wordsLarge from '../lib/words_dictionary.json';
 
 type Dictionary = Record<string, number>;
 
-const dictionary: Dictionary = words as Dictionary;
+function toDictionary(raw: any): Dictionary {
+    const dict: Dictionary = {};
+    if (Array.isArray(raw)) {
+        for (const w of raw) if (typeof w === 'string') dict[w.toLowerCase()] = 1;
+    } else if (raw && typeof raw === 'object') {
+        for (const k of Object.keys(raw)) dict[k.toLowerCase()] = 1;
+    }
+    return dict;
+}
+
+// Prefer large dictionary; fallback to small
+const dictionary: Dictionary = Object.keys(wordsLarge || {}).length > 0 ? toDictionary(wordsLarge) : toDictionary(wordsSmall);
 const blacklist = new Set<string>((blacklistArr as unknown as string[]).map(w => w.toLowerCase()));
 
 // Performance optimization: Pre-compute word count for logging
 const WORD_COUNT = Object.keys(dictionary).length;
-console.log(`[DictionaryWorker] Loaded ${WORD_COUNT.toLocaleString()} words`);
+// Guard console in prod builds
+declare const importMetaEnvDev: boolean | undefined;
+// @ts-ignore
+const __DEV__ = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
+if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log(`[DictionaryWorker] Loaded ${WORD_COUNT.toLocaleString()} words`);
+}
+
+// Build a small prefix index (first 2 letters)
+const prefixIndex = new Map<string, string[]>();
+for (const w of Object.keys(dictionary)) {
+    if (w.length < 3) continue;
+    const key = w.slice(0, 2);
+    if (!prefixIndex.has(key)) prefixIndex.set(key, []);
+    const arr = prefixIndex.get(key)!;
+    if (arr.length < 500) arr.push(w); // cap per-bucket to bound memory
+}
 
 interface BaseMessage {
     id: number;
@@ -57,17 +87,23 @@ self.addEventListener('message', (event: MessageEvent<BaseMessage | ValidateMess
                 (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: [] });
                 break;
             }
-            
-            // Performance optimization: Early exit when we have enough suggestions
-            const suggestions: string[] = [];
-            for (const word of Object.keys(dictionary)) {
-                if (word.startsWith(normalizedPrefix) && word.length >= 3 && !blacklist.has(word)) {
-                    suggestions.push(word);
-                    if (suggestions.length >= limit) break; // Early exit
+            let candidates: string[] = [];
+            const bucket = prefixIndex.get(normalizedPrefix.slice(0, 2));
+            if (bucket && bucket.length) {
+                for (let i = 0; i < bucket.length && candidates.length < limit; i++) {
+                    const w = bucket[i];
+                    if (w.startsWith(normalizedPrefix) && !blacklist.has(w)) candidates.push(w);
+                }
+            } else {
+                // Fallback: scan dictionary keys but break early
+                for (const w of Object.keys(dictionary)) {
+                    if (w.startsWith(normalizedPrefix) && !blacklist.has(w)) {
+                        candidates.push(w);
+                        if (candidates.length >= limit) break;
+                    }
                 }
             }
-            
-            (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions });
+            (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: candidates.slice(0, limit) });
             break;
         }
     }

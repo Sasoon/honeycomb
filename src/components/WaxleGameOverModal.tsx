@@ -172,6 +172,9 @@ const WaxleGameOverModal = ({
             isDailyChallenge ? 'z-30' : 'z-50'
           }`}
           onClick={(e) => e.target === e.currentTarget && !isDailyChallenge && onRestart()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="waxle-gameover-title"
         >
           <motion.div
             initial={{ scale: 0.7, opacity: 0 }}
@@ -179,16 +182,19 @@ const WaxleGameOverModal = ({
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", damping: 15 }}
             className="bg-bg-primary rounded-3xl p-8 max-w-md w-full shadow-2xl border border-secondary/20 backdrop-blur-xl"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !isDailyChallenge) onRestart();
+            }}
           >
             <div className="text-center space-y-6">
               {/* Header */}
               <div className="space-y-2">
                 <div className="mx-auto w-12 h-12 bg-gradient-to-br from-amber to-amber-light rounded-full flex items-center justify-center mb-3">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-semibold text-text-primary">Challenge complete!</h2>
+                <h2 id="waxle-gameover-title" className="text-xl font-semibold text-text-primary">Challenge complete!</h2>
               </div>
               
               {/* Compact Score Display */}
@@ -234,6 +240,7 @@ const WaxleGameOverModal = ({
                       onClick={handleSubmitScore}
                       disabled={!playerName.trim() || isSubmitting}
                       className="w-full bg-amber hover:bg-amber-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-amber/20 flex items-center justify-center space-x-2"
+                      aria-label="Submit score to leaderboard"
                     >
                       {isSubmitting ? (
                         <>
@@ -296,6 +303,7 @@ const WaxleGameOverModal = ({
                     <button
                       onClick={handleShare}
                       className="flex-1 bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 text-text-primary font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-secondary/10 focus:outline-none focus:ring-2 focus:ring-secondary/50 flex items-center justify-center space-x-2"
+                      aria-label="Share your score"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
@@ -305,6 +313,7 @@ const WaxleGameOverModal = ({
                     <a
                       href={`/leaderboard?fresh=${Date.now()}&submitted=true`}
                       className="flex-1 text-center bg-primary hover:bg-primary-dark text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 flex items-center justify-center space-x-2"
+                      aria-label="View leaderboard"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -318,6 +327,7 @@ const WaxleGameOverModal = ({
                     <button
                       onClick={onRestart}
                       className="flex-1 bg-primary hover:bg-primary-dark text-white font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 flex items-center justify-center space-x-2"
+                      aria-label="Play again"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -327,6 +337,7 @@ const WaxleGameOverModal = ({
                     <button
                       onClick={handleShare}
                       className="flex-1 bg-secondary/10 hover:bg-secondary/20 border border-secondary/20 text-text-primary font-medium py-3 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-secondary/10 focus:outline-none focus:ring-2 focus:ring-secondary/50 flex items-center justify-center space-x-2"
+                      aria-label="Share your score"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />

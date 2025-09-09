@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Clock, Target } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card, CardContent } from '../components/ui/Card';
 import { cn } from '../lib/utils';
 
 interface LeaderboardEntry {

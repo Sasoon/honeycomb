@@ -48,20 +48,20 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
       }
     };
     
-    const handleTouchStart = (e: TouchEvent) => {
+    function handleTouchStart(e: TouchEvent) {
       touchStartX = e.touches[0].clientX;
-    };
+    }
     
-    const handleTouchMove = (e: TouchEvent) => {
+    function handleTouchMove(e: TouchEvent) {
       touchEndX = e.touches[0].clientX;
-    };
+    }
     
-    const handleTouchEnd = () => {
+    function handleTouchEnd() {
       // Swipe left to close sidebar (100px threshold)
       if (touchStartX - touchEndX > 100) {
         onClose();
       }
-    };
+    }
     
     // Add all event listeners
     document.addEventListener('mousedown', handleClickOutside);
@@ -72,9 +72,9 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
     return () => {
       // Cleanup all listeners
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleTouchStart as any);
-      document.removeEventListener('touchmove', handleTouchMove as any);
-      document.removeEventListener('touchend', handleTouchEnd as any);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
     };
   }, [isOpen, onClose]);
   

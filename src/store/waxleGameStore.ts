@@ -77,17 +77,24 @@ interface WaxleGameState {
     // Separate game states
     classicGameState: GameModeState;
     dailyGameState: GameModeState;
-    
+
     // Current mode tracking
     isDailyChallenge: boolean;
-    
+
+    // Timeout tracking for cleanup
+    pendingTimeouts: Set<NodeJS.Timeout>;
+
     // Persistence
     lastSaved: number;
 
     // Helper functions for state management
     getCurrentGameState: () => GameModeState;
     updateCurrentGameState: (updates: Partial<GameModeState>) => void;
-    
+
+    // Timeout management
+    addTimeout: (timeout: NodeJS.Timeout) => void;
+    clearAllTimeouts: () => void;
+
     // Actions
     setGameState: (state: Partial<WaxleGameState>) => void;
     initializeGame: () => void;
@@ -153,7 +160,7 @@ const initialGameModeState: GameModeState = {
 
 // Initial state
 const initialState: Omit<WaxleGameState,
-    'getCurrentGameState' | 'updateCurrentGameState' |
+    'getCurrentGameState' | 'updateCurrentGameState' | 'addTimeout' | 'clearAllTimeouts' |
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
@@ -162,6 +169,7 @@ const initialState: Omit<WaxleGameState,
     classicGameState: { ...initialGameModeState },
     dailyGameState: { ...initialGameModeState },
     isDailyChallenge: false,
+    pendingTimeouts: new Set<NodeJS.Timeout>(),
     lastSaved: Date.now(),
 };
 
@@ -174,26 +182,40 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             // Helper function to get current game state (route-aware)
             getCurrentGameState: () => {
                 const state = get();
-                const isDailyMode = window.location.pathname === '/daily';
+                const isDailyMode = typeof window !== 'undefined' && window.location.pathname === '/daily';
                 return isDailyMode ? state.dailyGameState : state.classicGameState;
             },
 
             // Helper function to update current game state (route-aware)
             updateCurrentGameState: (updates: Partial<GameModeState>) => {
-                const isDailyMode = window.location.pathname === '/daily';
+                const isDailyMode = typeof window !== 'undefined' && window.location.pathname === '/daily';
                 if (isDailyMode) {
                     set((prev) => ({
                         ...prev,
-                        isDailyChallenge: true, // Keep flag synced
                         dailyGameState: { ...prev.dailyGameState, ...updates }
                     }));
                 } else {
                     set((prev) => ({
                         ...prev,
-                        isDailyChallenge: false, // Keep flag synced
                         classicGameState: { ...prev.classicGameState, ...updates }
                     }));
                 }
+            },
+
+            // Timeout management to prevent memory leaks
+            addTimeout: (timeout: NodeJS.Timeout) => {
+                set((prev) => {
+                    prev.pendingTimeouts.add(timeout);
+                    return prev;
+                });
+            },
+
+            clearAllTimeouts: () => {
+                set((prev) => {
+                    prev.pendingTimeouts.forEach((timeout) => clearTimeout(timeout));
+                    prev.pendingTimeouts.clear();
+                    return prev;
+                });
             },
 
             setGameState: (state) => set((prev) => ({ ...prev, ...state })),
@@ -255,22 +277,22 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const gridSize = 5;
                 const initialGrid = generateInitialGrid(gridSize, true); // Skip pre-placed tiles for daily challenges
                 const seededRNG = createSeededRNG(seed);
-                
+
                 // Use the pre-generated starting letters from the API
                 const startingLetters = gameState.startingLetters || [];
-                
+
                 // Place starting tiles with deterministic positioning
                 const tilesWithLetters = placeStartingTiles(initialGrid, startingLetters, gridSize);
-                
+
                 // Generate power cards deterministically (optional: could disable for daily challenge)
-                
+
                 // Use pre-generated drops from API
                 const firstDrop = gameState.firstDrop || [];
                 const secondDrop = gameState.secondDrop || [];
-                
+
                 // Set the RNG state for future generations
                 seededRNG.setState(gameState.rngState);
-                
+
                 // Initialize daily challenge game state
                 set((prev) => ({
                     ...prev,
@@ -308,6 +330,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             resetGame: () => {
+                // Clear any pending timeouts to prevent memory leaks
+                get().clearAllTimeouts();
                 set({
                     ...initialState,
                     classicGameState: {
@@ -323,7 +347,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             startPlayerPhase: () => {
-                console.log('[STORE] Starting player phase with 2 orbits');
+                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                    console.log('[STORE] Starting player phase with 2 orbits');
+                }
                 const { updateCurrentGameState } = get();
                 updateCurrentGameState({
                     phase: 'player',
@@ -359,87 +385,119 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Clear action history at round end since we can't undo across rounds
                 get().clearActionHistory();
 
-                // Progressive difficulty: +1 tile every 5 rounds, no cap
-                const currentTilesPerDrop = 3 + Math.floor((newRound - 1) / 5);
-                
-                console.log(`[STORE] Round ${newRound}: ${currentTilesPerDrop} tiles per drop`);
+                // Progressive difficulty: +1 tile every 3 rounds (accounting for Round 1 offset)
+                let currentTilesPerDrop = 3;
+                if (newRound >= 11) {
+                    currentTilesPerDrop = 6; // Cap at 6 tiles (Round 11+)
+                } else if (newRound >= 8) {
+                    currentTilesPerDrop = 5; // Round 8-10: 5 tiles
+                } else if (newRound >= 5) {
+                    currentTilesPerDrop = 4; // Round 5-7: 4 tiles  
+                }
+                // Round 2-4: 3 tiles (default, Round 1 has no flood)
+
+                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                    console.log(`[STORE] Round ${newRound}: ${currentTilesPerDrop} tiles per drop`);
+                }
 
                 // Generate flood tiles for this round
                 const rewardCreative = (!state.freeMoveAvailable) || ((state.freeOrbitsAvailable || 0) <= 0);
-                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative, state.seededRNG);
+                const rng = state.seededRNG && typeof (state.seededRNG as any).next === 'function' ? state.seededRNG : undefined;
+                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative, rng);
 
                 // Ensure we have exactly 3 tiles
                 let actualFallingLetters = fallingLetters;
                 if (fallingLetters.length < currentTilesPerDrop) {
-                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rewardCreative, state.seededRNG);
+                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rewardCreative, rng);
                     actualFallingLetters = [...fallingLetters, ...additionalTiles];
                 } else if (fallingLetters.length > currentTilesPerDrop) {
                     actualFallingLetters = fallingLetters.slice(0, currentTilesPerDrop);
                 }
 
-                console.log(`[STORE] Round ${newRound}: Processing ${actualFallingLetters.length} falling tiles (consistent 3 per flood)`);
+                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                    console.log(`[STORE] Round ${newRound}: Processing ${actualFallingLetters.length} falling tiles`);
+                }
 
                 // Apply the flood to the grid
                 const { newGrid, finalPaths, placedCount, unplacedLetters } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
-                
-                console.log(`[STORE] Flood complete: ${placedCount} tiles placed out of ${actualFallingLetters.length} attempted`);
+
+                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                    console.log(`[STORE] Flood complete: ${placedCount} tiles placed out of ${actualFallingLetters.length} attempted`);
+                }
 
                 // Game over only if tiles couldn't be placed AND top row is actually full
                 const topRowCells = newGrid.filter(cell => cell.position.row === 0);
                 const topRowFull = topRowCells.every(cell => cell.letter && cell.isPlaced);
-                
+
                 if (unplacedLetters.length > 0 && topRowFull) {
-                    
-                    // DEBUG: Log game state when game over occurs
-                    console.log(`[DEBUG] GAME OVER triggered at round ${newRound}`);
-                    console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
-                    console.log(`[DEBUG] Attempted to place:`, actualFallingLetters);
-                    console.log(`[DEBUG] Successfully placed:`, placedCount);
-                    console.log(`[DEBUG] Total tiles on grid:`, newGrid.filter(cell => cell.letter && cell.isPlaced).length);
-                    console.log(`[DEBUG] Empty cells available:`, newGrid.filter(cell => !cell.letter).length);
-                    console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length);
-                    console.log(`[DEBUG] Top row full:`, topRowFull);
-                    
+                    if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                        console.log(`[DEBUG] GAME OVER triggered at round ${newRound}`);
+                        console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
+                        console.log(`[DEBUG] Attempted to place:`, actualFallingLetters);
+                        console.log(`[DEBUG] Successfully placed:`, placedCount);
+                        console.log(`[DEBUG] Total tiles on grid:`, newGrid.filter(cell => cell.letter && cell.isPlaced).length);
+                        console.log(`[DEBUG] Empty cells available:`, newGrid.filter(cell => !cell.letter).length);
+                        console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length);
+                        console.log(`[DEBUG] Top row full:`, topRowFull);
+                    }
+
                     // Toast removed - game over modal shows this information
                     updateCurrentGameState({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
-                    
+
                     // Mark daily challenge as completed when game ends
                     if (get().isDailyChallenge && get().getCurrentGameState().dailyDate) {
                         const completedKey = `waxle-daily-completed-${get().getCurrentGameState().dailyDate}`;
                         localStorage.setItem(completedKey, 'true');
-                        console.log(`Daily challenge completed for ${get().getCurrentGameState().dailyDate}`);
+                        if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                            console.log(`Daily challenge completed for ${get().getCurrentGameState().dailyDate}`);
+                        }
                     }
-                    
+
                     return;
                 } else if (unplacedLetters.length > 0) {
-                    // DEBUG: Log when tiles fail to place but game continues (top row not full)
-                    console.log(`[DEBUG] ${unplacedLetters.length} tiles failed to place, but top row not full - continuing game`);
-                    console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
-                    console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length, '/ 3');
+                    if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
+                        console.log(`[DEBUG] ${unplacedLetters.length} tiles failed to place, but top row not full - continuing game`);
+                        console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
+                        console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length, '/ 3');
+                    }
                 }
 
                 // Generate fresh previews for the upcoming turns using correct tile count for each future round
                 // nextDrop1 will be used for (newRound + 1), nextDrop2 will be used for (newRound + 2)
                 const nextRound1 = newRound + 1;
                 const nextRound2 = newRound + 2;
-                
+
                 // Calculate tile count for future rounds using same formula
-                const tilesForNextRound1 = 3 + Math.floor((nextRound1 - 1) / 5);
-                const tilesForNextRound2 = 3 + Math.floor((nextRound2 - 1) / 5);
+                let tilesForNextRound1 = 3;
+                if (nextRound1 >= 11) {
+                    tilesForNextRound1 = 6;
+                } else if (nextRound1 >= 8) {
+                    tilesForNextRound1 = 5;
+                } else if (nextRound1 >= 5) {
+                    tilesForNextRound1 = 4;
+                }
+                let tilesForNextRound2 = 3;
+                if (nextRound2 >= 11) {
+                    tilesForNextRound2 = 6;
+                } else if (nextRound2 >= 8) {
+                    tilesForNextRound2 = 5;
+                } else if (nextRound2 >= 5) {
+                    tilesForNextRound2 = 4;
+                }
 
                 // Shift the queue: nextRows[1] becomes nextRows[0] (making forecast accurate)
-                let nextDrop1 = state.nextRows[1] || generateDropLettersSmart(tilesForNextRound1, newGrid, false, state.seededRNG);
-                
+                let nextDrop1 = state.nextRows[1] || generateDropLettersSmart(tilesForNextRound1, newGrid, false, rng);
+
                 // Ensure nextDrop1 has correct tile count for the next round
                 if (nextDrop1.length < tilesForNextRound1) {
-                    const additionalTiles = generateDropLettersSmart(tilesForNextRound1 - nextDrop1.length, newGrid, false, state.seededRNG);
+                    const additionalTiles = generateDropLettersSmart(tilesForNextRound1 - nextDrop1.length, newGrid, false, rng);
                     nextDrop1 = [...nextDrop1, ...additionalTiles];
                 } else if (nextDrop1.length > tilesForNextRound1) {
                     nextDrop1 = nextDrop1.slice(0, tilesForNextRound1);
                 }
-                
+
                 // Only generate the new second forecast
-                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false, state.seededRNG);
+                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false, rng);
 
                 // Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid
@@ -668,84 +726,96 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             toggleTileLock: (cellId: string) => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
-                
+
                 const clickedCell = state.grid.find(c => c.id === cellId);
                 if (!clickedCell || !clickedCell.letter || !clickedCell.isPlaced) return; // Only lock placed tiles
-                
+
                 // Push current state to history before lock operation
                 get().pushToHistory('lock_toggle');
-                
+
                 const currentLockedTiles = Array.isArray(state.lockedTiles) ? state.lockedTiles : [];
                 const selectedTileIds = state.selectedTiles.map(t => t.cellId);
                 const isClickedCellLocked = currentLockedTiles.includes(cellId);
-                
+
                 if (isClickedCellLocked) {
                     // If clicked cell is locked, unlock all selected tiles (or just the clicked one if none selected)
                     const tilesToUnlock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
-                    
+
                     // Only unlock valid locked tiles
                     const validTilesToUnlock = tilesToUnlock.filter(tileId => {
                         return currentLockedTiles.includes(tileId);
                     });
-                    
+
                     // Start unlock animation
                     const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
                     const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToUnlock])];
-                    
-                    updateCurrentGameState({ 
+
+                    updateCurrentGameState({
                         lockAnimatingTiles: newAnimatingTiles,
                         selectedTiles: [],
                         currentWord: ''
                     });
-                    
-                    // After 400ms, complete the unlock
-                    setTimeout(() => {
+
+                    // After 400ms, complete the unlock (tracked to prevent memory leaks)
+                    const unlockTimeout = setTimeout(() => {
                         const { getCurrentGameState, updateCurrentGameState } = get();
                         const currentState = getCurrentGameState();
                         const newLockedTiles = (currentState.lockedTiles || []).filter(id => !validTilesToUnlock.includes(id));
                         const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToUnlock.includes(id));
-                        
+
                         updateCurrentGameState({
                             lockedTiles: newLockedTiles,
                             lockAnimatingTiles: newAnimatingTiles
                         });
+                        
+                        // Remove from tracking after execution
+                        get().pendingTimeouts.delete(unlockTimeout);
                     }, 400);
                     
+                    // Track timeout for cleanup
+                    get().addTimeout(unlockTimeout);
+
                     const count = validTilesToUnlock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} unlocked`);
                 } else {
                     // If clicked cell is not locked, lock all selected tiles (including the clicked one if selected)
                     const tilesToLock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
-                    
+
                     // Only lock valid placed tiles
                     const validTilesToLock = tilesToLock.filter(tileId => {
                         const cell = state.grid.find(c => c.id === tileId);
                         return cell && cell.letter && cell.isPlaced;
                     });
-                    
+
                     // Start lock animation
                     const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
                     const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToLock])];
-                    
-                    updateCurrentGameState({ 
+
+                    updateCurrentGameState({
                         lockAnimatingTiles: newAnimatingTiles,
                         selectedTiles: [],
                         currentWord: ''
                     });
-                    
-                    // After 400ms, complete the lock
-                    setTimeout(() => {
+
+                    // After 400ms, complete the lock (tracked to prevent memory leaks)
+                    const lockTimeout = setTimeout(() => {
                         const { getCurrentGameState, updateCurrentGameState } = get();
                         const currentState = getCurrentGameState();
                         const newLockedTiles = [...new Set([...(currentState.lockedTiles || []), ...validTilesToLock])];
                         const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToLock.includes(id));
-                        
+
                         updateCurrentGameState({
                             lockedTiles: newLockedTiles,
                             lockAnimatingTiles: newAnimatingTiles
                         });
+                        
+                        // Remove from tracking after execution
+                        get().pendingTimeouts.delete(lockTimeout);
                     }, 400);
                     
+                    // Track timeout for cleanup
+                    get().addTimeout(lockTimeout);
+
                     const count = validTilesToLock.length;
                     toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);
                 }
@@ -755,7 +825,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             pushToHistory: (actionType: 'orbit' | 'word_submit' | 'lock_toggle') => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
-                
+
                 // Create snapshot of current state
                 const snapshot = {
                     grid: [...state.grid],
@@ -768,34 +838,34 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     totalWords: state.totalWords,
                     tilesCleared: state.tilesCleared
                 };
-                
+
                 // Add to history
                 const newHistory = [...state.actionHistory, {
                     type: actionType,
                     previousState: snapshot,
                     timestamp: Date.now()
                 }];
-                
+
                 // Limit history to last 10 actions for memory management
                 if (newHistory.length > 10) {
                     newHistory.shift();
                 }
-                
+
                 updateCurrentGameState({ actionHistory: newHistory });
             },
 
             undoLastAction: () => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
-                
+
                 if (state.actionHistory.length === 0 || state.phase !== 'player') {
                     return;
                 }
-                
+
                 // Get the last action
                 const lastAction = state.actionHistory[state.actionHistory.length - 1];
                 const newHistory = state.actionHistory.slice(0, -1);
-                
+
                 // Restore the previous state
                 updateCurrentGameState({
                     grid: lastAction.previousState.grid,
@@ -809,7 +879,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     tilesCleared: lastAction.previousState.tilesCleared,
                     actionHistory: newHistory
                 });
-                
+
                 toastService.success(`${lastAction.type.replace('_', ' ')} undone`);
             },
 
@@ -825,31 +895,34 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             checkGameOver: () => {
-                // Check if top row has any tiles
-                // TODO: Implement based on grid structure
-                return false;
+                const state = get().getCurrentGameState();
+                if (!state.grid || state.grid.length === 0) return false;
+                const topRowCells = state.grid.filter(cell => cell.position.row === 0);
+                if (topRowCells.length === 0) return false;
+                return topRowCells.every(cell => cell.letter && cell.isPlaced);
             }
         }),
         {
             name: 'waxle-game',
             skipHydration: false,
             partialize: (state) => {
-                // Persist both Classic and Daily states separately
+                // Persist both Classic and Daily states separately (excluding runtime-only data)
                 return {
                     classicGameState: {
                         ...state.classicGameState,
-                        phase: 'player', // Always start in player phase on load
                         selectedTiles: [], // Clear UI state
                         currentWord: '',
+                        seededRNG: undefined,
                     },
                     dailyGameState: {
-                        ...state.dailyGameState, 
-                        phase: 'player', // Always start in player phase on load
+                        ...state.dailyGameState,
                         selectedTiles: [], // Clear UI state
                         currentWord: '',
+                        seededRNG: undefined,
                     },
-                    isDailyChallenge: false, // Always start in Classic mode on load
+                    isDailyChallenge: state.isDailyChallenge,
                     lastSaved: state.lastSaved,
+                    // pendingTimeouts excluded - runtime only
                 };
             },
         }

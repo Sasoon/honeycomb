@@ -25,7 +25,7 @@ const DailyChallenge = () => {
   const [error, setError] = useState<string | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   
-  const { initializeDailyChallenge, isDailyChallenge } = useWaxleGameStore();
+  const { initializeDailyChallenge, dailyGameState } = useWaxleGameStore();
   const [isPlayingChallenge, setIsPlayingChallenge] = useState(false);
   
   // Load daily seed on component mount
@@ -115,8 +115,11 @@ const DailyChallenge = () => {
   };
   
   
-  // If already in daily challenge mode, show game immediately to prevent flash
-  if (isDailyChallenge || isPlayingChallenge) {
+  // Check if there's an active daily game in progress
+  const hasDailyGameInProgress = dailyGameState?.gameInitialized && dailyGameState?.phase !== 'gameOver';
+  
+  // If already in daily challenge mode or has game in progress, show game immediately to prevent flash
+  if (hasDailyGameInProgress || isPlayingChallenge) {
     return (
       <WaxleGame
         onBackToDailyChallenge={handleBackToDailyPage}

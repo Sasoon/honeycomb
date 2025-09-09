@@ -4,8 +4,108 @@
 // offensive_words.json : [ "word1", "word2", ... ]
 
 // Cache to store validated words for performance (increased for larger dictionary)
-const validWordCache = new Map<string, boolean>();
 const MAX_CACHE_SIZE = 5000;
+
+class LRUCache<K, V> {
+    private capacity: number;
+    private map: Map<K, { value: V; prev?: K; next?: K }> = new Map();
+    private head: K | undefined;
+    private tail: K | undefined;
+
+    constructor(capacity: number) {
+        this.capacity = Math.max(1, capacity);
+    }
+
+    private validateKey(key: K): boolean {
+        const node = this.map.get(key);
+        if (!node) return false;
+        
+        // Validate linked list integrity
+        if (node.prev !== undefined) {
+            const prevNode = this.map.get(node.prev);
+            if (!prevNode || prevNode.next !== key) return false;
+        }
+        if (node.next !== undefined) {
+            const nextNode = this.map.get(node.next);
+            if (!nextNode || nextNode.prev !== key) return false;
+        }
+        
+        return true;
+    }
+
+    get(key: K): V | undefined {
+        const node = this.map.get(key);
+        if (!node) return undefined;
+        // Verify cache integrity before touch
+        if (!this.validateKey(key)) return undefined;
+        this.touch(key);
+        return node.value;
+    }
+
+    set(key: K, value: V): void {
+        if (this.map.has(key)) {
+            const node = this.map.get(key);
+            if (node) {
+                node.value = value;
+                this.touch(key);
+            }
+            return;
+        }
+        // Insert at head
+        this.map.set(key, { value, prev: undefined, next: this.head });
+        if (this.head !== undefined) {
+            const h = this.map.get(this.head);
+            if (h) h.prev = key;
+        }
+        this.head = key;
+        if (this.tail === undefined) this.tail = key;
+
+        if (this.map.size > this.capacity) this.evict();
+    }
+
+    private touch(key: K): void {
+        if (this.head === key) return;
+        const node = this.map.get(key);
+        if (!node) return; // Safe guard
+
+        // detach
+        if (node.prev !== undefined) {
+            const p = this.map.get(node.prev);
+            if (p) p.next = node.next;
+        }
+        if (node.next !== undefined) {
+            const n = this.map.get(node.next);
+            if (n) n.prev = node.prev;
+        }
+        if (this.tail === key) this.tail = node.prev;
+
+        // move to head
+        node.prev = undefined;
+        node.next = this.head;
+        if (this.head !== undefined) {
+            const h = this.map.get(this.head);
+            if (h) h.prev = key;
+        }
+        this.head = key;
+    }
+
+    private evict(): void {
+        if (this.tail === undefined) return;
+        const lruKey = this.tail;
+        const node = this.map.get(lruKey);
+        if (!node) return; // Safe guard
+        
+        if (node.prev !== undefined) {
+            const p = this.map.get(node.prev);
+            if (p) p.next = undefined;
+        }
+        this.tail = node.prev;
+        if (this.head === lruKey) this.head = undefined;
+        this.map.delete(lruKey);
+    }
+}
+
+const validWordCache = new LRUCache<string, boolean>(MAX_CACHE_SIZE);
 
 // Define dictionary type
 type Dictionary = Record<string, number>;
@@ -79,6 +179,7 @@ class WordValidator {
             .then(() => {
                 this._isReady = true;
                 if (import.meta.env.DEV) {
+                    // eslint-disable-next-line no-console
                     console.log('Dictionary preloaded and ready');
                 }
             });
@@ -93,32 +194,50 @@ class WordValidator {
         if (this.dictionaryPromise) return this.dictionaryPromise;
 
         this.isLoading = true;
-        this.dictionaryPromise = Promise.all([
-            import('./enable1.json'),
-            import('./offensive_words.json')
-        ]).then(([dictModule, blModule]) => {
-            this.dictionary = dictModule.default as Dictionary;
-            const blList = blModule.default as unknown as string[];
-            this.blacklist = new Set(blList.map(w => w.toLowerCase()));
-            if (import.meta.env.DEV) {
-                console.log(`ENABLE dictionary loaded (${Object.keys(this.dictionary).length}) with blacklist (${this.blacklist.size})`);
+        this.dictionaryPromise = (async () => {
+            try {
+                // Prefer the larger dictionary; fallback to enable1 if needed
+                const [dictModule, blModule] = await Promise.all([
+                    import('./words_dictionary.json').catch(() => import('./enable1.json')),
+                    import('./offensive_words.json')
+                ]);
+
+                const rawDict = (dictModule as any).default;
+                let dict: Dictionary = {};
+                if (Array.isArray(rawDict)) {
+                    // Array of words
+                    for (const w of rawDict) {
+                        if (typeof w === 'string' && w.length > 0) dict[w.toLowerCase()] = 1;
+                    }
+                } else if (rawDict && typeof rawDict === 'object') {
+                    // Object map { word: something }
+                    for (const key of Object.keys(rawDict)) {
+                        dict[key.toLowerCase()] = 1;
+                    }
+                } else {
+                    throw new Error('Unsupported dictionary format');
+                }
+
+                this.dictionary = dict;
+                const blList = ((blModule as any).default as unknown as string[]) || [];
+                this.blacklist = new Set(blList.map(w => w.toLowerCase()));
+                if (import.meta.env.DEV) {
+                    // eslint-disable-next-line no-console
+                    console.log(`Dictionary loaded (${Object.keys(this.dictionary).length}) with blacklist (${this.blacklist.size})`);
+                }
+                this.isLoading = false;
+                this._isReady = true;
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.error('Error loading dictionary/blacklist', err);
+                this.isLoading = false;
             }
-            this.isLoading = false;
-            this._isReady = true;
-        }).catch(err => {
-            console.error('Error loading dictionary/blacklist', err);
-            this.isLoading = false;
-        });
+        })();
 
         return this.dictionaryPromise;
     }
 
     private addToCache(word: string, isValid: boolean): void {
-        if (validWordCache.size >= MAX_CACHE_SIZE) {
-            // More efficient cache cleanup - clear 20% of oldest entries
-            const keysToDelete = Array.from(validWordCache.keys()).slice(0, Math.floor(MAX_CACHE_SIZE * 0.2));
-            keysToDelete.forEach(key => validWordCache.delete(key));
-        }
         validWordCache.set(word, isValid);
     }
 
@@ -126,7 +245,10 @@ class WordValidator {
         if (!word || word.length < 3) return false;
 
         const normalized = word.toLowerCase();
-        if (validWordCache.has(normalized)) return validWordCache.get(normalized)!;
+        {
+            const cached = validWordCache.get(normalized);
+            if (cached !== undefined) return cached;
+        }
         if (this.worker) return false;
 
         if (this.dictionary && this.blacklist) {
@@ -138,6 +260,7 @@ class WordValidator {
         if (!this.isLoading) {
             this.loadDictionaryIfNeeded().then(() => {
                 if (import.meta.env.DEV) {
+                    // eslint-disable-next-line no-console
                     console.log(`Dictionary loaded, "${normalized}" can now be validated`);
                 }
             });
@@ -148,7 +271,10 @@ class WordValidator {
     async validateWordAsync(word: string): Promise<boolean> {
         if (!word || word.length < 3) return false;
         const normalized = word.toLowerCase();
-        if (validWordCache.has(normalized)) return validWordCache.get(normalized)!;
+        {
+            const cached = validWordCache.get(normalized);
+            if (cached !== undefined) return cached;
+        }
 
         if (this.worker) {
             const res = await this.postToWorker<{ id: number; type: 'validate'; isValid: boolean }>({ type: 'validate', word: normalized });
@@ -183,6 +309,7 @@ class WordValidator {
 
         await this.loadDictionaryIfNeeded();
         const dictionary = this.dictionary || {};
+        // Fallback: filter keys (heavy, but only used if worker failed)
         const suggestions = Object.keys(dictionary)
             .filter(word =>
                 word.startsWith(normalizedPrefix) &&
