@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Clock, Play, CheckCircle, RotateCcw, Trophy } from 'lucide-react';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 import { Button } from '../components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { cn } from '../lib/utils';
+import { Card, CardContent } from '../components/ui/Card';
 import WaxleGame from './WaxleGame';
 
 interface DailySeedData {
