@@ -1,6 +1,6 @@
-// ENABLE dictionary (~173k words) and blacklist are loaded lazily/dynamically to avoid inflating bundle size
-// The JSON files should be generated in build step or checked in to src/lib
-// enable1.json   : { "word": 1, ... }
+// Dictionary (~370k words) and blacklist are loaded from public folder at runtime to avoid build memory issues
+// Files are fetched from public/ directory which are automatically deployed to root
+// dictionary.json      : { "word": 1, ... } (filtered to 3+ letters)
 // offensive_words.json : [ "word1", "word2", ... ]
 
 // Cache to store validated words for performance (increased for larger dictionary)
