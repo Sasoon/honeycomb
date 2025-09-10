@@ -1,88 +1,113 @@
+import { CheckCircle, ArrowRight, Undo2, RotateCw, Zap, Lock } from 'lucide-react';
+
 const HowToPlay = () => {
   return (
     <div className="page-container page-container--standard">
       <h1 className="page-title">How to Play WAXLE</h1>
       
+      {/* Quick Start */}
       <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4">Quick Start</h2>
-        <p className="mb-4">
-          Build words with falling letter tiles on a hexagonal grid. Clear tiles to prevent the board from filling up 
-          as more tiles drop each round. Survive as long as possible for the highest score!
+        <h2 className="text-xl font-semibold mb-4 text-text-primary">Quick Start</h2>
+        <p className="mb-4 text-text-secondary">
+          Build words with falling letter tiles on a hexagonal grid. Clear tiles to prevent the board from filling up as more tiles drop each round. Survive as long as possible for the highest score!
         </p>
+      </div>
+
+      {/* Game Mechanics with GIF placeholders */}
+      <div className="rounded-lg shadow-lg border border-secondary p-6 section-spacing">
+        <h2 className="text-xl font-semibold mb-4 text-text-primary">Game Mechanics</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-waxle-light rounded-lg p-4">
-            <h3 className="font-semibold mb-2">Your Turn</h3>
-            <ul className="list-disc list-inside text-sm space-y-1">
-              <li>Select adjacent tiles to form words (3+ letters)</li>
-              <li>Submit word to clear tiles and score points</li>
-              <li>Use Orbit (2x) to rotate tiles around a pivot</li>
-              <li>Use Lock to keep tiles in place during flood</li>
-              <li>End turn when ready</li>
-            </ul>
+        <div className="space-y-8">
+          {/* Orbit Mechanic */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <div>
+              <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
+                <Zap className="w-5 h-5 text-amber mr-2" />
+                Orbit System
+              </h3>
+              <div className="space-y-2 text-text-secondary">
+                <p>Select a tile as a pivot point, click the orbit icon then drag in a circular motion to rotate surrounding tiles. To cancel an active orbit, hover over the orbit icon and release or drag the tiles back to their original position.</p>
+              </div>
+            </div>
+            <div className="bg-secondary/10 rounded-lg p-2 text-center">
+              <img 
+                src="/tutorial/orbit-demo.gif" 
+                alt="Real gameplay demonstration showing tiles orbiting around a selected pivot point"
+                className="max-h-60 mx-auto rounded border border-secondary/20"
+                style={{ objectFit: 'contain' }}
+              />
+            </div>
           </div>
-          <div className="bg-waxle-light rounded-lg p-4">
-            <h3 className="font-semibold mb-2">Flood Phase</h3>
-            <ul className="list-disc list-inside text-sm space-y-1">
-              <li>New tiles drop from the top automatically</li>
-              <li>Every 5 rounds = +1 more tile (3→4→5...)</li>
-              <li>Tiles settle with gravity</li>
-              <li>Game over if top row fills completely</li>
-            </ul>
+
+          {/* Lock Mechanic */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <div className="order-2 lg:order-1">
+              <div className="bg-secondary/10 rounded-lg p-2 text-center">
+                <img 
+                  src="/tutorial/lock-demo.gif" 
+                  alt="Real gameplay demonstration showing tile locking mechanism and locked tiles staying in place during gravity"
+                  className="max-h-60 mx-auto rounded border border-secondary/20"
+                  style={{ objectFit: 'contain' }}
+                />
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
+                <Lock className="w-5 h-5 text-blue-400 mr-2" />
+                Tile Locking
+              </h3>
+              <div className="space-y-2 text-text-secondary">
+                <p>Lock tiles in place to prevent them from being affected by orbit. This lets you strategically move specific tiles to form even more words. Click the lock icon on any selected tile to lock it in place - this also works with multiple selections.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      
-      <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4">Scoring</h2>
+
+      {/* Scoring & Gameplay */}
+      <div className="bg-bg-primary rounded-lg shadow-lg border border-secondary p-6 section-spacing">
+        <h2 className="text-xl font-semibold mb-4 text-text-primary">Scoring & Gameplay</h2>
         
-        <div className="space-y-3 mb-4">
+        {/* Scoring Demonstration */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center mb-8">
           <div>
-            <div className="font-medium">Base Score Formula:</div>
-            <p className="text-sm text-text-muted">
-              Word Length × (1 + Round × 0.1) + (Tiles Cleared × 10)
-            </p>
+            <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
+              <span className="w-5 h-5 text-amber mr-2">🎯</span>
+              Scoring
+            </h3>
+            <div className="space-y-2 text-text-secondary">
+              <p>Words are primarily scored by their length, so longer words are worth more points</p>
+            </div>
           </div>
-          <div>
-            <div className="font-medium">Combo Bonus:</div>
-            <p className="text-sm text-text-muted">
-              Submit multiple words in one turn for 1.5× multiplier on additional words
-            </p>
+          <div className="bg-secondary/10 rounded-lg p-2 text-center">
+            <img 
+              src="/tutorial/scoring-demo.gif" 
+              alt="Real gameplay demonstration showing scoring mechanics and point calculation"
+              className="max-h-60 mx-auto rounded border border-secondary/20"
+              style={{ objectFit: 'contain' }}
+            />
           </div>
         </div>
-        
-        <div className="bg-amber/10 border border-amber/20 rounded-lg p-3">
-          <p className="text-sm">
-            <strong>Example:</strong> 5-letter word in Round 3 = 5 × 1.3 = 6.5 + tile bonus = ~7-17 points
-          </p>
-        </div>
-      </div>
-      
-      <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4">Strategy Tips</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-semibold mb-2">Survival</h3>
-            <ul className="list-disc list-inside text-sm space-y-1">
-              <li>Keep the top rows clear at all costs</li>
-              <li>Clear tiles every turn - don't hoard</li>
-              <li>Plan for escalating difficulty</li>
+            <h3 className="font-medium text-text-primary mb-3">Scoring System</h3>
+            <ul className="space-y-2 text-text-secondary text-sm">
+              <li>• Longer words = Higher scores</li>
+              <li>• Bonus points for clearing multiple words per turn</li>
+              <li>• Round multiplier increases your score over time</li>
+              <li>• Survival bonus for lasting longer</li>
             </ul>
           </div>
           <div>
-            <h3 className="font-semibold mb-2">High Scores</h3>
-            <ul className="list-disc list-inside text-sm space-y-1">
-              <li>Build longer words for exponential gains</li>
-              <li>Submit multiple words per turn when possible</li>
-              <li>Use Orbit to create better opportunities</li>
-              <li>Save Lock for critical situations</li>
+            <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
+            <ul className="space-y-2 text-text-secondary text-sm">
+              <li>• Plan ahead - look at the next tile preview</li>
+              <li>• Use locks to set up big words</li>
+              <li>• Save orbits for emergency situations</li>
+              <li>• Focus on clearing the top of the board</li>
             </ul>
           </div>
-        </div>
-        
-        <div className="text-center p-4 bg-waxle-light rounded-lg mt-4">
-          <p className="font-semibold">Ready to test your word-building skills? 🧩</p>
         </div>
       </div>
     </div>
