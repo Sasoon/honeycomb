@@ -1,4 +1,4 @@
-import { CheckCircle, ArrowRight, Undo2, RotateCw, Zap, Lock } from 'lucide-react';
+import { Zap, Lock } from 'lucide-react';
 
 const HowToPlay = () => {
   return (
@@ -73,10 +73,13 @@ const HowToPlay = () => {
           <div>
             <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
               <span className="w-5 h-5 text-amber mr-2">🎯</span>
-              Scoring
+              Scoring System
             </h3>
             <div className="space-y-2 text-text-secondary">
-              <p>Words are primarily scored by their length, so longer words are worth more points</p>
+              <p>Your score follows three simple rules that multiply together:</p>
+              <p><strong>Length Squared:</strong> Base points equal word length squared (5 letters = 25 points)</p>
+              <p><strong>Adjacency Bonus:</strong> Each adjacent edge in your word adds 0.5x multiplier</p>
+              <p><strong>Round Multiplier:</strong> Score increases as floods get harder (every 3 rounds)</p>
             </div>
           </div>
           <div className="bg-secondary/10 rounded-lg p-2 text-center">
@@ -91,21 +94,21 @@ const HowToPlay = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-medium text-text-primary mb-3">Scoring System</h3>
+            <h3 className="font-medium text-text-primary mb-3">The Golden Rules</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
-              <li>• Longer words = Higher scores</li>
-              <li>• Bonus points for clearing multiple words per turn</li>
-              <li>• Round multiplier increases your score over time</li>
-              <li>• Survival bonus for lasting longer</li>
+              <li>• <strong>Length²:</strong> 4 letters = 16 base points</li>
+              <li>• <strong>+0.5x per edge:</strong> Triangle cluster = 2.5x multiplier</li>
+              <li>• <strong>Round bonus:</strong> Later rounds = higher multipliers</li>
+              <li>• <strong>Example:</strong> 4-letter triangle in round 6 = 16 × 2.5 × 2 = 80 points</li>
             </ul>
           </div>
           <div>
             <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
-              <li>• Plan ahead - look at the next tile preview</li>
-              <li>• Use locks to set up big words</li>
-              <li>• Save orbits for emergency situations</li>
-              <li>• Focus on clearing the top of the board</li>
+              <li>• Use orbit to cluster tiles before making words</li>
+              <li>• Curved words score much higher than straight lines</li>
+              <li>• Look for triangle and L-shaped patterns</li>
+              <li>• Late-game scores can be massive - survival pays off!</li>
             </ul>
           </div>
         </div>

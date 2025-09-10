@@ -18,7 +18,7 @@ const debounce = <T extends (...args: any[]) => void>(func: T, wait: number): T 
   }) as T;
 };
 import HexGrid, { HexCell } from '../components/HexGrid';
-import { areCellsAdjacent } from '../lib/waxleGameUtils';
+import { areCellsAdjacent, countAdjacentEdges } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import toastService from '../lib/toastService';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
@@ -837,12 +837,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     [currentWord.length, isWordValid]
   );
   
-  const currentWordScore = useMemo(() => 
-    currentWord.length >= 3 && validationState === true
-      ? calculateDisplayWordScore(currentWord, round, wordsThisRound.length, currentWord.length)
-      : 0,
-    [currentWord, round, wordsThisRound.length, validationState]
-  );
+  const currentWordScore = useMemo(() => {
+    if (currentWord.length >= 3 && validationState === true) {
+      const selectedTileIds = selectedTiles.map(t => t.cellId);
+      const adjacentEdges = countAdjacentEdges(selectedTileIds, grid);
+      return calculateDisplayWordScore(currentWord, round, adjacentEdges);
+    }
+    return 0;
+  }, [currentWord, round, validationState, selectedTiles, grid]);
 
   // Default selection for words
   const handleCellClick = useCallback((cell: HexCell) => {
@@ -916,6 +918,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 nextRows={nextRows}
                 previewLevel={previewLevel}
                 isWordValid={validationState === true}
+                selectedTiles={selectedTiles}
+                grid={grid}
               />
             </motion.div>
           )}

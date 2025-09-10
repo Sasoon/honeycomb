@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Trophy, Hourglass } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { calculateDisplayWordScore } from '../lib/gameUtils';
+import { countAdjacentEdges } from '../lib/waxleGameUtils';
+import { HexCell } from './HexGrid';
 import { OptimizedCounter } from './OptimizedCounter';
 import { DynamicZapIcon } from './DynamicZapIcon';
 
@@ -16,6 +18,8 @@ type WaxleMobileGameControlsProps = {
   nextRows: string[][];
   previewLevel: number;
   isWordValid?: boolean;
+  selectedTiles: Array<{ cellId: string; letter: string; position: number }>;
+  grid: HexCell[];
 };
 
 const WaxleMobileGameControls = ({
@@ -27,7 +31,9 @@ const WaxleMobileGameControls = ({
   freeOrbitsAvailable,
   nextRows,
   previewLevel,
-  isWordValid
+  isWordValid,
+  selectedTiles,
+  grid
 }: WaxleMobileGameControlsProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -235,7 +241,11 @@ const WaxleMobileGameControls = ({
                     {currentWord}
                     {currentWord.length >= 3 && isWordValid && (
                       <span className="text-amber-dark ml-2">
-                        [{calculateDisplayWordScore(currentWord, round, wordsThisRound, currentWord.length)}]
+                        [{(() => {
+                          const selectedTileIds = selectedTiles.map(t => t.cellId);
+                          const adjacentEdges = countAdjacentEdges(selectedTileIds, grid);
+                          return calculateDisplayWordScore(currentWord, round, adjacentEdges);
+                        })()}]
                       </span>
                     )}
                   </p>

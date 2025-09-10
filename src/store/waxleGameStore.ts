@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateWaxleScore, generateRandomLetter, placeStartingTiles } from '../lib/waxleGameUtils';
+import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateWaxleScore, generateRandomLetter, placeStartingTiles, countAdjacentEdges } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
@@ -667,10 +667,10 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const tilesToClear = state.selectedTiles.map(t => t.cellId);
                 const { newGrid, tilesCleared, moveSources } = clearTilesAndApplyGravity(state.grid, tilesToClear);
 
-                // Calculate score
-                const baseScore = state.currentWord.length;
-                const isCombo = state.wordsThisRound.length > 0; // Simple combo: any word after the first
-                const wordScore = calculateWaxleScore(baseScore, state.round, tilesCleared, isCombo);
+                // Calculate score using new golden rules
+                const wordLength = state.currentWord.length;
+                const adjacentEdges = countAdjacentEdges(tilesToClear, state.grid);
+                const wordScore = calculateWaxleScore(wordLength, state.round, adjacentEdges);
 
 
                 // Update state
@@ -695,7 +695,16 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 }
 
                 updateCurrentGameState(updates);
-                toastService.success(`+${wordScore} points!`);
+                
+                // Show score breakdown for creative words (with adjacency bonus)
+                if (adjacentEdges > 0) {
+                    const baseScore = wordLength * wordLength;
+                    const adjacencyMultiplier = 1 + (adjacentEdges * 0.5);
+                    const roundMultiplier = Math.max(1, Math.floor(state.round / 3));
+                    toastService.success(`+${wordScore} points! (${baseScore} × ${adjacencyMultiplier}x × ${roundMultiplier}x)`);
+                } else {
+                    toastService.success(`+${wordScore} points!`);
+                }
                 haptics.success();
 
                 // Always end round after word submission (original simple logic)

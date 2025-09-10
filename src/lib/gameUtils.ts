@@ -21,33 +21,26 @@ export const LETTER_VALUES: { [key: string]: number } = {
     'Q': 10, 'Z': 10
 };
 
-// Calculate estimated word score for preview (matches actual game scoring)
+// Calculate estimated word score for preview (matches new golden rules scoring)
 export const calculateDisplayWordScore = (
     word: string, 
     round: number = 1, 
-    wordsThisRound: number = 0,
-    estimatedTilesCleared: number = 0
+    adjacentEdges: number = 0
 ): number => {
     if (!word || word.length < 3) return 0;
     
-    // Base score is just word length (like actual game)
-    let score = word.length;
+    // Rule 1: Base score is word length squared
+    const baseScore = word.length * word.length;
     
-    // Round multiplier (like actual game)
-    score *= (1 + round * 0.1);
+    // Rule 2: Each adjacent edge adds 0.5x multiplier
+    const adjacencyMultiplier = 1 + (adjacentEdges * 0.5);
     
-    // Tiles cleared bonus estimate (like actual game) 
-    // For preview, we estimate cleared tiles as word length since that's typical
-    const estimatedCleared = estimatedTilesCleared || word.length;
-    score += estimatedCleared * 10;
+    // Rule 3: Round multiplier based on flood difficulty (every 3 rounds)
+    const roundMultiplier = Math.max(1, Math.floor(round / 3));
     
-    // Combo multiplier (like actual game)
-    const isCombo = wordsThisRound > 0;
-    if (isCombo) {
-        score *= 1.5;
-    }
+    const finalScore = baseScore * adjacencyMultiplier * roundMultiplier;
     
-    return Math.floor(score);
+    return Math.floor(finalScore);
 };
 
 // Target score to win

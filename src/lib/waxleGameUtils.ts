@@ -468,27 +468,46 @@ export function clearTilesAndApplyGravity(
 }
 
 
-// Calculate score for a word with bonuses
-export function calculateWaxleScore(
-    baseWordScore: number,
-    round: number,
-    tilesCleared: number,
-    isCombo: boolean
-): number {
-    let score = baseWordScore;
-
-    // Round multiplier
-    score *= (1 + round * 0.1);
-
-    // Tiles cleared bonus
-    score += tilesCleared * 10;
-
-    // Combo multiplier
-    if (isCombo) {
-        score *= 1.5;
+// Count adjacent edges within a word (not including sequential word path)
+export function countAdjacentEdges(selectedTiles: string[], grid: HexCell[]): number {
+    let edges = 0;
+    
+    for (let i = 0; i < selectedTiles.length; i++) {
+        const tile1 = grid.find(c => c.id === selectedTiles[i]);
+        if (!tile1) continue;
+        
+        for (let j = i + 1; j < selectedTiles.length; j++) {
+            const tile2 = grid.find(c => c.id === selectedTiles[j]);
+            if (!tile2) continue;
+            
+            // Count adjacency between non-sequential tiles in the word
+            if (isHexAdjacent(tile1, tile2)) {
+                edges++;
+            }
+        }
     }
+    
+    return edges;
+}
 
-    return Math.floor(score);
+// Calculate score using new golden rules: Length² × Adjacency × Round
+export function calculateWaxleScore(
+    wordLength: number,
+    round: number,
+    adjacentEdges: number
+): number {
+    // Rule 1: Base score is word length squared
+    const baseScore = wordLength * wordLength;
+    
+    // Rule 2: Each adjacent edge adds 0.5x multiplier
+    const adjacencyMultiplier = 1 + (adjacentEdges * 0.5);
+    
+    // Rule 3: Round multiplier based on flood difficulty (every 3 rounds)
+    const roundMultiplier = Math.max(1, Math.floor(round / 3));
+    
+    const finalScore = baseScore * adjacencyMultiplier * roundMultiplier;
+    
+    return Math.floor(finalScore);
 }
 
 // Unified hex adjacency function - replaces all other adjacency functions
