@@ -73,13 +73,13 @@ const HowToPlay = () => {
           <div>
             <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
               <span className="w-5 h-5 text-amber mr-2">🎯</span>
-              Scoring System
+              Scoring
             </h3>
             <div className="space-y-2 text-text-secondary">
-              <p>Your score follows three simple rules that multiply together:</p>
-              <p><strong>Length Squared:</strong> Base points equal word length squared (5 letters = 25 points)</p>
-              <p><strong>Adjacency Bonus:</strong> Each adjacent edge in your word adds 0.5x multiplier</p>
-              <p><strong>Round Multiplier:</strong> Score increases as floods get harder (every 3 rounds)</p>
+              <p>3+ letter words only score.</p>
+              <p>Each letter is worth <span className="font-semibold text-text-primary">2 points</span>.</p>
+              <p>Creativity bonus: +1 for each extra tile-to-tile connection your word makes (max +4).</p>
+              <p>That's it — add them up as you play.</p>
             </div>
           </div>
           <div className="bg-secondary/10 rounded-lg p-2 text-center">
@@ -94,21 +94,21 @@ const HowToPlay = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-medium text-text-primary mb-3">The Golden Rules</h3>
+            <h3 className="font-medium text-text-primary mb-3">Scoring System</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
-              <li>• <strong>Length²:</strong> 4 letters = 16 base points</li>
-              <li>• <strong>+0.5x per edge:</strong> Triangle cluster = 2.5x multiplier</li>
-              <li>• <strong>Round bonus:</strong> Later rounds = higher multipliers</li>
-              <li>• <strong>Example:</strong> 4-letter triangle in round 6 = 16 × 2.5 × 2 = 80 points</li>
+              <li>• 3+ letters to score</li>
+              <li>• Score per word = 2 × letters + creativity bonus (max +4)</li>
+              <li>• No multipliers — fully additive and predictable</li>
+              <li>• Example: 5-letter word with 2 extra connections = 12 points</li>
             </ul>
           </div>
           <div>
             <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
-              <li>• Use orbit to cluster tiles before making words</li>
-              <li>• Curved words score much higher than straight lines</li>
-              <li>• Look for triangle and L-shaped patterns</li>
-              <li>• Late-game scores can be massive - survival pays off!</li>
+              <li>• Plan ahead - look at the next tile preview</li>
+              <li>• Use locks to set up big words</li>
+              <li>• Save orbits for emergency situations</li>
+              <li>• Focus on clearing the top of the board</li>
             </ul>
           </div>
         </div>

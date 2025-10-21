@@ -23,24 +23,14 @@ export const LETTER_VALUES: { [key: string]: number } = {
 
 // Calculate estimated word score for preview (matches new golden rules scoring)
 export const calculateDisplayWordScore = (
-    word: string, 
-    round: number = 1, 
+    word: string,
+    _round: number = 1,
     adjacentEdges: number = 0
 ): number => {
     if (!word || word.length < 3) return 0;
-    
-    // Rule 1: Base score is word length squared
-    const baseScore = word.length * word.length;
-    
-    // Rule 2: Each adjacent edge adds 0.5x multiplier
-    const adjacencyMultiplier = 1 + (adjacentEdges * 0.5);
-    
-    // Rule 3: Round multiplier based on flood difficulty (every 3 rounds)
-    const roundMultiplier = Math.max(1, Math.floor(round / 3));
-    
-    const finalScore = baseScore * adjacencyMultiplier * roundMultiplier;
-    
-    return Math.floor(finalScore);
+    const letterPoints = 2 * word.length;
+    const adjacencyBonus = Math.min(adjacentEdges, 4);
+    return letterPoints + adjacencyBonus;
 };
 
 // Target score to win

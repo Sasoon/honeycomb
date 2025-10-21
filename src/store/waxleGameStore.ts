@@ -695,15 +695,14 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 }
 
                 updateCurrentGameState(updates);
-                
-                // Show score breakdown for creative words (with adjacency bonus)
-                if (adjacentEdges > 0) {
-                    const baseScore = wordLength * wordLength;
-                    const adjacencyMultiplier = 1 + (adjacentEdges * 0.5);
-                    const roundMultiplier = Math.max(1, Math.floor(state.round / 3));
-                    toastService.success(`+${wordScore} points! (${baseScore} × ${adjacencyMultiplier}x × ${roundMultiplier}x)`);
+
+                // Show simple additive score breakdown
+                const lettersPart = 2 * wordLength;
+                const adjPart = Math.min(adjacentEdges, 4);
+                if (adjPart > 0) {
+                    toastService.success(`+${wordScore} points! (letters ${lettersPart}, adj +${adjPart})`);
                 } else {
-                    toastService.success(`+${wordScore} points!`);
+                    toastService.success(`+${wordScore} points! (letters ${lettersPart})`);
                 }
                 haptics.success();
 
@@ -776,11 +775,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                             lockedTiles: newLockedTiles,
                             lockAnimatingTiles: newAnimatingTiles
                         });
-                        
+
                         // Remove from tracking after execution
                         get().pendingTimeouts.delete(unlockTimeout);
                     }, 400);
-                    
+
                     // Track timeout for cleanup
                     get().addTimeout(unlockTimeout);
 
@@ -817,11 +816,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                             lockedTiles: newLockedTiles,
                             lockAnimatingTiles: newAnimatingTiles
                         });
-                        
+
                         // Remove from tracking after execution
                         get().pendingTimeouts.delete(lockTimeout);
                     }, 400);
-                    
+
                     // Track timeout for cleanup
                     get().addTimeout(lockTimeout);
 
