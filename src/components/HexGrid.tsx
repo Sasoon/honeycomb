@@ -1,7 +1,6 @@
 // Remove React import
 import { useState, useRef, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
-import AnimatedLockBorder from './AnimatedLockBorder';
 // import HexagonBorder from './HexagonBorder'; // Available for future use
 
 // Define types for our grid
@@ -33,10 +32,6 @@ export interface HexGridProps {
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
   hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
-  lockMode?: boolean; // Whether lock mode is active - deprecated, keeping for compatibility
-  lockedTiles?: string[]; // Array of locked tile IDs
-  lockAnimatingTiles?: string[]; // Array of tile IDs currently animating
-  onTileLockToggle?: (cellId: string) => void; // Handler for lock toggle - deprecated, now handled in overlay
   enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
   isSettling?: boolean; // When true, tiles ease-out settle on new game
 }
@@ -48,9 +43,6 @@ const CellView = memo(function CellView({
   containerClass,
   setRef,
   showLetter,
-  isLocked,
-  isLocking,
-  isUnlocking,
   // showBorder, // Disabled - borders removed from selected tiles
   // borderColor, // Disabled - borders removed from selected tiles
   // drag handlers removed
@@ -62,9 +54,6 @@ const CellView = memo(function CellView({
   containerClass: string;
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
-  isLocked?: boolean;
-  isLocking?: boolean;
-  isUnlocking?: boolean;
   // showBorder?: boolean; // Disabled - borders removed from selected tiles
   // borderColor?: string; // Disabled - borders removed from selected tiles
   // drag handlers removed
@@ -109,42 +98,29 @@ const CellView = memo(function CellView({
             </span>
           </div>
         )}
-        <AnimatedLockBorder 
-          isLocking={isLocking || false}
-          isUnlocking={isUnlocking || false}
-          isLocked={isLocked || false}
-        />
         {/* HexagonBorder disabled for selected tiles - kept available for future use */}
         {/* {showBorder && (
-          <HexagonBorder 
+          <HexagonBorder
             isVisible={true}
             color={borderColor || 'var(--primary)'}
             strokeWidth={2}
           />
         )} */}
-        {(isLocked || isLocking) && (
-          <div className="lock-indicator" style={{ position: 'absolute', top: '-4px', left: '-4px' }}>
-            <span style={{ fontSize: '0.8rem' }}>🔒</span>
-          </div>
-        )}
       </div>
     </motion.div>
   );
 });
 
-const HexGrid = ({ 
-  cells, 
-  onCellClick, 
-  isWordValid, 
+const HexGrid = ({
+  cells,
+  onCellClick,
+  isWordValid,
   isPlacementPhase,
   isWordAlreadyScored,
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
-  lockedTiles = [],
-  lockAnimatingTiles = [],
   enableLayout = true,
   isSettling = false,
-  // onTileLockToggle,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
   
@@ -265,8 +241,7 @@ const HexGrid = ({
     );
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
-    const isLocked = Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false;
-    
+
     if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
       if (!isPlacementPhase) {
@@ -300,12 +275,6 @@ const HexGrid = ({
         }
       }
     }
-
-    // Apply locked tile styling - using AnimatedLockBorder component for locks
-    if (isLocked && !cell.isSelected) {
-      extraClasses += ' shadow-md';
-    }
-
 
     return {
       container: `${bgColor} ${textColor} ${extraClasses}`,
@@ -347,9 +316,6 @@ const HexGrid = ({
                     containerClass={styles.container}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
-                    isLocked={Array.isArray(lockedTiles) ? lockedTiles.includes(cell.id) : false}
-                    isLocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && !lockedTiles.includes(cell.id) : false}
-                    isUnlocking={Array.isArray(lockAnimatingTiles) ? lockAnimatingTiles.includes(cell.id) && lockedTiles.includes(cell.id) : false}
                     enableLayout={enableLayout}
                     isSettling={isSettling}
                     // showBorder={styles.showBorder} // Disabled - borders removed

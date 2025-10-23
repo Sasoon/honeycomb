@@ -289,6 +289,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     // Pivot center from DOM for positioning
     pivotCenter: { x: number; y: number };
   } | null>(null);
+  const anchorNeighborIdRef = useRef<string | null>(null);
   const [, setLockedSteps] = useState<number>(0); // magnetic snapped steps (value stored in ref)
   const lockedStepsRef = useRef<number>(0);
   const [isOverCancel, setIsOverCancel] = useState<boolean>(false);
@@ -315,9 +316,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     nextRows,
     previewLevel,
     freeOrbitsAvailable,
-    lockMode,
-    lockedTiles,
-    lockAnimatingTiles,
     gridSize,
     gravityMoves,
     floodPaths,
@@ -330,13 +328,13 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     initializeGame,
     selectTile,
     submitWord,
+    orbitPivot,
     undoLastAction,
     canUndo,
     endRound,
     startPlayerPhase,
     endPlayerPhase,
     resetGame,
-    toggleTileLock,
   } = store;
 
   const isDailyChallenge = isDailyMode;
@@ -1248,8 +1246,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
             {/* Contextual move targets removed for now */}
 
-            {/* Subtle hex selection outline around pivot - always show when tile selected */}
-            {phase === 'player' && selectedSingle && orbitAnchor && (
+            {/* Subtle hex selection outline - remove dependency on selectedSingle for orbit */}
+            {phase === 'player' && orbitAnchor && (
               <div
                 className="absolute pointer-events-none"
                 style={{
@@ -1266,72 +1264,15 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             )}
 
 
-            {phase === 'player' && selectedSingle && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && (() => {
-              // Arc Dragger UI for orbit controls
+            {phase === 'player' && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && (() => {
+              // Arc Dragger UI for orbit controls (pivot chosen on hold)
               const container = containerRef.current;
               if (!container) return null;
-              const centers = mapCenters(container);
-              const pivot = grid.find(c => c.id === selectedSingle.cellId);
-              if (!pivot) return null;
-
-              // Build canonical 6-slot map around pivot using DOM centers
-              const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
-              if (!pivotCenter) return null;
-
-              // All actual neighbors within grid
-              const neighborCandidates = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
-
-              // Quantize neighbor angle to one of 6 slots
-              const slotIndexToCell: (HexCell | null)[] = new Array(6).fill(null);
-              const cellIdToSlotIndex = new Map<string, number>();
-              neighborCandidates.forEach(cell => {
-                const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
-                if (!ctr) return;
-                const angle = Math.atan2(ctr.y - pivotCenter.y, ctr.x - pivotCenter.x);
-                const norm = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-                const slotIdx = Math.round(norm / (Math.PI / 3)) % 6;
-                // If collision, keep the closer one by angle distance
-                if (slotIndexToCell[slotIdx]) {
-                  const existing = slotIndexToCell[slotIdx]!;
-                  const eCtr = centers.get(`${existing.position.row},${existing.position.col}`);
-                  if (eCtr) {
-                    const eAngle = Math.atan2(eCtr.y - pivotCenter.y, eCtr.x - pivotCenter.x);
-                    const eNorm = ((eAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-                    const diffExisting = Math.abs(eNorm - slotIdx * (Math.PI / 3));
-                    const diffNew = Math.abs(norm - slotIdx * (Math.PI / 3));
-                    if (diffNew < diffExisting) slotIndexToCell[slotIdx] = cell;
-                  }
-                } else {
-                  slotIndexToCell[slotIdx] = cell;
-                }
-                cellIdToSlotIndex.set(cell.id, slotIdx);
-              });
-
-              const orderedNeighbors = slotIndexToCell.filter((c): c is HexCell => !!c);
-              const neighborIdToPresentIndex = new Map<string, number>();
-              orderedNeighbors.forEach((n, idx) => neighborIdToPresentIndex.set(n.id, idx));
-
-              orbitPlanRef.current = { pivotId: pivot.id, slotIndexToCell, cellIdToSlotIndex, orderedNeighbors, neighborIdToPresentIndex, pivotCenter };
-              // Do not set state here to avoid render loops; initialize on drag start
-
-              // Adjacent tiles with letters to preview during drag
-              const adjacentTiles = grid
-                .filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced)
-                .map(cell => {
-                  const center = centers.get(`${cell.position.row},${cell.position.col}`);
-                  if (!center) return null;
-                  const angle = Math.atan2(center.y - orbitAnchor.y, center.x - orbitAnchor.x);
-                  return { cell, center: { x: center.x, y: center.y }, angle };
-                })
-                .filter((item): item is { cell: HexCell; center: { x: number; y: number }; angle: number } => item !== null)
-                .sort((a, b) => a.angle - b.angle);
-
-              if (adjacentTiles.length < 1) return null;
+              const centers = mapCenters(container as HTMLElement);
+              // Defer building plan until hold begins; here we only render the ring interaction layer
 
               const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
                 if (!freeOrbitsAvailable || freeOrbitsAvailable <= 0) return;
-                e.preventDefault();
-                e.stopPropagation();
 
                 // Initialize snapped state at start of drag
                 setLockedSteps(0);
@@ -1345,50 +1286,115 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
                 const containerX = clientX - rect.left;
                 const containerY = clientY - rect.top;
+                const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+
+                let totalRotation = 0;
+                let currentLockedStepsLocal = 0;
+                let holdSatisfied = false;
+                let holdTimer: number | null = null;
 
                 const startAngle = Math.atan2(containerY - orbitAnchor.y, containerX - orbitAnchor.x);
+
+                const beginOrbit = () => {
+                  if (holdSatisfied) return;
+                  holdSatisfied = true;
+                  // From this point on, orbit is active → consume events
+                  e.preventDefault();
+                  e.stopPropagation();
+
                 setCurrentDragAngle(0);
                 setIsDragging(true);
 
-                let totalRotation = 0;
-                // Local copies to control hysteresis
-                let currentLockedStepsLocal = 0;
+                // Build plan dynamically based on nearest pivot at drag start
+                // Choose nearest pivot (center cell) relative to pointer
+                let bestPivot: HexCell | null = null;
+                let bestDist = Infinity;
+                grid.forEach(cell => {
+                  const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
+                  if (!ctr) return;
+                  const d = Math.hypot(ctr.x - containerX, ctr.y - containerY);
+                  if (d < bestDist) { bestDist = d; bestPivot = cell; }
+                });
+                if (!bestPivot) return;
+                const pivot = bestPivot as HexCell; // Type assertion after null check
+                const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
+                if (!pivotCenter) return;
+                setOrbitAnchor({ x: pivotCenter.x, y: pivotCenter.y });
+
+                const neighborCandidates = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot));
+                const slotIndexToCell: (HexCell | null)[] = new Array(6).fill(null);
+                const cellIdToSlotIndex = new Map<string, number>();
+                neighborCandidates.forEach(cell => {
+                  const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
+                  if (!ctr) return;
+                  const angleN = Math.atan2(ctr.y - pivotCenter.y, ctr.x - pivotCenter.x);
+                  const norm = ((angleN % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                  const slotIdx = Math.round(norm / (Math.PI / 3)) % 6;
+                  if (slotIndexToCell[slotIdx]) {
+                    const existing = slotIndexToCell[slotIdx]!;
+                    const eCtr = centers.get(`${existing.position.row},${existing.position.col}`);
+                    if (eCtr) {
+                      const eAngle = Math.atan2(eCtr.y - pivotCenter.y, eCtr.x - pivotCenter.x);
+                      const eNorm = ((eAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                      const diffExisting = Math.abs(eNorm - slotIdx * (Math.PI / 3));
+                      const diffNew = Math.abs(norm - slotIdx * (Math.PI / 3));
+                      if (diffNew < diffExisting) slotIndexToCell[slotIdx] = cell;
+                    }
+                  } else {
+                    slotIndexToCell[slotIdx] = cell;
+                  }
+                  cellIdToSlotIndex.set(cell.id, slotIdx);
+                });
+                const orderedNeighbors = slotIndexToCell.filter((c): c is HexCell => !!c);
+                const neighborIdToPresentIndex = new Map<string, number>();
+                orderedNeighbors.forEach((n, idx) => neighborIdToPresentIndex.set(n.id, idx));
+                orbitPlanRef.current = { pivotId: pivot.id, slotIndexToCell, cellIdToSlotIndex, orderedNeighbors, neighborIdToPresentIndex, pivotCenter };
+
+                // Determine which neighbor is under pointer → anchor it
+                anchorNeighborIdRef.current = null;
+                {
+                  const startPoint = { x: containerX, y: containerY };
+                  let nearestIdLocal: string | null = null;
+                  let nearestNeighborDist = Infinity;
+                  orderedNeighbors.forEach(n => {
+                    const ctr = centers.get(`${n.position.row},${n.position.col}`);
+                    if (!ctr) return;
+                    const d = Math.hypot(startPoint.x - ctr.x, startPoint.y - ctr.y);
+                    if (d < nearestNeighborDist) { nearestNeighborDist = d; nearestIdLocal = n.id; }
+                  });
+                  const distPivot0 = Math.hypot(startPoint.x - pivotCenter.x, startPoint.y - pivotCenter.y);
+                  if (nearestIdLocal && nearestNeighborDist < distPivot0) {
+                    anchorNeighborIdRef.current = nearestIdLocal;
+                  }
+                }
 
                 const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
                   moveE.preventDefault();
 
-                  const moveClientX = 'touches' in moveE ? moveE.touches[0].clientX : moveE.clientX;
-                  const moveClientY = 'touches' in moveE ? moveE.touches[0].clientY : moveE.clientY;
+                    const moveClientX = 'touches' in moveE ? moveE.touches[0].clientX : (moveE as MouseEvent).clientX;
+                    const moveClientY = 'touches' in moveE ? moveE.touches[0].clientY : (moveE as MouseEvent).clientY;
 
                   const containerMoveX = moveClientX - rect.left;
                   const containerMoveY = moveClientY - rect.top;
 
                   // --- Orbit jitter guard --------------------------------------------------
-                  // Very small drags near the pivot center cause the angle to flip wildly,
-                  // which results in back-and-forth snapping between slots.  Delay engaging
-                  // the snapping logic until the pointer is at least `minRadiusForSnap`
-                  // away from the pivot.  This also gives the interaction a more
-                  // "magnetic" feel — you need to pull the handle outward a little before
-                  // it "catches" into the orbit track.
-                  const dxPivot = containerMoveX - orbitAnchor.x;
-                  const dyPivot = containerMoveY - orbitAnchor.y;
+                    const dxPivot = containerMoveX - pivotCenter.x;
+                    const dyPivot = containerMoveY - pivotCenter.y;
                   const radiusPivot = Math.hypot(dxPivot, dyPivot);
                   const minRadiusForSnap = cellSize.w * 0.45; // tweak as needed
 
                   if (radiusPivot < minRadiusForSnap) {
-                    // Provide visual feedback (soft rotation) but skip snapping logic
                     const softAngle = Math.atan2(dyPivot, dxPivot) - startAngle;
                     setCurrentDragAngle(softAngle);
                     return;
                   }
 
                   // Detect pointer over cancel (X) icon area while dragging
-                  const iconCX = orbitAnchor.x;
-                  const iconCY = orbitAnchor.y - cellSize.h * 0.4;
+                    const iconCX = pivotCenter.x;
+                    const iconCY = pivotCenter.y - cellSize.h * 0.4;
                   const dxIcon = containerMoveX - iconCX;
                   const dyIcon = containerMoveY - iconCY;
                   const distIcon = Math.hypot(dxIcon, dyIcon);
-                  const isCoarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
                   const cancelRadius = isCoarse ? 28 : 18; // larger on touch for reliability
                   const overCancelNow = distIcon <= cancelRadius;
                   if (overCancelNow !== isOverCancelRef.current) {
@@ -1401,7 +1407,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     setLockedSteps(0);
                   }
 
-                  const currentAngle = Math.atan2(containerMoveY - orbitAnchor.y, containerMoveX - orbitAnchor.x);
+                  const currentAngle = Math.atan2(containerMoveY - pivotCenter.y, containerMoveX - pivotCenter.x);
                   let deltaAngle = currentAngle - startAngle;
 
                   while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
@@ -1425,24 +1431,19 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
                   // Only allow at most ±1 change at a time and enforce exit threshold to go back
                   if (proposedStep !== 0) {
-                    // If attempting to revert, require larger threshold
                     if ((proposedStep === -1 && relAngle > -exitThreshold) || (proposedStep === +1 && relAngle < enterThreshold)) {
                       proposedStep = 0;
                     }
                   }
-
-                  // No external-ring; rotate among present neighbors only (always legal within grid)
 
                   if (proposedStep !== 0 && !overCancelNow) {
                     currentLockedStepsLocal += proposedStep;
                     setLockedSteps(currentLockedStepsLocal);
                     lockedStepsRef.current = currentLockedStepsLocal;
                     haptics.tick();
-                    // Snap preview angle to the new slot centre for crisp, decisive motion
                     setCurrentDragAngle(currentLockedStepsLocal * (Math.PI / 3));
                   }
 
-                  // Drive soft angle for UI feedback (handle rotation)
                   setCurrentDragAngle(totalRotation);
                 };
 
@@ -1468,8 +1469,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   }
                   const endX = endClientX - endRect.left;
                   const endY = endClientY - endRect.top;
-                  const endIconCX = orbitAnchor.x;
-                  const endIconCY = orbitAnchor.y - cellSize.h * 0.4;
+                    const endIconCX = pivotCenter.x;
+                    const endIconCY = pivotCenter.y - cellSize.h * 0.4;
                   const endDx = endX - endIconCX;
                   const endDy = endY - endIconCY;
                   const endDist = Math.hypot(endDx, endDy);
@@ -1489,7 +1490,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     const storeState = useWaxleGameStore.getState();
                     let currentGrid = storeState.isDailyChallenge ? storeState.dailyGameState.grid : storeState.classicGameState.grid;
                     const plan = orbitPlanRef.current;
-                    const pivot = currentGrid.find(c => c.id === selectedSingle.cellId);
+                    const pivot = currentGrid.find(c => c.id === selectedSingle?.cellId);
                     if (!pivot || !plan || plan.pivotId !== pivot.id) {
                       operationInProgressRef.current = false;
                       return;
@@ -1502,27 +1503,22 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       return;
                     }
 
-                    // Get current locked tiles  
-                    const storeState2 = useWaxleGameStore.getState();
-                    const currentGameState = storeState2.isDailyChallenge ? storeState2.dailyGameState : storeState2.classicGameState;
-                    const lockedTileIds = Array.isArray(currentGameState.lockedTiles) ? currentGameState.lockedTiles : [];
-                    console.log('[ORBIT-UI] Locked tiles:', lockedTileIds);
-
-                    // Extract current state: letters and lock status  
+                      // Auto-anchored neighbor: keep its letter in place; rotate others
+                      const anchoredId = anchorNeighborIdRef.current;
                     const neighborStates = neighbors.map(n => ({
                       cell: n,
                       letter: n.letter && n.isPlaced ? n.letter : '',
-                      isLocked: lockedTileIds.includes(n.id)
-                    }));
-
-                    // Only rotate letters from unlocked tiles
-                    const unlockedLetters = neighborStates
-                      .filter(state => !state.isLocked)
+                        isAnchored: anchoredId === n.id
+                      }));
+                      
+                      // Only rotate letters from non-anchored tiles
+                      const rotatableLetters = neighborStates
+                        .filter(state => !state.isAnchored)
                       .map(state => state.letter);
 
-                    console.log('[ORBIT-UI] Unlocked letters to rotate:', unlockedLetters);
+                      console.log('[ORBIT-UI] Rotatable letters to rotate:', rotatableLetters);
 
-                    if (unlockedLetters.length < 2) {
+                      if (rotatableLetters.length < 2) {
                       toastService.error('Not enough unlocked neighbors to orbit');
                       
                       // Clean up orbit drag state properly
@@ -1542,7 +1538,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     });
 
                     // Rotate unlocked letters
-                    let rotatedLetters = [...unlockedLetters];
+                      let rotatedLetters = [...rotatableLetters];
                     for (let i = 0; i < steps; i++) {
                       console.log(`[ORBIT-UI] Applying step ${i + 1}/${steps} ${direction}`);
                       if (direction === 'cw') {
@@ -1556,11 +1552,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     let rotatedIndex = 0;
                     const neighborIdToNewLetter = new Map<string, string>();
                     
-                    neighborStates.forEach(({ cell, isLocked, letter }) => {
-                      if (isLocked) {
-                        // Locked tiles keep their current letter
+                      neighborStates.forEach(({ cell, isAnchored, letter }) => {
+                        if (isAnchored) {
+                          // Anchored tile keeps its current letter
                         neighborIdToNewLetter.set(cell.id, letter);
-                        console.log(`[ORBIT-UI] Keeping locked tile ${cell.id}: ${letter}`);
+                          console.log(`[ORBIT-UI] Keeping anchored tile ${cell.id}: ${letter}`);
                       } else {
                         // Unlocked tiles get the next rotated letter
                         const newLetter = rotatedLetters[rotatedIndex];
@@ -1605,18 +1601,21 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     // Push current state to history before orbit operation
                     const { pushToHistory } = useWaxleGameStore.getState();
                     pushToHistory('orbit');
-                    
-                    // Decrement orbit count properly  
+
+                    // Decrement orbit count properly
                     const newOrbitsAvailable = Math.max(0, (currentGameState.freeOrbitsAvailable || 0) - 1);
-                    
+
+                    // Apply orbit (will also apply gravity and potentially enter gravitySettle phase)
+                    orbitPivot(currentGrid);
+
+                    // Update orbit count and clear selection
                     const { updateCurrentGameState } = useWaxleGameStore.getState();
-                    updateCurrentGameState({ 
-                      grid: currentGrid, 
-                      selectedTiles: [], 
-                      currentWord: '', 
+                    updateCurrentGameState({
+                      selectedTiles: [],
+                      currentWord: '',
                       freeOrbitsAvailable: newOrbitsAvailable
                     });
-                    
+
                     toastService.success(`Orbit used (${newOrbitsAvailable} remaining)`);
                     haptics.success();
                     
@@ -1629,52 +1628,90 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   isOverCancelRef.current = false;
                   setCurrentDragAngle(0);
 
-                  document.removeEventListener('mousemove', handleDragMove);
-                  document.removeEventListener('mouseup', handleDragEnd);
-                  document.removeEventListener('touchmove', handleDragMove);
-                  document.removeEventListener('touchend', handleDragEnd);
+                    document.removeEventListener('mousemove', handleDragMove as EventListener);
+                    document.removeEventListener('mouseup', handleDragEnd as EventListener);
+                    document.removeEventListener('touchmove', handleDragMove as EventListener);
+                    document.removeEventListener('touchend', handleDragEnd as EventListener);
+                  };
+
+                  document.addEventListener('mousemove', handleDragMove as EventListener, { passive: false } as AddEventListenerOptions);
+                  document.addEventListener('mouseup', handleDragEnd as EventListener, { passive: false } as AddEventListenerOptions);
+                  document.addEventListener('touchmove', handleDragMove as EventListener, { passive: false } as AddEventListenerOptions);
+                  document.addEventListener('touchend', handleDragEnd as EventListener, { passive: false } as AddEventListenerOptions);
                 };
 
-                document.addEventListener('mousemove', handleDragMove, { passive: false });
-                document.addEventListener('mouseup', handleDragEnd, { passive: false });
-                document.addEventListener('touchmove', handleDragMove, { passive: false });
-                document.addEventListener('touchend', handleDragEnd, { passive: false });
+                if (isCoarse) {
+                  beginOrbit();
+                } else {
+                  // Desktop hold-to-orbit
+                  const HOLD_MS = 220;
+                  holdTimer = window.setTimeout(() => {
+                    beginOrbit();
+                    if (holdTimer) window.clearTimeout(holdTimer);
+                  }, HOLD_MS) as unknown as number;
+
+                  // If released before hold, treat as selection click (nearest tile)
+                  const handleMouseUpQuick = (upE: MouseEvent) => {
+                    if (!holdSatisfied) {
+                      if (holdTimer) window.clearTimeout(holdTimer);
+                      document.removeEventListener('mouseup', handleMouseUpQuick);
+                      const upRect = container.getBoundingClientRect();
+                      const upX = upE.clientX - upRect.left;
+                      const upY = upE.clientY - upRect.top;
+                      const centers2 = mapCenters(container as HTMLElement);
+                      let bestId: string | null = null;
+                      let bestDist = Infinity;
+                      grid.forEach(cell => {
+                        const ctr = centers2.get(`${cell.position.row},${cell.position.col}`);
+                        if (!ctr) return;
+                        const d = Math.hypot(ctr.x - upX, ctr.y - upY);
+                        if (d < bestDist) { bestDist = d; bestId = cell.id; }
+                      });
+                      if (bestId) {
+                        selectTile(bestId);
+                      }
+                    }
+                  };
+                  document.addEventListener('mouseup', handleMouseUpQuick, { passive: true, once: true } as AddEventListenerOptions);
+                }
               };
               
               return (
                 <>
+                  {/* Ring interaction: allow drag start anywhere over the ring area */}
                   {(freeOrbitsAvailable || 0) > 0 && (
                     <div
                       onMouseDown={handleDragStart}
                       onTouchStart={handleDragStart}
-                      className="absolute cursor-grab active:cursor-grabbing"
+                      className="absolute"
                       style={{
                         left: orbitAnchor.x,
-                        top: orbitAnchor.y - cellSize.h * 0.4,
+                        top: orbitAnchor.y,
                         transform: 'translate(-50%, -50%)',
-                        width: '24px',
-                        height: '24px',
-                        background: isDragging ? (isOverCancel ? 'rgba(107, 114, 128, 0.95)' : 'rgba(59, 130, 246, 0.9)') : 'rgba(59, 130, 246, 0.9)',
+                        width: `${cellSize.w * 2.2}px`,
+                        height: `${cellSize.w * 2.2}px`,
                         borderRadius: '50%',
-                        border: '2px solid white',
-                        zIndex: 62,
-                        boxShadow: isDragging && isOverCancel ? '0 0 0 3px rgba(107,114,128,0.35)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: isDragging ? '14px' : '15px',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        userSelect: 'none',
-                        touchAction: 'none'
+                        zIndex: 61,
+                        // Invisible interaction layer
+                        background: 'transparent',
                       }}
-                      title="Drag to rotate tiles around pivot"
-                    >
-                      {isDragging ? '×' : '↻'}
-                    </div>
+                      title="Drag a ring tile to keep it in place and rotate the others"
+                    />
                   )}
-                  
-                  {isDragging && (
+
+                  {isDragging && (() => {
+                    // Compute adjacent tiles from orbit plan
+                    const plan = orbitPlanRef.current;
+                    if (!plan) return null;
+
+                    const adjacentTiles = plan.orderedNeighbors
+                      .map(cell => {
+                        const center = centers.get(`${cell.position.row},${cell.position.col}`);
+                        return center ? { cell, center } : null;
+                      })
+                      .filter(item => item !== null) as Array<{ cell: HexCell; center: { x: number; y: number } }>;
+
+                    return (
                     <>
                       {adjacentTiles.map(({ cell, center }) => {
                         // Drive overlay from locked steps using canonical slots
@@ -1682,29 +1719,26 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         let drawX = center.x - cellSize.w / 2;
                         let drawY = center.y - cellSize.h / 2;
                         
-                        // Check if this tile is locked
-                        const currentState = useWaxleGameStore.getState();
-                        const currentGameState = currentState.isDailyChallenge ? currentState.dailyGameState : currentState.classicGameState;
-                        const lockedTileIds = Array.isArray(currentGameState.lockedTiles) ? currentGameState.lockedTiles : [];
-                        const isLocked = lockedTileIds.includes(cell.id);
+                        // Anchored tile stays; others preview rotation
+                        const isAnchored = anchorNeighborIdRef.current === cell.id;
                         
                         // Detect if tile is in original position
                         let isInOriginalPosition = false;
                         const originalX = center.x - cellSize.w / 2;
                         const originalY = center.y - cellSize.h / 2;
                         
-                        // Only move unlocked tiles during preview
-                        if (plan && !isLocked) {
+                        // Only move non-anchored tiles during preview
+                        if (plan && !isAnchored) {
                           const presentIdx = plan.neighborIdToPresentIndex.get(cell.id);
                           if (presentIdx !== undefined && plan.orderedNeighbors.length > 0) {
                             // Calculate position among ONLY unlocked tiles
-                            const unlockedNeighbors = plan.orderedNeighbors.filter(n => !lockedTileIds.includes(n.id));
-                            const unlockedPresentIdx = unlockedNeighbors.findIndex(n => n.id === cell.id);
+                            const rotatableNeighbors = plan.orderedNeighbors.filter(n => anchorNeighborIdRef.current !== n.id);
+                            const unlockedPresentIdx = rotatableNeighbors.findIndex(n => n.id === cell.id);
                             
                             if (unlockedPresentIdx !== -1) {
-                              const unlockedCount = unlockedNeighbors.length;
+                              const unlockedCount = rotatableNeighbors.length;
                               const targetUnlockedIdx = ((unlockedPresentIdx + lockedStepsRef.current) % unlockedCount + unlockedCount) % unlockedCount;
-                              const targetCell = unlockedNeighbors[targetUnlockedIdx];
+                              const targetCell = rotatableNeighbors[targetUnlockedIdx];
                               const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
                               if (targetCtr) {
                                 drawX = targetCtr.x - cellSize.w / 2;
@@ -1716,7 +1750,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                             }
                           }
                         } else {
-                          // Locked tiles are always in original position
+                          // Anchored tile is always in original position
                           isInOriginalPosition = true;
                         }
 
@@ -1729,7 +1763,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                             key={`preview-${cell.id}`}
                             className="absolute pointer-events-none"
                             initial={{ x: drawX, y: drawY, scale: 1, opacity: 1 }}
-                            animate={{ x: drawX, y: drawY, scale: isLocked ? 1.0 : 1.02, opacity: 1 }}
+                            animate={{ x: drawX, y: drawY, scale: isAnchored ? 1.0 : 1.02, opacity: 1 }}
                             transition={{ type: 'spring', stiffness: 950, damping: 50, mass: 1.5 }}
                             style={{
                               position: 'absolute',
@@ -1738,8 +1772,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                               width: `${cellSize.w}px`,
                               height: `${cellSize.h}px`,
                               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                              background: isLocked 
-                                ? 'rgba(251, 146, 60, 0.3)' // Orange for locked tiles
+                              background: isAnchored 
+                                ? 'rgba(59,130,246,0.28)' // Blue for anchored tile
                                 : isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)', // Grey for original position
                               zIndex: 59,
                               display: 'flex',
@@ -1747,7 +1781,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                               justifyContent: 'center',
                               fontSize: '1rem',
                               fontWeight: 'bold',
-                              color: isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)', // Grey text for original position
+                              color: isAnchored ? 'rgba(59,130,246,0.95)' : (isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)'),
                               boxShadow: isOverCancel || isInOriginalPosition ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)' // Grey shadow for original position
                             }}
                           >
@@ -1757,79 +1791,42 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         );
                       })}
 
-                    </>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* Lock button overlays */}
-            {phase === 'player' && (() => {
-              const container = containerRef.current;
-              if (!container) return null;
-              const centers = mapCenters(container);
-              
-              // Get tiles that should show lock buttons
-              // - Show icons on locked/selected tiles 
-              // - Exception: if multiple tiles selected, show icon only on last selected tile
-              const isMultipleSelected = selectedTiles.length > 1;
-              const lastSelectedTileId = isMultipleSelected ? selectedTiles[selectedTiles.length - 1].cellId : null;
-              
-              const tilesWithLockButtons = grid.filter(cell => 
-                cell.letter && 
-                cell.isPlaced && 
-                (isMultipleSelected ? 
-                  // Multiple selected: show icon only on last selected tile
-                  cell.id === lastSelectedTileId :
-                  // Single/no selection: show icons on all locked tiles and all selected tiles
-                  (lockedTiles?.includes(cell.id) || selectedTiles.some(s => s.cellId === cell.id))
-                )
-              );
-
-              return (
-                <>
-                  {tilesWithLockButtons.map(cell => {
-                    const center = centers.get(`${cell.position.row},${cell.position.col}`);
-                    if (!center) return null;
-                    
-                    const isLocked = lockedTiles?.includes(cell.id) || false;
-                    
-                    return (
-                      <div
-                        key={`lock-${cell.id}`}
-                        className="absolute cursor-pointer"
+                      {/* Desktop/mobile nudge buttons at opposite ends of the ring */}
+                      <button
+                        className="absolute"
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current -= 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
+                        onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current -= 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
                         style={{
-                          left: center.x,
-                          top: center.y + cellSize.h * 0.4, // Bottom position (inverted from orbit)
+                          left: '50%',
+                          top: `calc(50% - ${cellSize.w * 1.6}px)`,
                           transform: 'translate(-50%, -50%)',
-                          width: '24px',
-                          height: '24px',
-                          background: isLocked ? 'rgba(239, 68, 68, 0.9)' : 'rgba(34, 197, 94, 0.9)', // Red for locked, green for unlocked
-                          borderRadius: '50%',
-                          border: '2px solid white',
-                          zIndex: 62,
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px',
-                          color: 'white',
-                          fontWeight: 'bold',
-                          userSelect: 'none',
-                          touchAction: 'none'
+                          zIndex: 63,
+                          width: 28, height: 28, borderRadius: 9999, border: '2px solid white',
+                          background: 'rgba(59,130,246,0.9)', color: 'white', fontWeight: 800
                         }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleTileLock(cell.id);
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        title={isLocked ? "Unlock this tile" : "Lock selected tiles"}
+                        aria-label="Step counter-clockwise"
                       >
-                        {isLocked ? '🔓' : '🔒'}
-                      </div>
-                    );
-                  })}
+                        
+                      </button>
+                      <button
+                        className="absolute"
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current += 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
+                        onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current += 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
+                        style={{
+                          left: '50%',
+                          top: `calc(50% + ${cellSize.w * 1.6}px)`,
+                          transform: 'translate(-50%, -50%)',
+                          zIndex: 63,
+                          width: 28, height: 28, borderRadius: 9999, border: '2px solid white',
+                          background: 'rgba(59,130,246,0.9)', color: 'white', fontWeight: 800
+                        }}
+                        aria-label="Step clockwise"
+                      >
+                        
+                      </button>
+                    </>
+                  );
+                  })()}
                 </>
               );
             })()}
@@ -1868,10 +1865,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 placedTilesThisTurn={[]}
                 gridSize={gridSize}
                 isTetrisVariant={true}
-                lockMode={lockMode}
-                lockedTiles={lockedTiles}
-                lockAnimatingTiles={lockAnimatingTiles}
-                onTileLockToggle={toggleTileLock}
                 enableLayout={!isTransitioning}
                 isSettling={isSettling}
                 hiddenLetterCellIds={[

@@ -32,9 +32,6 @@ interface GameModeState {
     tilesHiddenForAnimation?: string[];
     freeMoveAvailable?: boolean;
     freeOrbitsAvailable?: number;
-    lockMode?: boolean;
-    lockedTiles?: string[];
-    lockAnimatingTiles?: string[];
     nextRows: string[][];
     tilesPerDrop: number;
     dropSpeed: number;
@@ -56,13 +53,12 @@ interface GameModeState {
     seededRNG?: SeededRNG;
     // Action history for undo functionality
     actionHistory: Array<{
-        type: 'orbit' | 'word_submit' | 'lock_toggle';
+        type: 'orbit' | 'word_submit';
         previousState: {
             grid: HexCell[];
             freeOrbitsAvailable?: number;
             score: number;
             wordsThisRound: string[];
-            lockedTiles: string[];
             selectedTiles: SelectedTile[];
             currentWord: string;
             totalWords: number;
@@ -114,13 +110,10 @@ interface WaxleGameState {
 
     // New minimal actions for one-action-per-turn
     moveTileOneStep: (sourceCellId: string, targetCellId: string) => void;
-    orbitPivot: (pivotCellId: string, direction?: 'cw' | 'ccw') => void;
-
-    // Lock mode actions
-    toggleTileLock: (cellId: string) => void;
+    orbitPivot: (newGrid: HexCell[]) => void;
 
     // Undo functionality
-    pushToHistory: (actionType: 'orbit' | 'word_submit' | 'lock_toggle') => void;
+    pushToHistory: (actionType: 'orbit' | 'word_submit') => void;
     undoLastAction: () => void;
     canUndo: () => boolean;
     clearActionHistory: () => void;
@@ -152,9 +145,6 @@ const initialGameModeState: GameModeState = {
     slowModeRounds: 0,
     previewLevel: 1,
     tilesHiddenForAnimation: [],
-    lockMode: false,
-    lockedTiles: [],
-    lockAnimatingTiles: [],
     actionHistory: [],
 };
 
@@ -164,7 +154,7 @@ const initialState: Omit<WaxleGameState,
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'toggleTileLock' | 'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
+    'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
 > = {
     classicGameState: { ...initialGameModeState },
     dailyGameState: { ...initialGameModeState },
@@ -261,9 +251,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         wordsThisRound: [],
                         freeMoveAvailable: false,
                         freeOrbitsAvailable: 2,
-                        lockMode: false,
-                        lockedTiles: [],
-                        lockAnimatingTiles: [],
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
@@ -312,9 +299,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         wordsThisRound: [],
                         freeMoveAvailable: false,
                         freeOrbitsAvailable: 2,
-                        lockMode: false,
-                        lockedTiles: [],
-                        lockAnimatingTiles: [],
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
@@ -373,14 +357,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
                 const newRound = state.round + 1;
-
-                // Clear lock mode and locked tiles immediately before flood starts
-                // This ensures visual indicators disappear before flood animation
-                updateCurrentGameState({
-                    lockMode: false,
-                    lockedTiles: [],
-                    lockAnimatingTiles: [],
-                });
 
                 // Clear action history at round end since we can't undo across rounds
                 get().clearActionHistory();
@@ -723,114 +699,46 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 return;
             },
 
-            // Note: Orbit logic is implemented in WaxleGame.tsx drag handler
-            orbitPivot: (_pivotCellId: string, _direction: 'cw' | 'ccw' = 'cw') => {
-                // This function exists for interface compatibility but orbit is handled in UI
-                console.log('[ORBIT-STORE] This function is not used - orbit handled in UI');
-            },
-
-
-
-            toggleTileLock: (cellId: string) => {
+            // Apply gravity after orbit completes (called from WaxleGame.tsx after letter rotation)
+            orbitPivot: (newGrid: HexCell[]) => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
-                const clickedCell = state.grid.find(c => c.id === cellId);
-                if (!clickedCell || !clickedCell.letter || !clickedCell.isPlaced) return; // Only lock placed tiles
+                if (state.phase !== 'player') {
+                    console.warn('[ORBIT] Cannot orbit during non-player phase');
+                    return;
+                }
 
-                // Push current state to history before lock operation
-                get().pushToHistory('lock_toggle');
+                // Apply gravity to the new grid
+                const { newGrid: settledGrid, moveSources } = clearTilesAndApplyGravity(newGrid, []);
 
-                const currentLockedTiles = Array.isArray(state.lockedTiles) ? state.lockedTiles : [];
-                const selectedTileIds = state.selectedTiles.map(t => t.cellId);
-                const isClickedCellLocked = currentLockedTiles.includes(cellId);
+                // Convert moveSources Map to plain object for serialization
+                const gravityMoves = new Map(moveSources);
 
-                if (isClickedCellLocked) {
-                    // If clicked cell is locked, unlock all selected tiles (or just the clicked one if none selected)
-                    const tilesToUnlock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
+                // Check if any tiles actually moved
+                const tilesMovedByGravity = gravityMoves.size > 0;
 
-                    // Only unlock valid locked tiles
-                    const validTilesToUnlock = tilesToUnlock.filter(tileId => {
-                        return currentLockedTiles.includes(tileId);
-                    });
-
-                    // Start unlock animation
-                    const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
-                    const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToUnlock])];
-
+                if (tilesMovedByGravity) {
+                    // Update grid and enter gravity settle phase
                     updateCurrentGameState({
-                        lockAnimatingTiles: newAnimatingTiles,
-                        selectedTiles: [],
-                        currentWord: ''
+                        grid: settledGrid,
+                        gravityMoves: gravityMoves,
+                        phase: 'gravitySettle'
                     });
 
-                    // After 400ms, complete the unlock (tracked to prevent memory leaks)
-                    const unlockTimeout = setTimeout(() => {
-                        const { getCurrentGameState, updateCurrentGameState } = get();
-                        const currentState = getCurrentGameState();
-                        const newLockedTiles = (currentState.lockedTiles || []).filter(id => !validTilesToUnlock.includes(id));
-                        const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToUnlock.includes(id));
-
-                        updateCurrentGameState({
-                            lockedTiles: newLockedTiles,
-                            lockAnimatingTiles: newAnimatingTiles
-                        });
-
-                        // Remove from tracking after execution
-                        get().pendingTimeouts.delete(unlockTimeout);
-                    }, 400);
-
-                    // Track timeout for cleanup
-                    get().addTimeout(unlockTimeout);
-
-                    const count = validTilesToUnlock.length;
-                    toastService.success(`${count} tile${count > 1 ? 's' : ''} unlocked`);
+                    console.log(`[ORBIT-GRAVITY] ${gravityMoves.size} tiles settled after orbit`);
                 } else {
-                    // If clicked cell is not locked, lock all selected tiles (including the clicked one if selected)
-                    const tilesToLock = selectedTileIds.length > 0 ? selectedTileIds : [cellId];
-
-                    // Only lock valid placed tiles
-                    const validTilesToLock = tilesToLock.filter(tileId => {
-                        const cell = state.grid.find(c => c.id === tileId);
-                        return cell && cell.letter && cell.isPlaced;
-                    });
-
-                    // Start lock animation
-                    const currentAnimatingTiles = Array.isArray(state.lockAnimatingTiles) ? state.lockAnimatingTiles : [];
-                    const newAnimatingTiles = [...new Set([...currentAnimatingTiles, ...validTilesToLock])];
-
+                    // No gravity movement, just update grid and stay in player phase
                     updateCurrentGameState({
-                        lockAnimatingTiles: newAnimatingTiles,
-                        selectedTiles: [],
-                        currentWord: ''
+                        grid: settledGrid
                     });
 
-                    // After 400ms, complete the lock (tracked to prevent memory leaks)
-                    const lockTimeout = setTimeout(() => {
-                        const { getCurrentGameState, updateCurrentGameState } = get();
-                        const currentState = getCurrentGameState();
-                        const newLockedTiles = [...new Set([...(currentState.lockedTiles || []), ...validTilesToLock])];
-                        const newAnimatingTiles = (currentState.lockAnimatingTiles || []).filter(id => !validTilesToLock.includes(id));
-
-                        updateCurrentGameState({
-                            lockedTiles: newLockedTiles,
-                            lockAnimatingTiles: newAnimatingTiles
-                        });
-
-                        // Remove from tracking after execution
-                        get().pendingTimeouts.delete(lockTimeout);
-                    }, 400);
-
-                    // Track timeout for cleanup
-                    get().addTimeout(lockTimeout);
-
-                    const count = validTilesToLock.length;
-                    toastService.success(`${count} tile${count > 1 ? 's' : ''} locked`);
+                    console.log('[ORBIT-GRAVITY] No tiles moved after orbit');
                 }
             },
 
             // Undo functionality
-            pushToHistory: (actionType: 'orbit' | 'word_submit' | 'lock_toggle') => {
+            pushToHistory: (actionType: 'orbit' | 'word_submit') => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
@@ -840,7 +748,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     freeOrbitsAvailable: state.freeOrbitsAvailable,
                     score: state.score,
                     wordsThisRound: [...state.wordsThisRound],
-                    lockedTiles: [...(state.lockedTiles || [])],
                     selectedTiles: [...state.selectedTiles],
                     currentWord: state.currentWord,
                     totalWords: state.totalWords,
@@ -880,7 +787,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     freeOrbitsAvailable: lastAction.previousState.freeOrbitsAvailable,
                     score: lastAction.previousState.score,
                     wordsThisRound: lastAction.previousState.wordsThisRound,
-                    lockedTiles: lastAction.previousState.lockedTiles,
                     selectedTiles: lastAction.previousState.selectedTiles,
                     currentWord: lastAction.previousState.currentWord,
                     totalWords: lastAction.previousState.totalWords,

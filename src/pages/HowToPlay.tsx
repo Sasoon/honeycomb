@@ -1,4 +1,4 @@
-import { Zap, Lock } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 const HowToPlay = () => {
   return (
@@ -36,29 +36,6 @@ const HowToPlay = () => {
                 className="max-h-60 mx-auto rounded border border-secondary/20"
                 style={{ objectFit: 'contain' }}
               />
-            </div>
-          </div>
-
-          {/* Lock Mechanic */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-            <div className="order-2 lg:order-1">
-              <div className="bg-secondary/10 rounded-lg p-2 text-center">
-                <img 
-                  src="/tutorial/lock-demo.gif" 
-                  alt="Real gameplay demonstration showing tile locking mechanism and locked tiles staying in place during gravity"
-                  className="max-h-60 mx-auto rounded border border-secondary/20"
-                  style={{ objectFit: 'contain' }}
-                />
-              </div>
-            </div>
-            <div className="order-1 lg:order-2">
-              <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
-                <Lock className="w-5 h-5 text-blue-400 mr-2" />
-                Tile Locking
-              </h3>
-              <div className="space-y-2 text-text-secondary">
-                <p>Lock tiles in place to prevent them from being affected by orbit. This lets you strategically move specific tiles to form even more words. Click the lock icon on any selected tile to lock it in place - this also works with multiple selections.</p>
-              </div>
             </div>
           </div>
         </div>
@@ -106,7 +83,7 @@ const HowToPlay = () => {
             <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
               <li>• Plan ahead - look at the next tile preview</li>
-              <li>• Use locks to set up big words</li>
+              <li>• Every orbit triggers gravity - tiles settle immediately!</li>
               <li>• Save orbits for emergency situations</li>
               <li>• Focus on clearing the top of the board</li>
             </ul>

@@ -389,7 +389,7 @@ function applyDeepFloodTiles(
 export function clearTilesAndApplyGravity(
     grid: HexCell[],
     tilesToClear: string[]
-): { newGrid: HexCell[], tilesCleared: number, moveSources: Map<string, string> } {
+): { newGrid: HexCell[], tilesCleared: number, moveSources: Map<string, string>, fullyResolved: boolean } {
     const newGrid = grid.map(cell => ({ ...cell, placedThisTurn: false }));
     let tilesCleared = 0;
     const moveSources = new Map<string, string>();
@@ -427,7 +427,7 @@ export function clearTilesAndApplyGravity(
     // Apply physics-based gravity - tiles fall down to fill gaps
     let changesMade = true;
     const gridSizeLocal = Math.max(...newGrid.map(c => c.position.row)) + 1;
-    const maxIterations = gridSizeLocal * 2;
+    const maxIterations = gridSizeLocal * 3; // Increased for hex diagonal cascades
     let iterations = 0;
 
     while (changesMade && iterations < maxIterations) {
@@ -464,7 +464,36 @@ export function clearTilesAndApplyGravity(
         }
     }
 
-    return { newGrid, tilesCleared, moveSources };
+    // Post-gravity validation: check for floating tiles
+    const fullyResolved = iterations < maxIterations;
+    if (!fullyResolved) {
+        console.warn(`[GRAVITY] Hit max iterations (${maxIterations}) - gravity may not be fully resolved`);
+    }
+
+    // Validate no tiles have accessible empty space below
+    let floatingTileCount = 0;
+    newGrid.forEach(cell => {
+        if (cell.letter && cell.isPlaced && cell.position.row < gridSizeLocal - 1) {
+            // Check if this tile has any adjacent empty cells below it
+            const cellsBelow = newGrid.filter(belowCell =>
+                belowCell.position.row === cell.position.row + 1 &&
+                isHexAdjacent(cell, belowCell) &&
+                !belowCell.letter &&
+                !belowCell.isPlaced
+            );
+
+            if (cellsBelow.length > 0) {
+                floatingTileCount++;
+                console.warn(`[GRAVITY] Floating tile detected at ${cell.position.row},${cell.position.col} - has ${cellsBelow.length} empty adjacent cells below`);
+            }
+        }
+    });
+
+    if (floatingTileCount > 0) {
+        console.error(`[GRAVITY] ${floatingTileCount} floating tiles detected after gravity resolution!`);
+    }
+
+    return { newGrid, tilesCleared, moveSources, fullyResolved };
 }
 
 

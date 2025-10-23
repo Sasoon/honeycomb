@@ -269,29 +269,6 @@ button {
   border: 2px solid var(--primary-light);
 }
 
-/* Lock border animations */
-.hex-grid__item.hex-border-locked,
-.hex-grid__item.hex-border-locking,
-.hex-grid__item.hex-border-unlocking {
-  position: relative;
-}
-
-.hex-grid__item.hex-border-locked::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: url("data:image/svg+xml,%3csvg width='100%25' height='115.47%25' viewBox='0 0 100 115.47' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'%3e%3cpath d='M 50 0 L 100 28.87 L 100 86.60 L 50 115.47 L 0 86.60 L 0 28.87 Z' fill='none' stroke='%231d1f20' stroke-width='2'/%3e%3c/svg%3e");
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
-  z-index: 10;
-  pointer-events: none;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-}
-
 .hex-grid__item.hex-double-score {
   position: relative;
 }
