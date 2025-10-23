@@ -41,10 +41,30 @@ const HowToPlay = () => {
         </div>
       </div>
 
+      {/* Auto-Clear Bonus Mechanic */}
+      <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/10 rounded-lg shadow-lg border border-amber-500/30 p-6 section-spacing">
+        <h2 className="text-xl font-semibold mb-4 text-text-primary flex items-center">
+          <span className="w-5 h-5 text-amber-500 mr-2">⚡</span>
+          Auto-Clear Bonus Mechanic
+        </h2>
+        <div className="space-y-4 text-text-secondary">
+          <p className="text-lg">
+            After new tiles flood the board, WAXLE automatically scans for bonus words across <span className="font-semibold text-amber-500">all 6 axes</span> of the hex grid.
+          </p>
+          <div className="bg-bg-primary/50 rounded p-4 space-y-2">
+            <p><span className="font-semibold text-amber-500">✓</span> All valid 3+ letter words found on any axis are automatically cleared!</p>
+            <p><span className="font-semibold text-amber-500">✓</span> Each auto-cleared word grants <span className="font-semibold text-text-primary">+1 orbit</span></p>
+            <p><span className="font-semibold text-amber-500">✓</span> Words clear sequentially with gravity between each</p>
+            <p><span className="font-semibold text-amber-500">✓</span> Highlighted in <span className="text-amber-500 font-semibold">orange</span> as they clear</p>
+          </div>
+          <p className="text-sm italic">This reward system encourages strategic placement and helps you accumulate orbits for tough situations!</p>
+        </div>
+      </div>
+
       {/* Scoring & Gameplay */}
       <div className="bg-bg-primary rounded-lg shadow-lg border border-secondary p-6 section-spacing">
         <h2 className="text-xl font-semibold mb-4 text-text-primary">Scoring & Gameplay</h2>
-        
+
         {/* Scoring Demonstration */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center mb-8">
           <div>
@@ -84,7 +104,8 @@ const HowToPlay = () => {
             <ul className="space-y-2 text-text-secondary text-sm">
               <li>• Plan ahead - look at the next tile preview</li>
               <li>• Every orbit triggers gravity - tiles settle immediately!</li>
-              <li>• Save orbits for emergency situations</li>
+              <li>• You start with 1 orbit and orbits accumulate across rounds</li>
+              <li>• Auto-clears grant bonus orbits - create axis-aligned words!</li>
               <li>• Focus on clearing the top of the board</li>
             </ul>
           </div>

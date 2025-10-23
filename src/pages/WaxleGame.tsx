@@ -318,10 +318,15 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     freeOrbitsAvailable,
     gridSize,
     gravityMoves,
+    gravitySource,
     floodPaths,
     tilesHiddenForAnimation: _unusedTiles,
     dailyDate,
     challengeStartTime,
+    currentAutoClearWord,
+    autoClearPhase,
+    autoClearLetterIndex,
+    justScoredWord,
   } = currentGameState;
 
   const {
@@ -335,6 +340,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     startPlayerPhase,
     endPlayerPhase,
     resetGame,
+    processNextAutoClearWord,
+    findAndStartNextAutoClear,
   } = store;
 
   const isDailyChallenge = isDailyMode;
@@ -379,6 +386,34 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       setFxOverlays([]);
     }
   }, [phase, grid]);
+
+  // Handle auto-clear letter-by-letter highlighting
+  useEffect(() => {
+    if (phase === 'autoClearing' && autoClearPhase === 'clear' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
+      const LETTER_HIGHLIGHT_DELAY = 250; // ms per letter
+      const wordLength = currentAutoClearWord.word.length;
+
+      // Increment letter index until all letters shown
+      if (autoClearLetterIndex < wordLength - 1) {
+        const timer = window.setTimeout(() => {
+          const { updateCurrentGameState } = useWaxleGameStore.getState();
+          updateCurrentGameState({
+            autoClearLetterIndex: autoClearLetterIndex + 1,
+          });
+        }, LETTER_HIGHLIGHT_DELAY);
+
+        return () => clearTimeout(timer);
+      } else {
+        // All letters highlighted, wait briefly then clear
+        const timer = window.setTimeout(() => {
+          console.log('[AUTO-CLEAR UI] All letters highlighted, triggering clear');
+          processNextAutoClearWord();
+        }, LETTER_HIGHLIGHT_DELAY + 200); // Extra delay after last letter
+
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [phase, autoClearPhase, currentAutoClearWord, autoClearLetterIndex, processNextAutoClearWord]);
 
   // Use layout effect to hide tiles synchronously before painting
   useLayoutEffect(() => {
@@ -436,10 +471,22 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         
         // Handle case where gravity moves were detected but no tiles actually need animation
         if (newlySettled.length === 0 || prefersReducedMotion) {
-            // No tiles to animate, or reduce motion: proceed directly to flood phase
+            // No tiles to animate, or reduce motion
             animationDoneSignal = () => {
                 const advanceT = window.setTimeout(() => {
-                    endRound();
+                    // Check gravity source to determine next action
+                    if (gravitySource === 'autoClear') {
+                        // Auto-clear cascade: look for next word
+                        console.log(`[AUTO-CLEAR] Gravity settled after auto-clear, looking for next word`);
+                        findAndStartNextAutoClear();
+                    } else if (gravitySource === 'wordSubmit') {
+                        // Player word submit: trigger flood
+                        console.log(`[GRAVITY] Gravity settled after word submission, ending round`);
+                        endRound();
+                    } else if (gravitySource === 'orbit') {
+                        // Orbit gravity: return to player phase
+                        startPlayerPhase();
+                    }
                 }, GRAVITY_SHORT_DELAY_MS);
                 timersRef.current.push(advanceT);
             };
@@ -514,7 +561,19 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
             animationDoneSignal = () => {
               const advanceT = window.setTimeout(() => {
-                endRound();
+                // Check gravity source to determine next action
+                if (gravitySource === 'autoClear') {
+                  // Auto-clear cascade: look for next word
+                  console.log(`[AUTO-CLEAR] Gravity settled after auto-clear, looking for next word`);
+                  findAndStartNextAutoClear();
+                } else if (gravitySource === 'wordSubmit') {
+                  // Player word submit: trigger flood
+                  console.log(`[GRAVITY] Gravity settled after word submission, ending round`);
+                  endRound();
+                } else if (gravitySource === 'orbit') {
+                  // Orbit gravity: return to player phase
+                  startPlayerPhase();
+                }
               }, maxDelay + 100);
               timersRef.current.push(advanceT);
             };
@@ -532,7 +591,13 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
           setHiddenCellIds(prev => prev.filter(id => !newlyFilled.some(c => c.id === id)));
           animationDoneSignal = () => {
             const advanceT = window.setTimeout(() => {
-              startPlayerPhase();
+              // After flood, check if we should scan for auto-clear words
+              if (justScoredWord) {
+                console.log(`[AUTO-CLEAR] Flood complete, scanning for auto-clear words`);
+                findAndStartNextAutoClear();
+              } else {
+                startPlayerPhase();
+              }
             }, 120);
             timersRef.current.push(advanceT);
           };
@@ -720,7 +785,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             const advanceDelay = tilePaths.length === 0 ? GRAVITY_SHORT_DELAY_MS + 20 : maxFinalDelay + PHASE_GAP_MS;
             const advanceT = window.setTimeout(() => {
               if (debugAnim) console.log('[FLD] ADVANCE', { at: tNow() });
-              startPlayerPhase();
+
+              // After flood, check if we should scan for auto-clear words
+              if (justScoredWord) {
+                console.log(`[AUTO-CLEAR] Flood complete, scanning for auto-clear words`);
+                findAndStartNextAutoClear();
+              } else {
+                startPlayerPhase();
+              }
             }, advanceDelay);
             timersRef.current.push(advanceT);
           };
@@ -1305,18 +1377,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 setCurrentDragAngle(0);
                 setIsDragging(true);
 
-                // Build plan dynamically based on nearest pivot at drag start
-                // Choose nearest pivot (center cell) relative to pointer
-                let bestPivot: HexCell | null = null;
-                let bestDist = Infinity;
-                grid.forEach(cell => {
-                  const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
-                  if (!ctr) return;
-                  const d = Math.hypot(ctr.x - containerX, ctr.y - containerY);
-                  if (d < bestDist) { bestDist = d; bestPivot = cell; }
-                });
-                if (!bestPivot) return;
-                const pivot = bestPivot as HexCell; // Type assertion after null check
+                // Use the selected tile as pivot directly
+                if (selectedTiles.length !== 1) return;
+                const selectedId = selectedTiles[0].cellId;
+                const pivot = grid.find(c => c.id === selectedId);
+                if (!pivot) return;
                 const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
                 if (!pivotCenter) return;
                 setOrbitAnchor({ x: pivotCenter.x, y: pivotCenter.y });
@@ -1791,39 +1856,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         );
                       })}
 
-                      {/* Desktop/mobile nudge buttons at opposite ends of the ring */}
-                      <button
-                        className="absolute"
-                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current -= 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
-                        onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current -= 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
-                        style={{
-                          left: '50%',
-                          top: `calc(50% - ${cellSize.w * 1.6}px)`,
-                          transform: 'translate(-50%, -50%)',
-                          zIndex: 63,
-                          width: 28, height: 28, borderRadius: 9999, border: '2px solid white',
-                          background: 'rgba(59,130,246,0.9)', color: 'white', fontWeight: 800
-                        }}
-                        aria-label="Step counter-clockwise"
-                      >
-                        
-                      </button>
-                      <button
-                        className="absolute"
-                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current += 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
-                        onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); lockedStepsRef.current += 1; setLockedSteps(lockedStepsRef.current); setCurrentDragAngle(lockedStepsRef.current * (Math.PI / 3)); haptics.tick(); }}
-                        style={{
-                          left: '50%',
-                          top: `calc(50% + ${cellSize.w * 1.6}px)`,
-                          transform: 'translate(-50%, -50%)',
-                          zIndex: 63,
-                          width: 28, height: 28, borderRadius: 9999, border: '2px solid white',
-                          background: 'rgba(59,130,246,0.9)', color: 'white', fontWeight: 800
-                        }}
-                        aria-label="Step clockwise"
-                      >
-                        
-                      </button>
                     </>
                   );
                   })()}
@@ -1857,7 +1889,17 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               }}
             >
               <HexGrid
-                cells={grid.map(c => ({ ...c, isSelected: selectedTiles.some(t => t.cellId === c.id) }))}
+                cells={grid.map(c => {
+                  const isSelected = selectedTiles.some(t => t.cellId === c.id);
+                  // Check if this cell is part of the current auto-clear word and should be highlighted
+                  let isAutoClear = false;
+                  if (phase === 'autoClearing' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
+                    // Only highlight cells up to the current letter index
+                    const cellIndex = currentAutoClearWord.cellIds.indexOf(c.id);
+                    isAutoClear = cellIndex >= 0 && cellIndex <= autoClearLetterIndex;
+                  }
+                  return { ...c, isSelected, isAutoClear };
+                })}
                 onCellClick={handleCellClick}
                 isWordValid={validationState}
                 isPlacementPhase={phase === 'player' ? !hasSelection : true}

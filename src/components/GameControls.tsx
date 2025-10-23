@@ -5,7 +5,7 @@ import { Button } from './ui/Button';
 type GameControlsProps = {
   // Game state
   currentWord: string;
-  phase: 'flood' | 'player' | 'gameOver' | 'gravitySettle';
+  phase: 'flood' | 'player' | 'gameOver' | 'gravitySettle' | 'autoClearing';
   validationState?: boolean;
   
   // Actions

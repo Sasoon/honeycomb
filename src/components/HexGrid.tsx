@@ -18,6 +18,7 @@ export type HexCell = {
   isPlaced: boolean;
   isDoubleScore: boolean;
   placedThisTurn?: boolean;
+  isAutoClear?: boolean;
 };
 
 export interface HexGridProps {
@@ -235,14 +236,19 @@ const HexGrid = ({
     let extraClasses = '';
     // let showBorder = false; // Disabled - borders removed from selected tiles
     // let borderColor = ''; // Disabled - borders removed from selected tiles
-    
+
     const isPlacedThisTurn = placedTilesThisTurn.some(
       placedCell => placedCell.id === cell.id
     );
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
 
-    if (cell.isSelected) {
+    // Auto-clear highlighting (orange/amber)
+    if (cell.isAutoClear) {
+      bgColor = 'bg-amber-light';
+      textColor = 'text-white';
+      extraClasses = 'ring-2 ring-amber-400 animate-pulse';
+    } else if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
       if (!isPlacementPhase) {
         // showBorder = true; // Disabled - no borders for selected tiles

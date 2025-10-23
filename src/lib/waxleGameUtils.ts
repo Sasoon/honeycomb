@@ -1,5 +1,6 @@
 import { HexCell } from '../components/HexGrid';
 import { SeededRNG } from './seededRNG';
+import wordValidator from './wordValidator';
 
 // Letter frequency for Tetris drops (weighted towards common letters)
 const LETTER_WEIGHTS = {
@@ -564,4 +565,194 @@ export function isHexAdjacent(cell1: HexCell, cell2: HexCell): boolean {
 // Legacy function - keep for compatibility but use isHexAdjacent internally
 export function areCellsAdjacent(cell1: HexCell, cell2: HexCell): boolean {
     return isHexAdjacent(cell1, cell2);
+}
+
+// === Auto-clear mechanic functions =====================================================
+
+/**
+ * Get all axis lines in the hex grid.
+ * Returns 15 lines total for a 5x5 diamond grid:
+ * - 5 horizontal lines (same row)
+ * - 5 diagonal / lines (row + col constant)
+ * - 5 diagonal \ lines (row - col constant)
+ *
+ * Each line contains cells that form a straight line through the hex grid.
+ * Only cells with placed letters are included.
+ */
+export function getAllAxisLines(grid: HexCell[]): HexCell[][] {
+    const lines: HexCell[][] = [];
+
+    // Filter to only placed tiles with letters
+    const placedCells = grid.filter(cell => cell.letter && cell.isPlaced);
+
+    // 1. Horizontal lines (same row)
+    const rowGroups = new Map<number, HexCell[]>();
+    placedCells.forEach(cell => {
+        const row = cell.position.row;
+        if (!rowGroups.has(row)) {
+            rowGroups.set(row, []);
+        }
+        rowGroups.get(row)!.push(cell);
+    });
+
+    // Sort cells in each row by column
+    rowGroups.forEach(cells => {
+        cells.sort((a, b) => a.position.col - b.position.col);
+        if (cells.length >= 1) { // Include lines with at least 1 cell
+            lines.push(cells);
+        }
+    });
+
+    // 2. Diagonal / lines (row + col constant)
+    const diagForwardGroups = new Map<number, HexCell[]>();
+    placedCells.forEach(cell => {
+        const key = cell.position.row + cell.position.col;
+        if (!diagForwardGroups.has(key)) {
+            diagForwardGroups.set(key, []);
+        }
+        diagForwardGroups.get(key)!.push(cell);
+    });
+
+    // Sort cells in each diagonal by row (ascending)
+    diagForwardGroups.forEach(cells => {
+        cells.sort((a, b) => a.position.row - b.position.row);
+        if (cells.length >= 1) { // Include lines with at least 1 cell
+            lines.push(cells);
+        }
+    });
+
+    // 3. Diagonal \ lines (row - col constant)
+    const diagBackwardGroups = new Map<number, HexCell[]>();
+    placedCells.forEach(cell => {
+        const key = cell.position.row - cell.position.col;
+        if (!diagBackwardGroups.has(key)) {
+            diagBackwardGroups.set(key, []);
+        }
+        diagBackwardGroups.get(key)!.push(cell);
+    });
+
+    // Sort cells in each diagonal by row (ascending)
+    diagBackwardGroups.forEach(cells => {
+        cells.sort((a, b) => a.position.row - b.position.row);
+        if (cells.length >= 1) { // Include lines with at least 1 cell
+            lines.push(cells);
+        }
+    });
+
+    // 4. Vertical lines in offset hex grid (2*col - row constant)
+    const verticalGroups = new Map<number, HexCell[]>();
+    placedCells.forEach(cell => {
+        const key = 2 * cell.position.col - cell.position.row;
+        if (!verticalGroups.has(key)) {
+            verticalGroups.set(key, []);
+        }
+        verticalGroups.get(key)!.push(cell);
+    });
+
+    // Sort cells in each vertical line by row (ascending)
+    verticalGroups.forEach(cells => {
+        cells.sort((a, b) => a.position.row - b.position.row);
+        if (cells.length >= 1) { // Include lines with at least 1 cell
+            lines.push(cells);
+        }
+    });
+
+    // 5. Shallow diagonal 1 in offset hex grid (row + 2*col constant)
+    const shallowDiag1Groups = new Map<number, HexCell[]>();
+    placedCells.forEach(cell => {
+        const key = cell.position.row + 2 * cell.position.col;
+        if (!shallowDiag1Groups.has(key)) {
+            shallowDiag1Groups.set(key, []);
+        }
+        shallowDiag1Groups.get(key)!.push(cell);
+    });
+
+    // Sort cells in each shallow diagonal by row (ascending)
+    shallowDiag1Groups.forEach(cells => {
+        cells.sort((a, b) => a.position.row - b.position.row);
+        if (cells.length >= 1) { // Include lines with at least 1 cell
+            lines.push(cells);
+        }
+    });
+
+    // 6. Shallow diagonal 2 in offset hex grid (row - 2*col constant)
+    const shallowDiag2Groups = new Map<number, HexCell[]>();
+    placedCells.forEach(cell => {
+        const key = cell.position.row - 2 * cell.position.col;
+        if (!shallowDiag2Groups.has(key)) {
+            shallowDiag2Groups.set(key, []);
+        }
+        shallowDiag2Groups.get(key)!.push(cell);
+    });
+
+    // Sort cells in each shallow diagonal by row (ascending)
+    shallowDiag2Groups.forEach(cells => {
+        cells.sort((a, b) => a.position.row - b.position.row);
+        if (cells.length >= 1) { // Include lines with at least 1 cell
+            lines.push(cells);
+        }
+    });
+
+    return lines;
+}
+
+/**
+ * Find all valid words in the given axis lines.
+ * Checks all contiguous subsequences of length ≥3 within each line.
+ * Returns an array of found words with their cell IDs.
+ */
+export async function findValidWordsInLines(
+    lines: HexCell[][]
+): Promise<Array<{ word: string; cellIds: string[] }>> {
+    const foundWords: Array<{ word: string; cellIds: string[] }> = [];
+    const seenWordCombinations = new Set<string>(); // Avoid duplicate word+position combinations
+
+    for (const line of lines) {
+        // Skip lines with fewer than 3 cells
+        if (line.length < 3) continue;
+
+        // Check both forward and backward directions
+        const directions = [line, [...line].reverse()];
+
+        for (const directedLine of directions) {
+            // Check all contiguous subsequences of length 3 or more
+            for (let start = 0; start < directedLine.length; start++) {
+                for (let length = 3; length <= directedLine.length - start; length++) {
+                    const subsequence = directedLine.slice(start, start + length);
+
+                    // Verify cells are actually adjacent (no gaps)
+                    let hasGaps = false;
+                    for (let i = 0; i < subsequence.length - 1; i++) {
+                        if (!isHexAdjacent(subsequence[i], subsequence[i + 1])) {
+                            hasGaps = true;
+                            break;
+                        }
+                    }
+
+                    // Skip if there are gaps in the sequence
+                    if (hasGaps) continue;
+
+                    const word = subsequence.map(cell => cell.letter).join('');
+                    const cellIds = subsequence.map(cell => cell.id);
+
+                    // Create unique key for this word+position combination
+                    const key = cellIds.sort().join(',');
+
+                    // Skip if we've already found this exact combination
+                    if (seenWordCombinations.has(key)) continue;
+
+                    // Validate word
+                    const isValid = await wordValidator.validateWordAsync(word);
+
+                    if (isValid) {
+                        console.log(`[AUTO-CLEAR SCAN] Found "${word}" at positions:`, subsequence.map(c => `(${c.position.row},${c.position.col})`).join(' -> '));
+                        foundWords.push({ word, cellIds });
+                        seenWordCombinations.add(key);
+                    }
+                }
+            }
+        }
+    }
+
+    return foundWords;
 }

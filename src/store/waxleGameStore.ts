@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
-import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateWaxleScore, generateRandomLetter, placeStartingTiles, countAdjacentEdges } from '../lib/waxleGameUtils';
+import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateWaxleScore, generateRandomLetter, placeStartingTiles, countAdjacentEdges, getAllAxisLines, findValidWordsInLines } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
@@ -10,7 +10,7 @@ import { createSeededRNG, SeededRNG } from '../lib/seededRNG';
 
 
 // Game phases
-export type GamePhase = 'flood' | 'player' | 'gameOver' | 'gravitySettle';
+export type GamePhase = 'flood' | 'player' | 'gameOver' | 'gravitySettle' | 'autoClearing';
 
 // Selected tiles for word building
 export interface SelectedTile {
@@ -28,6 +28,7 @@ interface GameModeState {
     score: number;
     round: number;
     gravityMoves?: Map<string, string>;
+    gravitySource?: 'orbit' | 'wordSubmit' | 'autoClear'; // Track what triggered gravity
     floodPaths?: Record<string, { path: string[]; batch: number }>;
     tilesHiddenForAnimation?: string[];
     freeMoveAvailable?: boolean;
@@ -46,6 +47,11 @@ interface GameModeState {
     wordsPerTurnLimit: number;
     slowModeRounds: number;
     previewLevel: number;
+    // Auto-clear mechanic fields
+    currentAutoClearWord?: { word: string; cellIds: string[] };
+    autoClearPhase?: 'highlight' | 'clear';
+    autoClearLetterIndex?: number;
+    justScoredWord?: boolean;
     // Daily-specific fields (only used in daily state)
     dailySeed?: number;
     dailyDate?: string;
@@ -99,7 +105,7 @@ interface WaxleGameState {
 
     // Game flow actions
     startPlayerPhase: () => void;
-    endRound: () => void;
+    endRound: () => Promise<void>;
     endPlayerPhase: () => void;
 
     // Player actions
@@ -111,6 +117,10 @@ interface WaxleGameState {
     // New minimal actions for one-action-per-turn
     moveTileOneStep: (sourceCellId: string, targetCellId: string) => void;
     orbitPivot: (newGrid: HexCell[]) => void;
+
+    // Auto-clear functionality
+    processNextAutoClearWord: () => void;
+    findAndStartNextAutoClear: () => Promise<void>;
 
     // Undo functionality
     pushToHistory: (actionType: 'orbit' | 'word_submit') => void;
@@ -154,7 +164,7 @@ const initialState: Omit<WaxleGameState,
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
     'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
-    'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
+    'processNextAutoClearWord' | 'findAndStartNextAutoClear' | 'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
 > = {
     classicGameState: { ...initialGameModeState },
     dailyGameState: { ...initialGameModeState },
@@ -250,7 +260,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         currentWord: '',
                         wordsThisRound: [],
                         freeMoveAvailable: false,
-                        freeOrbitsAvailable: 2,
+                        freeOrbitsAvailable: 1,
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
@@ -298,7 +308,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         currentWord: '',
                         wordsThisRound: [],
                         freeMoveAvailable: false,
-                        freeOrbitsAvailable: 2,
+                        freeOrbitsAvailable: 1,
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
@@ -331,17 +341,19 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             startPlayerPhase: () => {
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
                 if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                    console.log('[STORE] Starting player phase with 2 orbits');
+                    console.log(`[STORE] Starting player phase with ${state.freeOrbitsAvailable || 0} orbits`);
                 }
-                const { updateCurrentGameState } = get();
                 updateCurrentGameState({
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
                     freeMoveAvailable: false,
-                    freeOrbitsAvailable: 2,
+                    // Don't reset freeOrbitsAvailable - orbits accumulate across rounds
                     tilesHiddenForAnimation: [],
+                    justScoredWord: false, // Reset flag at start of each new turn
                 });
             },
 
@@ -353,7 +365,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 get().endRound();
             },
 
-            endRound: () => {
+            endRound: async () => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
                 const newRound = state.round + 1;
@@ -480,6 +492,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
                     .map(cell => cell.id);
 
+                // Don't scan for auto-clear here - will happen AFTER flood animation completes
                 updateCurrentGameState({
                     round: newRound,
                     tilesPerDrop: currentTilesPerDrop, // Progressive difficulty
@@ -491,6 +504,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     currentWord: '',
                     floodPaths: finalPaths,
                     tilesHiddenForAnimation: newlyPlacedTileIds,
+                    // justScoredWord is NOT reset here - will be checked after flood animation
                 });
             },
 
@@ -659,6 +673,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     selectedTiles: [],
                     currentWord: '',
                     gravityMoves: moveSources,
+                    gravitySource: 'wordSubmit', // Mark this as word-submit gravity
+                    justScoredWord: true, // Flag that we just scored a word
                     // Only set gravitySettle phase if there are moves to animate
                     // Otherwise stay in player phase and let endRound() handle flood transition
                     ...(moveSources.size > 0 ? { phase: 'gravitySettle' } : {}),
@@ -723,6 +739,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     updateCurrentGameState({
                         grid: settledGrid,
                         gravityMoves: gravityMoves,
+                        gravitySource: 'orbit', // Mark this as orbit-triggered gravity
                         phase: 'gravitySettle'
                     });
 
@@ -734,6 +751,112 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     });
 
                     console.log('[ORBIT-GRAVITY] No tiles moved after orbit');
+                }
+            },
+
+            // Process next auto-clear word (called from UI for letter highlighting or clearing)
+            processNextAutoClearWord: () => {
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
+
+                if (!state.currentAutoClearWord) {
+                    console.warn('[AUTO-CLEAR] No auto-clear word to process');
+                    return;
+                }
+
+                const currentWord = state.currentAutoClearWord;
+
+                // Check which phase we're in
+                if (state.autoClearPhase === 'highlight') {
+                    // HIGHLIGHT PHASE: Just transition to 'clear' phase
+                    // UI will handle letter-by-letter animation before calling again
+                    console.log(`[AUTO-CLEAR] Starting highlight for word "${currentWord.word}"`);
+                    updateCurrentGameState({
+                        phase: 'autoClearing',
+                        autoClearPhase: 'clear',
+                    });
+                    return;
+                }
+
+                // CLEAR PHASE: Actually clear the tiles
+                console.log(`[AUTO-CLEAR] Clearing word "${currentWord.word}"`);
+
+                // Clear the current word's tiles and apply gravity
+                const { newGrid, moveSources } = clearTilesAndApplyGravity(state.grid, currentWord.cellIds);
+
+                // Grant +1 orbit for this auto-clear word
+                const newOrbitsAvailable = (state.freeOrbitsAvailable || 0) + 1;
+
+                // Add word to wordsThisRound
+                const updatedWordsThisRound = [...state.wordsThisRound, currentWord.word];
+
+                // Clear current auto-clear state - will find next word after gravity settles
+                updateCurrentGameState({
+                    grid: newGrid,
+                    gravityMoves: moveSources,
+                    gravitySource: 'autoClear', // Use distinct source for auto-clear cascades
+                    phase: moveSources.size > 0 ? 'gravitySettle' : 'player',
+                    currentAutoClearWord: undefined,
+                    autoClearPhase: undefined,
+                    autoClearLetterIndex: undefined,
+                    freeOrbitsAvailable: newOrbitsAvailable,
+                    wordsThisRound: updatedWordsThisRound,
+                });
+
+                toastService.success(`Auto-cleared "${currentWord.word}"! +1 orbit`);
+                console.log(`[AUTO-CLEAR] Cleared word "${currentWord.word}"`);
+
+                // If no gravity, continue cascade immediately by scanning for next word
+                if (moveSources.size === 0) {
+                    console.log('[AUTO-CLEAR] No gravity, continuing cascade immediately');
+                    get().findAndStartNextAutoClear();
+                }
+            },
+
+            // Find and start next auto-clear word (called after gravity settles)
+            findAndStartNextAutoClear: async () => {
+                const { getCurrentGameState, updateCurrentGameState } = get();
+                const state = getCurrentGameState();
+
+                // Log current board state
+                console.log('[AUTO-CLEAR] Current board state:');
+                const maxRow = Math.max(...state.grid.map(c => c.position.row));
+                for (let r = 0; r <= maxRow; r++) {
+                    const rowCells = state.grid.filter(c => c.position.row === r).sort((a, b) => a.position.col - b.position.col);
+                    const rowStr = rowCells.map(c => c.letter || '.').join(' ');
+                    console.log(`  Row ${r}: ${rowStr}`);
+                }
+
+                // Scan for next word on current grid
+                const axisLines = getAllAxisLines(state.grid);
+                const foundWords = await findValidWordsInLines(axisLines);
+
+                console.log(`[AUTO-CLEAR] Found ${foundWords.length} words:`, foundWords.map(w => w.word));
+
+                if (foundWords.length > 0) {
+                    // Found another word - start highlighting it
+                    const nextWord = foundWords[0];
+                    console.log(`[AUTO-CLEAR] Starting auto-clear for: "${nextWord.word}"`);
+
+                    updateCurrentGameState({
+                        currentAutoClearWord: nextWord,
+                        autoClearPhase: 'highlight',
+                        autoClearLetterIndex: 0,
+                        phase: 'autoClearing',
+                    });
+
+                    // Trigger the highlight->clear transition
+                    get().processNextAutoClearWord();
+                } else {
+                    // No more words found - return to player phase
+                    console.log('[AUTO-CLEAR] No more words found, returning to player phase');
+                    updateCurrentGameState({
+                        phase: 'player',
+                        currentAutoClearWord: undefined,
+                        autoClearPhase: undefined,
+                        autoClearLetterIndex: undefined,
+                        justScoredWord: false, // Reset flag when returning to player phase
+                    });
                 }
             },
 
