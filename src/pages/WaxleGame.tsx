@@ -246,9 +246,7 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   return path;
 }*/
 
-type Overlay = { id: string; letter: string; x: number; y: number; pulse: number; isFinal?: boolean; rX?: number; rY?: number };
-
-type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'orbit' | 'move' };
+type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'orbit' | 'move' | 'flood'; duration?: number };
 
 // (no-op placeholder removed)
 
@@ -258,7 +256,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [previousGrid, setPreviousGrid] = useState<typeof grid>([]);
   const lastPlayerGridRef = useRef<typeof previousGrid>([]);
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [fxOverlays, setFxOverlays] = useState<FxOverlay[]>([]);
   const timersRef = useRef<number[]>([]);
   const uiTimersRef = useRef<number[]>([]);
@@ -391,7 +388,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   // Handle auto-clear letter-by-letter highlighting
   useEffect(() => {
     if (phase === 'autoClearing' && autoClearPhase === 'clear' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
-      const LETTER_HIGHLIGHT_DELAY = 250; // ms per letter
+      // ==================== AUTO-CLEAR ANIMATION TIMING (Tunable) ====================
+      // How fast each letter lights up sequentially (lower = faster)
+      const LETTER_HIGHLIGHT_DELAY = 150; // ms per letter (default: 150)
+
+      // How long to pause after ALL letters are lit before clearing them (higher = longer linger)
+      const LINGER_AFTER_COMPLETE = 600; // ms (default: 600)
+      // ===============================================================================
+
       const wordLength = currentAutoClearWord.word.length;
 
       // Increment letter index until all letters shown
@@ -405,11 +409,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
         return () => clearTimeout(timer);
       } else {
-        // All letters highlighted, wait briefly then clear
+        // All letters highlighted, linger then clear
         const timer = window.setTimeout(() => {
           console.log('[AUTO-CLEAR UI] All letters highlighted, triggering clear');
           processNextAutoClearWord();
-        }, LETTER_HIGHLIGHT_DELAY + 200); // Extra delay after last letter
+        }, LINGER_AFTER_COMPLETE);
 
         return () => clearTimeout(timer);
       }
@@ -458,8 +462,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   useEffect(() => {
     timersRef.current.forEach(t => window.clearTimeout(t));
     timersRef.current = [];
-    // Clear any stale overlays before scheduling new ones to avoid duplicate keys
-    setOverlays([]);
+    // Clear any stale fx overlays before scheduling new ones to avoid duplicate keys
+    setFxOverlays([]);
 
     const container = containerRef.current; if (!container) return;
     const centers = mapCenters(container);
@@ -512,9 +516,20 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             });
             
             let maxDelay = 0;
-            const baseDelay = 120; // Base animation duration
-            const staggerDelay = 80; // Time between distance groups
-            
+
+            // ==================== GRAVITY ANIMATION TIMING (Tunable) ====================
+            // Base fall duration in ms (lower = faster falls)
+            const baseDelay = 120; // default: 120ms
+
+            // Time between distance groups starting their animations (lower = more simultaneous)
+            const staggerDelay = 80; // default: 80ms
+
+            // Duration formula: baseDelay + (distance * 30)
+            // Distance 1: 120 + 30 = 150ms
+            // Distance 2: 120 + 60 = 180ms
+            // Distance 3: 120 + 90 = 210ms, etc.
+            // ============================================================================
+
             // Animate by distance groups (shorter distances first)
             const sortedDistances = Array.from(tilesByDistance.keys()).sort((a, b) => a - b);
             
@@ -524,30 +539,32 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 tilesAtDistance.forEach((tileData, tileIdx) => {
                     const { cell, from, to } = tileData;
                     const ovKey = `gset-${cell.id}-${Date.now()}`;
-                    
-                    // Spawn overlay at source
-                    setFxOverlays(prev => [...prev, { 
-                        key: ovKey, 
-                        letter: cell.letter, 
-                        x: from.x, 
+
+                    // Calculate animation duration based on distance (longer falls take more time)
+                    const animDuration = baseDelay + (distance * 30);
+
+                    // Spawn overlay at source with calculated duration
+                    setFxOverlays(prev => [...prev, {
+                        key: ovKey,
+                        letter: cell.letter,
+                        x: from.x,
                         y: from.y,
-                        kind: 'gravity'
+                        kind: 'gravity',
+                        duration: animDuration / 1000  // Convert ms to seconds for framer-motion
                     }]);
-                    
+
                     // Smooth staggered start within distance group
                     const groupStartDelay = distanceIdx * staggerDelay;
                     const tileStartDelay = groupStartDelay + (tileIdx * 25); // Small stagger within group
-                    
+
                     // Start animation
                     const animT = window.setTimeout(() => {
-                        setFxOverlays(prev => prev.map(o => 
+                        setFxOverlays(prev => prev.map(o =>
                             o.key === ovKey ? { ...o, x: to.x, y: to.y } : o
                         ));
                     }, tileStartDelay);
                     timersRef.current.push(animT);
-                    
-                    // Calculate animation duration based on distance (longer falls take more time)
-                    const animDuration = baseDelay + (distance * 30);
+
                     const finalDelay = tileStartDelay + animDuration;
                     maxDelay = Math.max(maxDelay, finalDelay);
                     
@@ -734,11 +751,19 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
               const initial = pathCenters[0].center;
               const fadeDelay = batchIdx === 0 ? 0 : batchStart;
-              const createOv = () => setOverlays(prev => {
-                const next = prev.filter(o => o.id !== cell.id);
-                next.push({ id: cell.id, letter: cell.letter, x: initial.x, y: initial.y, pulse: 0, rX: 0, rY: 0 });
-                return next;
-              });
+
+              const ovKey = `flood-${cell.id}-${Date.now()}`;
+
+              // Create FxOverlay at start position
+              const createOv = () => setFxOverlays(prev => [...prev, {
+                key: ovKey,
+                letter: cell.letter,
+                x: initial.x,
+                y: initial.y,
+                kind: 'flood'
+                // No duration - flood uses fixed FLOOD_STEP_MS per step
+              }]);
+
               if (fadeDelay === 0) {
                 createOv();
               } else {
@@ -746,35 +771,27 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 timersRef.current.push(ovT);
               }
 
+              // Animate through each step in the path
               pathCenters.forEach((pc: any, stepIndex: number) => {
-                const stepDelay = baseDelay + stepIndex*perStep;
-                const arriveT = window.setTimeout(()=>{
-                  let rX=0,rY=0;
-                  if(stepIndex>0){
-                    const prevPc = pathCenters[stepIndex-1];
-                    const dx=pc.center.x-prevPc.center.x; const dy=pc.center.y-prevPc.center.y;
-                    const mag=Math.max(1,Math.hypot(dx,dy));
-                    const ampX=Math.min(12,cellSize.w*0.1); const ampY=Math.min(12,cellSize.h*0.1);
-                    rX=-dx/mag*ampX; rY=-dy/mag*ampY;
-                  }
-                  setOverlays(prev=>prev.map(o=>o.id===cell.id?{...o,x:pc.center.x,y:pc.center.y,pulse:o.pulse+1,rX,rY}:o));
-                },stepDelay);
+                const stepDelay = baseDelay + stepIndex * perStep;
+                const arriveT = window.setTimeout(() => {
+                  setFxOverlays(prev => prev.map(o =>
+                    o.key === ovKey ? { ...o, x: pc.center.x, y: pc.center.y } : o
+                  ));
+                }, stepDelay);
                 timersRef.current.push(arriveT);
               });
 
-              const finalStepDelay = baseDelay + (pathCenters.length-1)*perStep;
-              const finalBounceDelay = finalStepDelay + stepMs;
-              if(finalBounceDelay>maxFinalDelay) maxFinalDelay=finalBounceDelay;
-              const bounceT = window.setTimeout(()=>{
-                setOverlays(prev=>prev.map(o=>o.id===cell.id?{...o,isFinal:true,pulse:o.pulse+1,rX:0,rY:0}:o));
-                if(navigator.vibrate) navigator.vibrate(10);
-              }, finalBounceDelay);
-              timersRef.current.push(bounceT);
+              // Calculate when animation completes
+              const finalStepDelay = baseDelay + (pathCenters.length - 1) * perStep;
+              const finalDelay = finalStepDelay + stepMs; // Add movement time
+              if(finalDelay > maxFinalDelay) maxFinalDelay = finalDelay;
 
-              const cleanupDelay = finalBounceDelay + 100;
-              const doneT = window.setTimeout(()=>{
-                setOverlays(prev=>prev.filter(o=>o.id!==cell.id));
-                setHiddenCellIds(prev=>prev.filter(id=>id!==cell.id));
+              // Clean up overlay and reveal tile
+              const cleanupDelay = finalDelay + 50;
+              const doneT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
+                setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
               }, cleanupDelay);
               timersRef.current.push(doneT);
             });
@@ -940,7 +957,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     // Stop any ongoing animations
     timersRef.current.forEach(t => window.clearTimeout(t));
     timersRef.current = [];
-    setOverlays([]);
     setFxOverlays([]);
     setHiddenCellIds([]);
     setPreviousGrid([]);
@@ -1210,73 +1226,36 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         <div className="flex-1 h-full overflow-hidden relative">
 
           <div ref={containerRef} className="absolute inset-0 px-2">
-            {/* Falling overlays */}
-            <div className="pointer-events-none absolute inset-0 z-40">
-              <AnimatePresence>
-                {overlays.map(ov => (
-                  <motion.div
-                    key={ov.id}
-                    initial={{ opacity: 0, scale: 0.92, x: ov.x - cellSize.w / 2, y: ov.y - cellSize.h / 2 }}
-                    animate={{ opacity: 1, scale: 1, x: ov.x - cellSize.w / 2, y: ov.y - cellSize.h / 2 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ type: 'tween', duration: FLOOD_STEP_MS / 1000, ease: 'linear' }}
-                    style={{ position: 'absolute', left: 0, top: 0 }}
-                  >
-                    <motion.div
-                      key={ov.pulse}
-                      initial={false}
-                      animate={{ 
-                        // Enhanced squash/stretch on impact for weight
-                        scaleX: ov.isFinal ? 1.05 : 1,
-                        scaleY: ov.isFinal ? 0.95 : 1,
-                        opacity: ov.isFinal ? 1 : 0.96,
-                        rotateZ: ov.isFinal ? 2 : 0
-                      }}
-                      transition={{ 
-                        duration: ov.isFinal ? 0.25 : 0.2, 
-                        ease: ov.isFinal ? "easeOut" : 'easeOut',
-                        type: "tween"
-                      }}
-                      className="flex items-center justify-center relative"
-                      style={{
-                        width: `${cellSize.w}px`,
-                        height: `${cellSize.h}px`,
-                        clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                        background: 'rgba(229,231,235,0.96)',
-                        borderRadius: 8,
-                        boxShadow: ov.isFinal 
-                          ? '0 6px 14px rgba(0,0,0,0.08)' 
-                          : '0 10px 20px rgba(0,0,0,0.12)'
-                      }}
-                    >
-                      {/* Recoil inner wrapper */}
-                      <motion.div
-                        key={`recoil-${ov.pulse}`}
-                        animate={{ x: [0, ov.rX || 0, 0], y: [0, ov.rY || 0, 0] }}
-                        transition={{ type: 'tween', duration: 0.26, ease: [0.2, 0.7, 0.2, 1], times: [0, 0.45, 1] }}
-                        className="flex items-center justify-center w-full h-full"
-                      >
-                        <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{ov.letter}</span>
-                      </motion.div>
-                    </motion.div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-
-            {/* Player-phase FX overlays (move/orbit/gravity) */}
+            {/* FX overlays (gravity/flood/orbit/move) */}
             <div className="pointer-events-none absolute inset-0 z-50">
               <AnimatePresence>
                 {fxOverlays.map(fx => (
                   <motion.div
                     key={fx.key}
                     initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1, rotateZ: 0 }}
-                    animate={fx.kind === 'gravity' ? {
+                    animate={fx.kind === 'flood' ? {
                       x: fx.x - cellSize.w / 2,
                       y: fx.y - cellSize.h / 2,
                       opacity: 1,
-                      scale: 1,
-                      rotateZ: 0
+                      // ==================== FLOOD FEEL (Tunable) ====================
+                      // Lighter bounce for short step-by-step movement
+                      scale: [1, 1, 1.08, 0.96, 1],
+                      // Subtle wobble
+                      rotateZ: [0, 0, 1.5, -0.5, 0]
+                      // ================================================================
+                    } : (fx.kind === 'gravity') ? {
+                      x: fx.x - cellSize.w / 2,
+                      y: fx.y - cellSize.h / 2,
+                      opacity: 1,
+                      // ==================== GRAVITY FEEL (Tunable) ====================
+                      // Bounce on landing: [start, hold, squash, stretch, settle]
+                      // Increase middle values for more bounce
+                      scale: [1, 1, 1.15, 0.92, 1],
+
+                      // Wobble during fall: [start, hold, tilt-right, tilt-left, settle]
+                      // Increase values for more wobble
+                      rotateZ: [0, 0, 3, -1, 0]
+                      // ================================================================
                     } : {
                       x: fx.x - cellSize.w / 2,
                       y: fx.y - cellSize.h / 2,
@@ -1286,9 +1265,32 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       rotateZ: [0, 6, -8, 4, -2, 0]
                     }}
                     exit={{ opacity: 0, scale: 0.8 }}
-                    transition={fx.kind === 'gravity' ? {
-                      duration: 0.2,
-                      ease: 'linear'
+                    transition={fx.kind === 'flood' ? {
+                      // ==================== FLOOD TIMING (Tunable) ====================
+                      // Fixed duration per step (from FLOOD_STEP_MS constant)
+                      duration: FLOOD_STEP_MS / 1000,
+
+                      // Keyframe timing: [start, accel-start, landing, bounce, settle]
+                      times: [0, 0.5, 0.75, 0.9, 1],
+
+                      // Same gravity acceleration curve for weight
+                      ease: [0.5, 2, 0.5, 1]
+                      // ===================================================================
+                    } : (fx.kind === 'gravity') ? {
+                      // ==================== GRAVITY TIMING (Tunable) ====================
+                      // Use calculated duration based on fall distance (automatically set)
+                      duration: fx.duration || 0.18,
+
+                      // Keyframe timing: [start, accel-start, landing, bounce, settle]
+                      // Adjust to change when bounce happens (0-1 range, must match scale/rotateZ length)
+                      times: [0, 0.5, 0.75, 0.9, 1],
+
+                      // Acceleration curve: [x1, y1, x2, y2] cubic bezier
+                      // Strong gravity feel with impact
+                      // More weight: try [0.6, 2, 0.4, 1]
+                      // Less weight: try [0.25, 1, 0.5, 1]
+                      ease: [0.5, 2, 0.5, 1]
+                      // ===================================================================
                     } : {
                       duration: 1.2,
                       times: [0, 0.15, 0.35, 0.55, 0.75, 1],

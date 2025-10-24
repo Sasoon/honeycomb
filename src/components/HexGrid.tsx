@@ -259,7 +259,7 @@ const HexGrid = ({
     if (cell.isAutoClear) {
       bgColor = 'bg-amber-light';
       textColor = 'text-white';
-      extraClasses = 'ring-2 ring-amber-400 animate-pulse';
+      extraClasses = ''; // Solid color, no animation
     } else if (cell.isSelected) {
       // Apply validation feedback colors if a word path is formed (not in placement phase)
       if (!isPlacementPhase) {
@@ -296,7 +296,7 @@ const HexGrid = ({
 
     // Orbit pivot glow (blue) - add on top of selected styling, only during active orbit
     if (cell.isOrbitPivot && isDragging) {
-      extraClasses = `${extraClasses} ring-2 ring-blue-400 shadow-lg shadow-blue-400/50`.trim();
+      extraClasses = `${extraClasses} orbit-pivot-glow`.trim();
     }
 
     return {
