@@ -294,6 +294,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const lockedStepsRef = useRef<number>(0);
   const [isOverCancel, setIsOverCancel] = useState<boolean>(false);
   const isOverCancelRef = useRef<boolean>(false);
+  const orbitDragHandlerRef = useRef<((e: React.MouseEvent | React.TouchEvent) => void) | undefined>(undefined);
   const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Get the store state separately to avoid infinite rerenders
@@ -919,9 +920,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   // Default selection for words
   const handleCellClick = useCallback((cell: HexCell) => {
     if (phase !== 'player') return;
+    if (isDragging) return; // Prevent selection during orbit drag
     haptics.select();
     selectTile(cell.id);
-  }, [phase, selectTile]);
+  }, [phase, selectTile, isDragging]);
 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
   
@@ -1415,23 +1417,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 orderedNeighbors.forEach((n, idx) => neighborIdToPresentIndex.set(n.id, idx));
                 orbitPlanRef.current = { pivotId: pivot.id, slotIndexToCell, cellIdToSlotIndex, orderedNeighbors, neighborIdToPresentIndex, pivotCenter };
 
-                // Determine which neighbor is under pointer → anchor it
-                anchorNeighborIdRef.current = null;
-                {
-                  const startPoint = { x: containerX, y: containerY };
-                  let nearestIdLocal: string | null = null;
-                  let nearestNeighborDist = Infinity;
-                  orderedNeighbors.forEach(n => {
-                    const ctr = centers.get(`${n.position.row},${n.position.col}`);
-                    if (!ctr) return;
-                    const d = Math.hypot(startPoint.x - ctr.x, startPoint.y - ctr.y);
-                    if (d < nearestNeighborDist) { nearestNeighborDist = d; nearestIdLocal = n.id; }
-                  });
-                  const distPivot0 = Math.hypot(startPoint.x - pivotCenter.x, startPoint.y - pivotCenter.y);
-                  if (nearestIdLocal && nearestNeighborDist < distPivot0) {
-                    anchorNeighborIdRef.current = nearestIdLocal;
-                  }
-                }
+                // No anchor - all tiles rotate together
 
                 const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
                   moveE.preventDefault();
@@ -1568,68 +1554,55 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       return;
                     }
 
-                      // Auto-anchored neighbor: keep its letter in place; rotate others
-                      const anchoredId = anchorNeighborIdRef.current;
+                    // All tiles rotate together (no anchoring)
                     const neighborStates = neighbors.map(n => ({
                       cell: n,
-                      letter: n.letter && n.isPlaced ? n.letter : '',
-                        isAnchored: anchoredId === n.id
-                      }));
-                      
-                      // Only rotate letters from non-anchored tiles
-                      const rotatableLetters = neighborStates
-                        .filter(state => !state.isAnchored)
-                      .map(state => state.letter);
+                      letter: n.letter && n.isPlaced ? n.letter : ''
+                    }));
 
-                      console.log('[ORBIT-UI] Rotatable letters to rotate:', rotatableLetters);
+                    // All tiles rotate together
+                      const allLetters = neighborStates.map(state => state.letter);
 
-                      if (rotatableLetters.length < 2) {
-                      toastService.error('Not enough unlocked neighbors to orbit');
-                      
-                      // Clean up orbit drag state properly
-                      setIsDragging(false);
-                      setIsOverCancel(false);
-                      setCurrentDragAngle(0);
-                      setLockedSteps(0);
-                      lockedStepsRef.current = 0;
-                      operationInProgressRef.current = false;
-                      return;
-                    }
+                      console.log('[ORBIT-UI] All letters to rotate:', allLetters);
 
-                    // Store original letter positions for comparison
-                    const originalLetterPositions = new Map<string, string>();
-                    neighborStates.forEach(({ cell, letter }) => {
-                      originalLetterPositions.set(cell.id, letter);
-                    });
+                      if (allLetters.length < 2) {
+                        toastService.error('Not enough neighbors to orbit');
 
-                    // Rotate unlocked letters
-                      let rotatedLetters = [...rotatableLetters];
-                    for (let i = 0; i < steps; i++) {
-                      console.log(`[ORBIT-UI] Applying step ${i + 1}/${steps} ${direction}`);
-                      if (direction === 'cw') {
-                        rotatedLetters = [rotatedLetters[rotatedLetters.length - 1], ...rotatedLetters.slice(0, rotatedLetters.length - 1)];
-                      } else {
-                        rotatedLetters = [...rotatedLetters.slice(1), rotatedLetters[0]];
+                        // Clean up orbit drag state properly
+                        setIsDragging(false);
+                        setIsOverCancel(false);
+                        setCurrentDragAngle(0);
+                        setLockedSteps(0);
+                        lockedStepsRef.current = 0;
+                        operationInProgressRef.current = false;
+                        return;
                       }
-                    }
 
-                    // Distribute rotated letters back to unlocked positions
-                    let rotatedIndex = 0;
-                    const neighborIdToNewLetter = new Map<string, string>();
-                    
-                      neighborStates.forEach(({ cell, isAnchored, letter }) => {
-                        if (isAnchored) {
-                          // Anchored tile keeps its current letter
-                        neighborIdToNewLetter.set(cell.id, letter);
-                          console.log(`[ORBIT-UI] Keeping anchored tile ${cell.id}: ${letter}`);
-                      } else {
-                        // Unlocked tiles get the next rotated letter
-                        const newLetter = rotatedLetters[rotatedIndex];
+                      // Store original letter positions for comparison
+                      const originalLetterPositions = new Map<string, string>();
+                      neighborStates.forEach(({ cell, letter }) => {
+                        originalLetterPositions.set(cell.id, letter);
+                      });
+
+                      // Rotate all letters
+                      let rotatedLetters = [...allLetters];
+                      for (let i = 0; i < steps; i++) {
+                        console.log(`[ORBIT-UI] Applying step ${i + 1}/${steps} ${direction}`);
+                        if (direction === 'cw') {
+                          rotatedLetters = [rotatedLetters[rotatedLetters.length - 1], ...rotatedLetters.slice(0, rotatedLetters.length - 1)];
+                        } else {
+                          rotatedLetters = [...rotatedLetters.slice(1), rotatedLetters[0]];
+                        }
+                      }
+
+                      // Distribute rotated letters back to all positions
+                      const neighborIdToNewLetter = new Map<string, string>();
+
+                      neighborStates.forEach(({ cell }, index) => {
+                        const newLetter = rotatedLetters[index];
                         neighborIdToNewLetter.set(cell.id, newLetter);
-                        console.log(`[ORBIT-UI] Moving ${cell.id}: ${letter} → ${newLetter}`);
-                        rotatedIndex++;
-                      }
-                    });
+                        console.log(`[ORBIT-UI] Moving ${cell.id}: ${allLetters[index]} → ${newLetter}`);
+                      });
 
                     // Check if any tiles actually moved to new positions
                     let actualMovement = false;
@@ -1740,30 +1713,12 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   document.addEventListener('mouseup', handleMouseUpQuick, { passive: true, once: true } as AddEventListenerOptions);
                 }
               };
-              
+
+              // Store handler in ref so it's accessible outside this IIFE
+              orbitDragHandlerRef.current = handleDragStart;
+
               return (
                 <>
-                  {/* Ring interaction: allow drag start anywhere over the ring area */}
-                  {(freeOrbitsAvailable || 0) > 0 && (
-                    <div
-                      onMouseDown={handleDragStart}
-                      onTouchStart={handleDragStart}
-                      className="absolute"
-                      style={{
-                        left: orbitAnchor.x,
-                        top: orbitAnchor.y,
-                        transform: 'translate(-50%, -50%)',
-                        width: `${cellSize.w * 2.2}px`,
-                        height: `${cellSize.w * 2.2}px`,
-                        borderRadius: '50%',
-                        zIndex: 61,
-                        // Invisible interaction layer
-                        background: 'transparent',
-                      }}
-                      title="Drag a ring tile to keep it in place and rotate the others"
-                    />
-                  )}
-
                   {isDragging && (() => {
                     // Compute adjacent tiles from orbit plan
                     const plan = orbitPlanRef.current;
@@ -1783,40 +1738,29 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                         const plan = orbitPlanRef.current;
                         let drawX = center.x - cellSize.w / 2;
                         let drawY = center.y - cellSize.h / 2;
-                        
-                        // Anchored tile stays; others preview rotation
-                        const isAnchored = anchorNeighborIdRef.current === cell.id;
-                        
+
                         // Detect if tile is in original position
                         let isInOriginalPosition = false;
                         const originalX = center.x - cellSize.w / 2;
                         const originalY = center.y - cellSize.h / 2;
-                        
-                        // Only move non-anchored tiles during preview
-                        if (plan && !isAnchored) {
+
+                        // All tiles rotate together
+                        if (plan) {
                           const presentIdx = plan.neighborIdToPresentIndex.get(cell.id);
                           if (presentIdx !== undefined && plan.orderedNeighbors.length > 0) {
-                            // Calculate position among ONLY unlocked tiles
-                            const rotatableNeighbors = plan.orderedNeighbors.filter(n => anchorNeighborIdRef.current !== n.id);
-                            const unlockedPresentIdx = rotatableNeighbors.findIndex(n => n.id === cell.id);
-                            
-                            if (unlockedPresentIdx !== -1) {
-                              const unlockedCount = rotatableNeighbors.length;
-                              const targetUnlockedIdx = ((unlockedPresentIdx + lockedStepsRef.current) % unlockedCount + unlockedCount) % unlockedCount;
-                              const targetCell = rotatableNeighbors[targetUnlockedIdx];
-                              const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
-                              if (targetCtr) {
-                                drawX = targetCtr.x - cellSize.w / 2;
-                                drawY = targetCtr.y - cellSize.h / 2;
-                                
-                                // Check if target position is same as original position
-                                isInOriginalPosition = (Math.abs(drawX - originalX) < 1 && Math.abs(drawY - originalY) < 1);
-                              }
+                            // Calculate target position for all tiles
+                            const numTiles = plan.orderedNeighbors.length;
+                            const targetIdx = ((presentIdx + lockedStepsRef.current) % numTiles + numTiles) % numTiles;
+                            const targetCell = plan.orderedNeighbors[targetIdx];
+                            const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
+                            if (targetCtr) {
+                              drawX = targetCtr.x - cellSize.w / 2;
+                              drawY = targetCtr.y - cellSize.h / 2;
+
+                              // Check if target position is same as original position
+                              isInOriginalPosition = (Math.abs(drawX - originalX) < 1 && Math.abs(drawY - originalY) < 1);
                             }
                           }
-                        } else {
-                          // Anchored tile is always in original position
-                          isInOriginalPosition = true;
                         }
 
                         // Border stroke disabled - no borders on orbiting tiles
@@ -1828,7 +1772,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                             key={`preview-${cell.id}`}
                             className="absolute pointer-events-none"
                             initial={{ x: drawX, y: drawY, scale: 1, opacity: 1 }}
-                            animate={{ x: drawX, y: drawY, scale: isAnchored ? 1.0 : 1.02, opacity: 1 }}
+                            animate={{ x: drawX, y: drawY, scale: 1.02, opacity: 1 }}
                             transition={{ type: 'spring', stiffness: 950, damping: 50, mass: 1.5 }}
                             style={{
                               position: 'absolute',
@@ -1837,17 +1781,19 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                               width: `${cellSize.w}px`,
                               height: `${cellSize.h}px`,
                               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                              background: isAnchored 
-                                ? 'rgba(59,130,246,0.28)' // Blue for anchored tile
-                                : isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)', // Grey for original position
+                              background: isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.28)' : 'rgba(34, 197, 94, 0.32)', // Grey for original position, green for rotating
                               zIndex: 59,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontSize: '1rem',
                               fontWeight: 'bold',
-                              color: isAnchored ? 'rgba(59,130,246,0.95)' : (isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)'),
-                              boxShadow: isOverCancel || isInOriginalPosition ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)' // Grey shadow for original position
+                              color: isOverCancel || isInOriginalPosition ? 'rgba(156, 163, 175, 0.9)' : 'rgba(34, 197, 94, 0.92)',
+                              boxShadow: isOverCancel || isInOriginalPosition ? '0 0 10px rgba(156, 163, 175, 0.25)' : '0 0 10px rgba(34, 197, 94, 0.3)',
+                              userSelect: 'none',
+                              WebkitUserSelect: 'none',
+                              MozUserSelect: 'none',
+                              msUserSelect: 'none'
                             }}
                           >
                             {/* SVG hexagonal border overlay - DISABLED */}
@@ -1891,6 +1837,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               <HexGrid
                 cells={grid.map(c => {
                   const isSelected = selectedTiles.some(t => t.cellId === c.id);
+                  // Check if this cell can be an orbit pivot (for attaching drag handlers)
+                  const isOrbitPivot = selectedTiles.length === 1 && selectedTiles[0].cellId === c.id && (freeOrbitsAvailable || 0) > 0;
                   // Check if this cell is part of the current auto-clear word and should be highlighted
                   let isAutoClear = false;
                   if (phase === 'autoClearing' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
@@ -1898,9 +1846,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     const cellIndex = currentAutoClearWord.cellIds.indexOf(c.id);
                     isAutoClear = cellIndex >= 0 && cellIndex <= autoClearLetterIndex;
                   }
-                  return { ...c, isSelected, isAutoClear };
+                  return { ...c, isSelected, isAutoClear, isOrbitPivot };
                 })}
                 onCellClick={handleCellClick}
+                onPivotDragStart={orbitDragHandlerRef.current}
+                isDragging={isDragging}
                 isWordValid={validationState}
                 isPlacementPhase={phase === 'player' ? !hasSelection : true}
                 isWordAlreadyScored={false}
@@ -1911,7 +1861,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 isSettling={isSettling}
                 hiddenLetterCellIds={[
                   ...hiddenCellIds,
-                  ...(isDragging && selectedSingle ? 
+                  ...(isDragging && selectedSingle ?
                     grid.filter(c => c.id !== selectedSingle.cellId && areCellsAdjacent(c, grid.find(g => g.id === selectedSingle.cellId)!) && c.letter && c.isPlaced)
                       .map(c => c.id) : []
                   )

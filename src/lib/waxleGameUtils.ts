@@ -735,8 +735,8 @@ export async function findValidWordsInLines(
                     const word = subsequence.map(cell => cell.letter).join('');
                     const cellIds = subsequence.map(cell => cell.id);
 
-                    // Create unique key for this word+position combination
-                    const key = cellIds.sort().join(',');
+                    // Create unique key for this word+position combination (use sorted copy for deduplication)
+                    const key = [...cellIds].sort().join(',');
 
                     // Skip if we've already found this exact combination
                     if (seenWordCombinations.has(key)) continue;
@@ -748,6 +748,11 @@ export async function findValidWordsInLines(
                         console.log(`[AUTO-CLEAR SCAN] Found "${word}" at positions:`, subsequence.map(c => `(${c.position.row},${c.position.col})`).join(' -> '));
                         foundWords.push({ word, cellIds });
                         seenWordCombinations.add(key);
+                    } else {
+                        // Log invalid words for debugging
+                        if (word.length >= 3) {
+                            console.log(`[AUTO-CLEAR SCAN] Rejected "${word}" - not in dictionary`);
+                        }
                     }
                 }
             }

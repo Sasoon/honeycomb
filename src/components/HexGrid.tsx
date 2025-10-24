@@ -19,6 +19,7 @@ export type HexCell = {
   isDoubleScore: boolean;
   placedThisTurn?: boolean;
   isAutoClear?: boolean;
+  isOrbitPivot?: boolean;
 };
 
 export interface HexGridProps {
@@ -35,6 +36,8 @@ export interface HexGridProps {
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
   enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
   isSettling?: boolean; // When true, tiles ease-out settle on new game
+  onPivotDragStart?: (e: React.MouseEvent | React.TouchEvent) => void; // Orbit drag handlers for pivot tile only
+  isDragging?: boolean; // Whether an orbit drag is currently active
 }
 
 
@@ -46,7 +49,7 @@ const CellView = memo(function CellView({
   showLetter,
   // showBorder, // Disabled - borders removed from selected tiles
   // borderColor, // Disabled - borders removed from selected tiles
-  // drag handlers removed
+  onDragStart,
   enableLayout = true,
   isSettling,
 }: {
@@ -57,13 +60,20 @@ const CellView = memo(function CellView({
   showLetter: boolean;
   // showBorder?: boolean; // Disabled - borders removed from selected tiles
   // borderColor?: string; // Disabled - borders removed from selected tiles
-  // drag handlers removed
+  onDragStart?: (e: React.MouseEvent | React.TouchEvent) => void;
   enableLayout?: boolean;
   isSettling?: boolean;
 }) {
   const layoutProps = enableLayout ? { layout: true } : {};
   const settleDelay = ((cell.position.row * 5 + cell.position.col * 2) % 7) * 0.02;
   const applySettle = !!isSettling;
+
+  // Only attach drag handlers if cell is orbit pivot
+  const dragHandlers = cell.isOrbitPivot && onDragStart ? {
+    onMouseDown: onDragStart,
+    onTouchStart: onDragStart,
+  } : {};
+
   return (
     <motion.div
       key={cell.id}
@@ -74,7 +84,7 @@ const CellView = memo(function CellView({
       data-placed-this-turn={cell.placedThisTurn ? 'true' : 'false'}
       className={`hex-grid__item ${containerClass} ${applySettle ? 'settle-tile' : ''}`}
       onClick={() => onClick(cell)}
-      // drag handlers removed
+      {...dragHandlers}
       {...layoutProps}
       style={{ position: 'relative', ...(applySettle ? { animationDelay: `${settleDelay}s` } : {}) }}
     >
@@ -122,6 +132,8 @@ const HexGrid = ({
   hiddenLetterCellIds = [],
   enableLayout = true,
   isSettling = false,
+  onPivotDragStart,
+  isDragging = false,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
   
@@ -243,7 +255,7 @@ const HexGrid = ({
     const isAnimatingPlacement = justPlacedIds.has(cell.id);
     const hasFinishedAnimation = animationCompletedIds.has(cell.id);
 
-    // Auto-clear highlighting (orange/amber)
+    // Auto-clear highlighting (orange/amber) - takes priority
     if (cell.isAutoClear) {
       bgColor = 'bg-amber-light';
       textColor = 'text-white';
@@ -280,6 +292,11 @@ const HexGrid = ({
           // borderColor = 'var(--color-2)';
         }
       }
+    }
+
+    // Orbit pivot glow (blue) - add on top of selected styling, only during active orbit
+    if (cell.isOrbitPivot && isDragging) {
+      extraClasses = `${extraClasses} ring-2 ring-blue-400 shadow-lg shadow-blue-400/50`.trim();
     }
 
     return {
@@ -324,9 +341,9 @@ const HexGrid = ({
                     showLetter={showLetter}
                     enableLayout={enableLayout}
                     isSettling={isSettling}
+                    onDragStart={onPivotDragStart}
                     // showBorder={styles.showBorder} // Disabled - borders removed
                     // borderColor={styles.borderColor} // Disabled - borders removed
-                    // drag handlers removed
                   />
                 </div>
               );
@@ -347,7 +364,12 @@ const HexGrid = ({
       
       
       <style>{`
-        .letter-tile { user-select:none; -webkit-user-select:none; }
+        .letter-tile {
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+        }
 
         @keyframes ghost-drop {
           0% { transform: scale(0.9); opacity: 0.8; }
