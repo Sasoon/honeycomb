@@ -24,6 +24,7 @@ import toastService from '../lib/toastService';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
 import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
 import GameControls from '../components/GameControls';
+import OrbitControls from '../components/OrbitControls';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
 // Flood animation timing constants
@@ -286,7 +287,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     // Pivot center from DOM for positioning
     pivotCenter: { x: number; y: number };
   } | null>(null);
-  const anchorNeighborIdRef = useRef<string | null>(null);
   const [, setLockedSteps] = useState<number>(0); // magnetic snapped steps (value stored in ref)
   const lockedStepsRef = useRef<number>(0);
   const [isOverCancel, setIsOverCancel] = useState<boolean>(false);
@@ -953,7 +953,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       console.warn('Restart blocked: Daily challenge cannot be restarted');
       return;
     }
-    
+
     // Stop any ongoing animations
     timersRef.current.forEach(t => window.clearTimeout(t));
     timersRef.current = [];
@@ -966,9 +966,129 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     setIsSettling(true);
     window.setTimeout(() => setIsSettling(false), 700);
   };
-  
 
   const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
+
+  // Calculate neighbors for orbit controls
+  const orbitNeighbors = useMemo(() => {
+    if (!selectedSingle) return [];
+    const pivot = grid.find(c => c.id === selectedSingle.cellId);
+    if (!pivot) return [];
+    return grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced);
+  }, [selectedSingle, grid]);
+
+  // Button-based orbit rotation handler
+  const handleButtonOrbit = useCallback((direction: 'cw' | 'ccw') => {
+    if (!selectedSingle || operationInProgressRef.current) return;
+    if (!freeOrbitsAvailable || freeOrbitsAvailable <= 0) return;
+
+    const pivot = grid.find(c => c.id === selectedSingle.cellId);
+    if (!pivot) return;
+
+    const neighbors = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced);
+    if (neighbors.length < 2) {
+      toastService.error('Not enough tiles to orbit');
+      return;
+    }
+
+    operationInProgressRef.current = true;
+    haptics.tick();
+
+    // Get container and centers for positioning
+    const container = containerRef.current;
+    if (!container) {
+      operationInProgressRef.current = false;
+      return;
+    }
+    const centers = mapCenters(container as HTMLElement);
+    const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
+    if (!pivotCenter) {
+      operationInProgressRef.current = false;
+      return;
+    }
+
+    // Order neighbors by angle around pivot
+    const neighborsWithAngles = neighbors.map(cell => {
+      const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
+      if (!ctr) return null;
+      const angle = Math.atan2(ctr.y - pivotCenter.y, ctr.x - pivotCenter.x);
+      const norm = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      return { cell, angle: norm };
+    }).filter(Boolean) as Array<{ cell: HexCell; angle: number }>;
+
+    neighborsWithAngles.sort((a, b) => a.angle - b.angle);
+    const orderedNeighbors = neighborsWithAngles.map(n => n.cell);
+
+    // Extract letters
+    const letters = orderedNeighbors.map(n => n.letter || '');
+
+    // Rotate letters
+    let rotatedLetters: string[];
+    if (direction === 'cw') {
+      rotatedLetters = [letters[letters.length - 1], ...letters.slice(0, letters.length - 1)];
+    } else {
+      rotatedLetters = [...letters.slice(1), letters[0]];
+    }
+
+    // Check if any actual movement
+    let actualMovement = false;
+    for (let i = 0; i < letters.length; i++) {
+      if (letters[i] !== rotatedLetters[i]) {
+        actualMovement = true;
+        break;
+      }
+    }
+
+    if (!actualMovement) {
+      toastService.error('No tiles moved');
+      operationInProgressRef.current = false;
+      return;
+    }
+
+    // Build new grid
+    const neighborIdToNewLetter = new Map<string, string>();
+    orderedNeighbors.forEach((cell, idx) => {
+      neighborIdToNewLetter.set(cell.id, rotatedLetters[idx]);
+    });
+
+    const storeState = useWaxleGameStore.getState();
+    let currentGrid = storeState.isDailyChallenge ? storeState.dailyGameState.grid : storeState.classicGameState.grid;
+
+    currentGrid = currentGrid.map(cell => {
+      const newLetter = neighborIdToNewLetter.get(cell.id);
+      if (newLetter !== undefined) {
+        return { ...cell, letter: newLetter, isPlaced: newLetter !== '' };
+      }
+      return cell;
+    });
+
+    // Push history and apply orbit
+    const { pushToHistory } = useWaxleGameStore.getState();
+    pushToHistory('orbit');
+
+    const newOrbitsAvailable = Math.max(0, (currentGameState.freeOrbitsAvailable || 0) - 1);
+    orbitPivot(currentGrid);
+
+    const { updateCurrentGameState } = useWaxleGameStore.getState();
+    updateCurrentGameState({
+      selectedTiles: [],
+      currentWord: '',
+      freeOrbitsAvailable: newOrbitsAvailable
+    });
+
+    toastService.success(`Orbit used (${newOrbitsAvailable} remaining)`);
+    haptics.success();
+    operationInProgressRef.current = false;
+  }, [selectedSingle, grid, freeOrbitsAvailable, currentGameState, orbitPivot]);
+
+  const handleOrbitCancel = useCallback(() => {
+    setIsDragging(false);
+    setIsOverCancel(false);
+    isOverCancelRef.current = false;
+    setCurrentDragAngle(0);
+    setLockedSteps(0);
+    lockedStepsRef.current = 0;
+  }, []);
 
   return (
     <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-[height,padding] duration-300 ease-in-out relative">
@@ -1811,6 +1931,23 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               );
             })()}
 
+            {/* Mobile-First Orbit Controls - Rotation Buttons */}
+            {phase === 'player' && (
+              <OrbitControls
+                isVisible={!!selectedSingle && orbitNeighbors.length >= 2}
+                orbitsAvailable={freeOrbitsAvailable || 0}
+                neighborCount={orbitNeighbors.length}
+                lockedSteps={lockedStepsRef.current}
+                isOverCancel={isOverCancel}
+                anchorPosition={orbitAnchor}
+                cellSize={cellSize}
+                onRotateCW={() => handleButtonOrbit('cw')}
+                onRotateCCW={() => handleButtonOrbit('ccw')}
+                onCancel={handleOrbitCancel}
+                onConfirm={() => {}}
+                isDragging={isDragging}
+              />
+            )}
 
             {/* Grid and UI Buttons container */}
             <div 
