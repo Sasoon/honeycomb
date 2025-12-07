@@ -1338,14 +1338,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
 
             {phase === 'player' && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && (() => {
-              // Horizontal swipe orbit controls
+              // Vertical swipe orbit controls
               const container = containerRef.current;
               if (!container) return null;
               const centers = mapCenters(container as HTMLElement);
 
-              // Horizontal swipe settings
-              const SWIPE_THRESHOLD = 50; // pixels per rotation step
-              const CANCEL_RADIUS = 30; // pixels - return to center to cancel
+              // Vertical swipe settings
+              const SWIPE_THRESHOLD = 40; // pixels per rotation step (less for vertical)
+              const CANCEL_RADIUS = 25; // pixels - return to center to cancel
 
               const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
                 if (!freeOrbitsAvailable || freeOrbitsAvailable <= 0) return;
@@ -1373,8 +1373,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 setIsDragging(true);
 
                 const rect = container.getBoundingClientRect();
-                const startClientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-                const startX = startClientX - rect.left;
+                const startClientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+                const startY = startClientY - rect.top;
 
                 // Build orbit plan - order neighbors by angle
                 const slotIndexToCell: (HexCell | null)[] = new Array(6).fill(null);
@@ -1399,22 +1399,22 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
                 const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
                   moveE.preventDefault();
-                  const moveClientX = 'touches' in moveE ? moveE.touches[0].clientX : (moveE as MouseEvent).clientX;
-                  const currentX = moveClientX - rect.left;
+                  const moveClientY = 'touches' in moveE ? moveE.touches[0].clientY : (moveE as MouseEvent).clientY;
+                  const currentY = moveClientY - rect.top;
 
-                  // Calculate horizontal delta
-                  const deltaX = currentX - startX;
+                  // Calculate vertical delta
+                  const deltaY = currentY - startY;
 
                   // Check if in cancel zone (returned to start)
-                  const inCancelZone = Math.abs(deltaX) < CANCEL_RADIUS;
+                  const inCancelZone = Math.abs(deltaY) < CANCEL_RADIUS;
                   if (inCancelZone !== isOverCancelRef.current) {
                     isOverCancelRef.current = inCancelZone;
                     setIsOverCancel(inCancelZone);
                   }
 
-                  // Calculate rotation steps from horizontal swipe
-                  // Positive deltaX = swipe right = clockwise
-                  const newSteps = Math.round(deltaX / SWIPE_THRESHOLD);
+                  // Calculate rotation steps from vertical swipe
+                  // Positive deltaY = swipe down = clockwise
+                  const newSteps = Math.round(deltaY / SWIPE_THRESHOLD);
 
                   if (newSteps !== currentSteps) {
                     // Haptic feedback on step change
@@ -1427,7 +1427,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   }
 
                   // Update drag angle for visual feedback
-                  setCurrentDragAngle(deltaX / SWIPE_THRESHOLD * (Math.PI / 3));
+                  setCurrentDragAngle(deltaY / SWIPE_THRESHOLD * (Math.PI / 3));
                 };
 
                 const handleDragEnd = (endE: MouseEvent | TouchEvent) => {
