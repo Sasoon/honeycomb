@@ -18,24 +18,22 @@ const HowToPlay = () => {
         <h2 className="text-xl font-semibold mb-4 text-text-primary">Game Mechanics</h2>
         
         <div className="space-y-8">
-          {/* Orbit Mechanic */}
+          {/* Swap Mechanic */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
             <div>
               <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
                 <Zap className="w-5 h-5 text-amber mr-2" />
-                Orbit System
+                Swap System
               </h3>
               <div className="space-y-2 text-text-secondary">
-                <p>Select a tile as a pivot point, click the orbit icon then drag in a circular motion to rotate surrounding tiles. To cancel an active orbit, hover over the orbit icon and release or drag the tiles back to their original position.</p>
+                <p>When you have swaps available, click any placed tile to select it (it will glow green), then click another placed tile to swap their letters. Click the same tile again to cancel.</p>
+                <p className="text-sm">Swaps trigger gravity - tiles will settle after swapping!</p>
               </div>
             </div>
-            <div className="bg-secondary/10 rounded-lg p-2 text-center">
-              <img 
-                src="/tutorial/orbit-demo.gif" 
-                alt="Real gameplay demonstration showing tiles orbiting around a selected pivot point"
-                className="max-h-60 mx-auto rounded border border-secondary/20"
-                style={{ objectFit: 'contain' }}
-              />
+            <div className="bg-secondary/10 rounded-lg p-2 text-center flex items-center justify-center min-h-[15rem]">
+              <div className="text-text-secondary italic">
+                Swap any two tiles to create new word opportunities
+              </div>
             </div>
           </div>
         </div>
@@ -53,11 +51,11 @@ const HowToPlay = () => {
           </p>
           <div className="bg-bg-primary/50 rounded p-4 space-y-2">
             <p><span className="font-semibold text-amber-500">✓</span> All valid 3+ letter words found on any axis are automatically cleared!</p>
-            <p><span className="font-semibold text-amber-500">✓</span> Each auto-cleared word grants <span className="font-semibold text-text-primary">+1 orbit</span></p>
+            <p><span className="font-semibold text-amber-500">✓</span> Each auto-cleared word grants <span className="font-semibold text-text-primary">+1 swap</span></p>
             <p><span className="font-semibold text-amber-500">✓</span> Words clear sequentially with gravity between each</p>
             <p><span className="font-semibold text-amber-500">✓</span> Highlighted in <span className="text-amber-500 font-semibold">orange</span> as they clear</p>
           </div>
-          <p className="text-sm italic">This reward system encourages strategic placement and helps you accumulate orbits for tough situations!</p>
+          <p className="text-sm italic">This reward system encourages strategic placement and helps you accumulate swaps for tough situations!</p>
         </div>
       </div>
 
@@ -103,9 +101,9 @@ const HowToPlay = () => {
             <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
               <li>• Plan ahead - look at the next tile preview</li>
-              <li>• Every orbit triggers gravity - tiles settle immediately!</li>
-              <li>• You start with 1 orbit and orbits accumulate across rounds</li>
-              <li>• Auto-clears grant bonus orbits - create axis-aligned words!</li>
+              <li>• Every swap triggers gravity - tiles settle immediately!</li>
+              <li>• You start with 1 swap and swaps accumulate across rounds</li>
+              <li>• Auto-clears grant bonus swaps - create axis-aligned words!</li>
               <li>• Focus on clearing the top of the board</li>
             </ul>
           </div>

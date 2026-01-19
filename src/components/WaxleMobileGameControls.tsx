@@ -14,7 +14,7 @@ type WaxleMobileGameControlsProps = {
   wordsThisRound: number;
   wordsThisRoundList: string[];
   currentWord: string;
-  freeOrbitsAvailable: number;
+  freeSwapsAvailable: number;
   nextRows: string[][];
   previewLevel: number;
   isWordValid?: boolean;
@@ -28,7 +28,7 @@ const WaxleMobileGameControls = ({
   wordsThisRound,
   wordsThisRoundList,
   currentWord,
-  freeOrbitsAvailable,
+  freeSwapsAvailable,
   nextRows,
   previewLevel,
   isWordValid,
@@ -120,15 +120,15 @@ const WaxleMobileGameControls = ({
                 </span>
                 <span className="w-1 h-1 bg-secondary/40 rounded-full" />
                 <div className="flex items-center space-x-1 text-text-secondary">
-                  <DynamicZapIcon 
-                    orbitsAvailable={freeOrbitsAvailable || 0}
-                    maxOrbits={2}
+                  <DynamicZapIcon
+                    swapsAvailable={freeSwapsAvailable || 0}
+                    maxSwaps={2}
                     size={12}
                     className="flex-shrink-0"
                     animationDelay={400}
                   />
                   <span className="text-xs">
-                    {freeOrbitsAvailable || 0} {(freeOrbitsAvailable || 0) === 1 ? 'Orbit' : 'Orbits'}
+                    {freeSwapsAvailable || 0} {(freeSwapsAvailable || 0) === 1 ? 'Swap' : 'Swaps'}
                   </span>
                 </div>
               </div>
@@ -168,7 +168,7 @@ const WaxleMobileGameControls = ({
                   animationDelay={400}
                 />
                 <span className="text-xs">
-                  {freeOrbitsAvailable || 0}
+                  {freeSwapsAvailable || 0}
                 </span>
               </div>
             </div>

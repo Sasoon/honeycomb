@@ -4,30 +4,30 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 
 interface DynamicZapIconProps {
-  orbitsAvailable: number;
-  maxOrbits?: number;
+  swapsAvailable: number;
+  maxSwaps?: number;
   size?: number;
   className?: string;
-  animationDelay?: number; // Delay in ms before starting orbit animation
+  animationDelay?: number; // Delay in ms before starting swap animation
 }
 
-export const DynamicZapIcon = ({ 
-  orbitsAvailable, 
-  maxOrbits = 2, 
+export const DynamicZapIcon = ({
+  swapsAvailable,
+  maxSwaps = 2, 
   size = 20,
   className,
   animationDelay = 0
 }: DynamicZapIconProps) => {
-  const [previousOrbits, setPreviousOrbits] = useState(orbitsAvailable);
+  const [previousSwaps, setPreviousOrbits] = useState(swapsAvailable);
   const [isRecharging, setIsRecharging] = useState(false);
   const [showEmptyState, setShowEmptyState] = useState(false);
-  const [animatedFillPercentage, setAnimatedFillPercentage] = useState((orbitsAvailable / maxOrbits) * 100);
+  const [animatedFillPercentage, setAnimatedFillPercentage] = useState((swapsAvailable / maxSwaps) * 100);
 
-  // Detect orbit recharge for power-up animation
+  // Detect swap recharge for power-up animation
   useEffect(() => {
-    if (orbitsAvailable > previousOrbits) {
-      // If coming from 0 orbits, show empty state briefly before power-up
-      if (previousOrbits === 0 && orbitsAvailable === 2) {
+    if (swapsAvailable > previousSwaps) {
+      // If coming from 0 swaps, show empty state briefly before power-up
+      if (previousSwaps === 0 && swapsAvailable === 2) {
         setShowEmptyState(true);
         setAnimatedFillPercentage(0);
         setTimeout(() => {
@@ -56,8 +56,8 @@ export const DynamicZapIcon = ({
           setIsRecharging(true);
           
           // Animate fill from current to target over 800ms
-          const startFill = (previousOrbits / maxOrbits) * 100;
-          const targetFill = (orbitsAvailable / maxOrbits) * 100;
+          const startFill = (previousSwaps / maxSwaps) * 100;
+          const targetFill = (swapsAvailable / maxSwaps) * 100;
           const startTime = Date.now();
           
           const animateFill = () => {
@@ -76,15 +76,15 @@ export const DynamicZapIcon = ({
         }, animationDelay);
       }
     }
-    setPreviousOrbits(orbitsAvailable);
-  }, [orbitsAvailable, previousOrbits, animationDelay]);
+    setPreviousOrbits(swapsAvailable);
+  }, [swapsAvailable, previousSwaps, animationDelay]);
 
-  // Calculate fill percentage - use animated value during recharge, or current orbits otherwise
-  const effectiveOrbits = showEmptyState ? 0 : orbitsAvailable;
-  const fillPercentage = isRecharging ? animatedFillPercentage : Math.max(0, Math.min(100, (effectiveOrbits / maxOrbits) * 100));
+  // Calculate fill percentage - use animated value during recharge, or current swaps otherwise
+  const effectiveSwaps = showEmptyState ? 0 : swapsAvailable;
+  const fillPercentage = isRecharging ? animatedFillPercentage : Math.max(0, Math.min(100, (effectiveSwaps / maxSwaps) * 100));
 
-  // Use ZapOff for 0 orbits (and not in empty state), Zap for any orbits or during empty state
-  const IconComponent = orbitsAvailable === 0 && !showEmptyState ? ZapOff : Zap;
+  // Use ZapOff for 0 swaps (and not in empty state), Zap for any swaps or during empty state
+  const IconComponent = swapsAvailable === 0 && !showEmptyState ? ZapOff : Zap;
 
   return (
     <div className={cn("relative inline-block", className)}>
@@ -159,8 +159,8 @@ export const DynamicZapIcon = ({
               size={size}
               className="stroke-[1] fill-none transition-[stroke,fill] duration-300 text-amber"
               style={{
-                opacity: (orbitsAvailable === 0 && !showEmptyState) ? 0.4 : 1,
-                color: (orbitsAvailable === 0 && !showEmptyState) ? '#6B7280' : '#F59E0B' // gray-500 or amber
+                opacity: (swapsAvailable === 0 && !showEmptyState) ? 0.4 : 1,
+                color: (swapsAvailable === 0 && !showEmptyState) ? '#6B7280' : '#F59E0B' // gray-500 or amber
               }}
             />
             
