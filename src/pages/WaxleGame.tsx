@@ -136,7 +136,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     longestWord,
     nextRows,
     previewLevel,
-    freeOrbitsAvailable,
+    freeSwapsAvailable,
     gridSize,
     gravityMoves,
     gravitySource,
@@ -154,7 +154,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     initializeGame,
     selectTile,
     submitWord,
-    orbitPivot,
+    swapTiles,
     undoLastAction,
     canUndo,
     endRound,
@@ -306,8 +306,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     } else if (gravitySource === 'wordSubmit') {
                         // Player word submit: trigger flood
                         endRound();
-                    } else if (gravitySource === 'orbit') {
-                        // Orbit gravity: return to player phase
+                    } else if (gravitySource === 'swap') {
+                        // Swap gravity: return to player phase
                         startPlayerPhase();
                     }
                 }, GRAVITY_SHORT_DELAY_MS);
@@ -802,7 +802,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 wordsThisRound={wordsThisRound.length}
                 wordsThisRoundList={wordsThisRound}
                 currentWord={currentWord}
-                freeOrbitsAvailable={freeOrbitsAvailable || 0}
+                freeSwapsAvailable={freeSwapsAvailable || 0}
                 nextRows={nextRows}
                 previewLevel={previewLevel}
                 isWordValid={validationState === true}
@@ -892,17 +892,17 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   "rounded-xl p-4 text-center"
                 )}>
                   <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
-                    <DynamicZapIcon 
-                      orbitsAvailable={freeOrbitsAvailable || 0}
-                      maxOrbits={2}
+                    <DynamicZapIcon
+                      swapsAvailable={freeSwapsAvailable || 0}
+                      maxSwaps={2}
                       size={20}
                       className="flex-shrink-0"
                       animationDelay={400}
                     />
-                    <span>{freeOrbitsAvailable || 0}</span>
+                    <span>{freeSwapsAvailable || 0}</span>
                   </div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">
-                    {(freeOrbitsAvailable || 0) === 1 ? 'Orbit' : 'Orbits'}
+                    {(freeSwapsAvailable || 0) === 1 ? 'Swap' : 'Swaps'}
                   </div>
                 </div>
               </div>

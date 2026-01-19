@@ -32,7 +32,7 @@ interface GameModeState {
     floodPaths?: Record<string, { path: string[]; batch: number }>;
     tilesHiddenForAnimation?: string[];
     freeMoveAvailable?: boolean;
-    freeOrbitsAvailable?: number;
+    freeSwapsAvailable?: number;
     nextRows: string[][];
     tilesPerDrop: number;
     dropSpeed: number;
@@ -59,10 +59,10 @@ interface GameModeState {
     seededRNG?: SeededRNG;
     // Action history for undo functionality
     actionHistory: Array<{
-        type: 'orbit' | 'word_submit';
+        type: 'swap' | 'word_submit';
         previousState: {
             grid: HexCell[];
-            freeOrbitsAvailable?: number;
+            freeSwapsAvailable?: number;
             score: number;
             wordsThisRound: string[];
             selectedTiles: SelectedTile[];
@@ -116,14 +116,14 @@ interface WaxleGameState {
 
     // New minimal actions for one-action-per-turn
     moveTileOneStep: (sourceCellId: string, targetCellId: string) => void;
-    orbitPivot: (newGrid: HexCell[]) => void;
+    swapTiles: (tile1Id: string, tile2Id: string) => void;
 
     // Auto-clear functionality
     processNextAutoClearWord: () => void;
     findAndStartNextAutoClear: () => Promise<void>;
 
     // Undo functionality
-    pushToHistory: (actionType: 'orbit' | 'word_submit') => void;
+    pushToHistory: (actionType: 'swap' | 'word_submit') => void;
     undoLastAction: () => void;
     canUndo: () => boolean;
     clearActionHistory: () => void;
@@ -163,7 +163,7 @@ const initialState: Omit<WaxleGameState,
     'getCurrentGameState' | 'updateCurrentGameState' | 'addTimeout' | 'clearAllTimeouts' |
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
-    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'orbitPivot' |
+    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'swapTiles' |
     'processNextAutoClearWord' | 'findAndStartNextAutoClear' | 'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
 > = {
     classicGameState: { ...initialGameModeState },
@@ -260,7 +260,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         currentWord: '',
                         wordsThisRound: [],
                         freeMoveAvailable: false,
-                        freeOrbitsAvailable: 1,
+                        freeSwapsAvailable: 1,
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
@@ -308,7 +308,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         currentWord: '',
                         wordsThisRound: [],
                         freeMoveAvailable: false,
-                        freeOrbitsAvailable: 1,
+                        freeSwapsAvailable: 1,
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
@@ -348,7 +348,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     selectedTiles: [],
                     currentWord: '',
                     freeMoveAvailable: false,
-                    // Don't reset freeOrbitsAvailable - orbits accumulate across rounds
+                    // Don't reset freeSwapsAvailable - swaps accumulate across rounds
                     tilesHiddenForAnimation: [],
                     justScoredWord: false, // Reset flag at start of each new turn
                 });
@@ -382,7 +382,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Round 2-4: 3 tiles (default, Round 1 has no flood)
 
                 // Generate flood tiles for this round
-                const rewardCreative = (!state.freeMoveAvailable) || ((state.freeOrbitsAvailable || 0) <= 0);
+                const rewardCreative = (!state.freeMoveAvailable) || ((state.freeSwapsAvailable || 0) <= 0);
                 const rng = state.seededRNG && typeof (state.seededRNG as any).next === 'function' ? state.seededRNG : undefined;
                 const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative, rng);
 
@@ -680,14 +680,32 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 return;
             },
 
-            // Apply gravity after orbit completes (called from WaxleGame.tsx after letter rotation)
-            orbitPivot: (newGrid: HexCell[]) => {
+            // Swap two tiles and apply gravity
+            swapTiles: (tile1Id: string, tile2Id: string) => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
                 if (state.phase !== 'player') {
                     return;
                 }
+
+                // Find the two tiles
+                const tile1 = state.grid.find(c => c.id === tile1Id);
+                const tile2 = state.grid.find(c => c.id === tile2Id);
+
+                if (!tile1 || !tile2) {
+                    return;
+                }
+
+                // Create new grid with swapped letters
+                const newGrid = state.grid.map(cell => {
+                    if (cell.id === tile1Id) {
+                        return { ...cell, letter: tile2.letter, isPlaced: tile2.isPlaced };
+                    } else if (cell.id === tile2Id) {
+                        return { ...cell, letter: tile1.letter, isPlaced: tile1.isPlaced };
+                    }
+                    return { ...cell };
+                });
 
                 // Apply gravity to the new grid
                 const { newGrid: settledGrid, moveSources } = clearTilesAndApplyGravity(newGrid, []);
@@ -703,7 +721,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     updateCurrentGameState({
                         grid: settledGrid,
                         gravityMoves: gravityMoves,
-                        gravitySource: 'orbit', // Mark this as orbit-triggered gravity
+                        gravitySource: 'swap', // Mark this as swap-triggered gravity
                         phase: 'gravitySettle'
                     });
                 } else {
@@ -741,8 +759,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Clear the current word's tiles and apply gravity
                 const { newGrid, moveSources } = clearTilesAndApplyGravity(state.grid, currentWord.cellIds);
 
-                // Grant +1 orbit for this auto-clear word
-                const newOrbitsAvailable = (state.freeOrbitsAvailable || 0) + 1;
+                // Grant +1 swap for this auto-clear word
+                const newSwapsAvailable = (state.freeSwapsAvailable || 0) + 1;
 
                 // Add word to wordsThisRound
                 const updatedWordsThisRound = [...state.wordsThisRound, currentWord.word];
@@ -756,7 +774,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     currentAutoClearWord: undefined,
                     autoClearPhase: undefined,
                     autoClearLetterIndex: undefined,
-                    freeOrbitsAvailable: newOrbitsAvailable,
+                    freeSwapsAvailable: newSwapsAvailable,
                     wordsThisRound: updatedWordsThisRound,
                 });
 
@@ -803,14 +821,14 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             // Undo functionality
-            pushToHistory: (actionType: 'orbit' | 'word_submit') => {
+            pushToHistory: (actionType: 'swap' | 'word_submit') => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
                 // Create snapshot of current state
                 const snapshot = {
                     grid: [...state.grid],
-                    freeOrbitsAvailable: state.freeOrbitsAvailable,
+                    freeSwapsAvailable: state.freeSwapsAvailable,
                     score: state.score,
                     wordsThisRound: [...state.wordsThisRound],
                     selectedTiles: [...state.selectedTiles],
@@ -849,7 +867,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Restore the previous state
                 updateCurrentGameState({
                     grid: lastAction.previousState.grid,
-                    freeOrbitsAvailable: lastAction.previousState.freeOrbitsAvailable,
+                    freeSwapsAvailable: lastAction.previousState.freeSwapsAvailable,
                     score: lastAction.previousState.score,
                     wordsThisRound: lastAction.previousState.wordsThisRound,
                     selectedTiles: lastAction.previousState.selectedTiles,
