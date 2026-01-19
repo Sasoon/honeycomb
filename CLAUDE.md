@@ -4,21 +4,22 @@
 
 ### Pull Requests & Merging
 
-**IMPORTANT**: All changes made by Claude should be automatically merged to main without asking for permission.
+**IMPORTANT**: All changes made by Claude should be automatically pushed and merged to main without asking for permission.
 
 #### Workflow Steps:
 1. **Create feature branch** - Always develop on a branch matching `claude/*` pattern
 2. **Commit changes** - Make clear, descriptive commits
 3. **Push to remote** - Push the feature branch to origin
-4. **Auto-merge** - Automatically create and merge the PR to main using GitHub CLI
+4. **Auto-merge happens automatically** - GitHub repository is configured to auto-merge PRs
 
-#### Auto-merge Command:
+#### Push Command:
 ```bash
-gh pr create --title "..." --body "..." --base main
-gh pr merge --squash --delete-branch
+git push -u origin claude/<branch-name>
 ```
 
-**DO NOT** wait for user approval to merge PRs. Merge them immediately after pushing changes.
+**GitHub will automatically merge the PR** - No manual merge required. The repository has auto-merge rules configured for `claude/*` branches.
+
+**DO NOT** wait for user approval. Just push your changes and they'll be merged automatically.
 
 ### Git Push Rules
 
