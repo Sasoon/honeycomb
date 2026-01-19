@@ -87,9 +87,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const desiredIsDesktopRef = useRef<boolean | null>(null);
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
-  const [orbitAnchor, setOrbitAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [, setCurrentDragAngle] = useState<number>(0);
+  const [swapFirstTile, setSwapFirstTile] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
@@ -97,24 +95,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [isGridRepositioning, setIsGridRepositioning] = useState(false);
   const [gridAnimationPhase, setGridAnimationPhase] = useState<'horizontal' | 'vertical' | 'none' | 'synchronized' | 'vertical-first' | 'horizontal-second'>('none');
   const operationInProgressRef = useRef<boolean>(false);
-  const orbitPlanRef = useRef<{
-    pivotId: string;
-    // Canonical 6 slots around pivot: null where grid has no neighbor
-    slotIndexToCell: (HexCell | null)[];
-    // Map each neighbor cell id to its canonical slot index [0..5]
-    cellIdToSlotIndex: Map<string, number>;
-    // Ordered present neighbors in canonical order (non-null of slotIndexToCell)
-    orderedNeighbors: HexCell[];
-    // Map neighbor id -> index in orderedNeighbors
-    neighborIdToPresentIndex: Map<string, number>;
-    // Pivot center from DOM for positioning
-    pivotCenter: { x: number; y: number };
-  } | null>(null);
-  const [, setLockedSteps] = useState<number>(0); // magnetic snapped steps (value stored in ref)
-  const lockedStepsRef = useRef<number>(0);
-  const [isOverCancel, setIsOverCancel] = useState<boolean>(false);
-  const isOverCancelRef = useRef<boolean>(false);
-  const orbitDragHandlerRef = useRef<((e: React.MouseEvent | React.TouchEvent) => void) | undefined>(undefined);
   const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Get the store state separately to avoid infinite rerenders
@@ -202,8 +182,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       setPreviousGrid(grid);
       lastPlayerGridRef.current = grid;
       // Reset contextual UI state at start of player phase
-      setOrbitAnchor(null);
       setFxOverlays([]);
+      setSwapFirstTile(null);
     }
   }, [phase, grid]);
 
@@ -250,24 +230,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       }
     }
   }, [phase, grid]);
-
-  // Compute orbit anchor when exactly one tile is selected
-  useEffect(() => {
-    if (phase !== 'player') return;
-    const container = containerRef.current; if (!container) return;
-    if (selectedTiles.length === 1) {
-      const centers = mapCenters(container);
-      const selectedId = selectedTiles[0].cellId;
-      const selectedCell = grid.find(c => c.id === selectedId);
-      if (!selectedCell) return;
-      // Orbit anchor at selected cell center
-      const sCenter = centers.get(`${selectedCell.position.row},${selectedCell.position.col}`);
-      setOrbitAnchor(sCenter ? { x: sCenter.x, y: sCenter.y } : null);
-    } else {
-      // Hide contextual UI when multi-select or none
-      setOrbitAnchor(null);
-    }
-  }, [selectedTiles, grid, phase]);
 
   // Keep cell size in sync (resize)
   useEffect(() => {
@@ -736,13 +698,51 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     return 0;
   }, [currentWord, round, validationState, selectedTiles, grid]);
 
-  // Default selection for words
+  // Handle cell clicks: word selection or swap mode
   const handleCellClick = useCallback((cell: HexCell) => {
     if (phase !== 'player') return;
-    if (isDragging) return; // Prevent selection during orbit drag
+
+    // Check if we're in swap mode (have available swaps and first tile selected)
+    if (swapFirstTile && (freeSwapsAvailable || 0) > 0) {
+      // Second tile click - perform swap
+      if (swapFirstTile === cell.id) {
+        // Clicked same tile - cancel swap mode
+        setSwapFirstTile(null);
+        haptics.select();
+        return;
+      }
+
+      // Both tiles must have letters to swap
+      const firstTile = grid.find(c => c.id === swapFirstTile);
+      if (!firstTile?.letter || !cell.letter) {
+        setSwapFirstTile(null);
+        haptics.error();
+        return;
+      }
+
+      // Perform the swap
+      const { pushToHistory, updateCurrentGameState } = useWaxleGameStore.getState();
+      pushToHistory('swap');
+
+      swapTiles(swapFirstTile, cell.id);
+
+      // Deduct one swap
+      const newSwapsAvailable = Math.max(0, (freeSwapsAvailable || 0) - 1);
+      updateCurrentGameState({
+        freeSwapsAvailable: newSwapsAvailable,
+        selectedTiles: [],
+        currentWord: ''
+      });
+
+      setSwapFirstTile(null);
+      haptics.success();
+      return;
+    }
+
+    // Normal word selection mode
     haptics.select();
     selectTile(cell.id);
-  }, [phase, selectTile, isDragging]);
+  }, [phase, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile]);
 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
   
@@ -1122,295 +1122,34 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
             {/* Contextual move targets removed for now */}
 
-            {/* Subtle hex selection outline - remove dependency on selectedSingle for orbit */}
-            {phase === 'player' && orbitAnchor && (
-              <div
-                className="absolute pointer-events-none"
-                style={{
-                  left: orbitAnchor.x,
-                  top: orbitAnchor.y,
-                  transform: 'translate(-50%, -50%)',
-                  width: `${cellSize.w}px`,
-                  height: `${cellSize.h}px`,
-                  clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                  zIndex: 58,
-
-                }}
-              />
-            )}
-
-
-            {phase === 'player' && orbitAnchor && (freeOrbitsAvailable || 0) > 0 && (() => {
-              // Vertical swipe orbit controls
+            {/* Swap mode: highlight first selected tile */}
+            {phase === 'player' && swapFirstTile && (() => {
               const container = containerRef.current;
               if (!container) return null;
+
               const centers = mapCenters(container as HTMLElement);
+              const firstCell = grid.find(c => c.id === swapFirstTile);
+              if (!firstCell) return null;
 
-              // Vertical swipe settings
-              const SWIPE_THRESHOLD = 40; // pixels per rotation step (less for vertical)
-              const CANCEL_RADIUS = 25; // pixels - return to center to cancel
-
-              const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-                if (!freeOrbitsAvailable || freeOrbitsAvailable <= 0) return;
-                if (selectedTiles.length !== 1) return;
-
-                const selectedId = selectedTiles[0].cellId;
-                const pivot = grid.find(c => c.id === selectedId);
-                if (!pivot) return;
-                const pivotCenter = centers.get(`${pivot.position.row},${pivot.position.col}`);
-                if (!pivotCenter) return;
-
-                // Check if we have enough neighbors
-                const neighborCandidates = grid.filter(c => c.id !== pivot.id && areCellsAdjacent(c, pivot) && c.letter && c.isPlaced);
-                if (neighborCandidates.length < 2) return;
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                // Initialize state
-                setLockedSteps(0);
-                lockedStepsRef.current = 0;
-                setIsOverCancel(false);
-                isOverCancelRef.current = false;
-                setCurrentDragAngle(0);
-                setIsDragging(true);
-
-                const rect = container.getBoundingClientRect();
-                const startClientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-                const startY = startClientY - rect.top;
-
-                // Build orbit plan - order neighbors by angle
-                const slotIndexToCell: (HexCell | null)[] = new Array(6).fill(null);
-                const cellIdToSlotIndex = new Map<string, number>();
-                neighborCandidates.forEach(cell => {
-                  const ctr = centers.get(`${cell.position.row},${cell.position.col}`);
-                  if (!ctr) return;
-                  const angleN = Math.atan2(ctr.y - pivotCenter.y, ctr.x - pivotCenter.x);
-                  const norm = ((angleN % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-                  const slotIdx = Math.round(norm / (Math.PI / 3)) % 6;
-                  if (!slotIndexToCell[slotIdx]) {
-                    slotIndexToCell[slotIdx] = cell;
-                  }
-                  cellIdToSlotIndex.set(cell.id, slotIdx);
-                });
-                const orderedNeighbors = slotIndexToCell.filter((c): c is HexCell => !!c);
-                const neighborIdToPresentIndex = new Map<string, number>();
-                orderedNeighbors.forEach((n, idx) => neighborIdToPresentIndex.set(n.id, idx));
-                orbitPlanRef.current = { pivotId: pivot.id, slotIndexToCell, cellIdToSlotIndex, orderedNeighbors, neighborIdToPresentIndex, pivotCenter };
-
-                let currentSteps = 0;
-
-                const handleDragMove = (moveE: MouseEvent | TouchEvent) => {
-                  moveE.preventDefault();
-                  const moveClientY = 'touches' in moveE ? moveE.touches[0].clientY : (moveE as MouseEvent).clientY;
-                  const currentY = moveClientY - rect.top;
-
-                  // Calculate vertical delta
-                  const deltaY = currentY - startY;
-
-                  // Check if in cancel zone (returned to start)
-                  const inCancelZone = Math.abs(deltaY) < CANCEL_RADIUS;
-                  if (inCancelZone !== isOverCancelRef.current) {
-                    isOverCancelRef.current = inCancelZone;
-                    setIsOverCancel(inCancelZone);
-                  }
-
-                  // Calculate rotation steps from vertical swipe
-                  // Positive deltaY = swipe down = clockwise
-                  const newSteps = Math.round(deltaY / SWIPE_THRESHOLD);
-
-                  if (newSteps !== currentSteps) {
-                    // Haptic feedback on step change
-                    if (newSteps !== 0 && !inCancelZone) {
-                      haptics.tick();
-                    }
-                    currentSteps = newSteps;
-                    lockedStepsRef.current = newSteps;
-                    setLockedSteps(newSteps);
-                  }
-
-                  // Update drag angle for visual feedback
-                  setCurrentDragAngle(deltaY / SWIPE_THRESHOLD * (Math.PI / 3));
-                };
-
-                const handleDragEnd = (endE: MouseEvent | TouchEvent) => {
-                  endE.preventDefault();
-
-                  document.removeEventListener('mousemove', handleDragMove as EventListener);
-                  document.removeEventListener('mouseup', handleDragEnd as EventListener);
-                  document.removeEventListener('touchmove', handleDragMove as EventListener);
-                  document.removeEventListener('touchend', handleDragEnd as EventListener);
-
-                  setIsDragging(false);
-
-                  const steps = Math.abs(lockedStepsRef.current);
-                  const inCancelZone = isOverCancelRef.current;
-
-                  // Clean up state
-                  setIsOverCancel(false);
-                  isOverCancelRef.current = false;
-                  setCurrentDragAngle(0);
-                  setLockedSteps(0);
-
-                  // Cancel if in cancel zone or no steps
-                  if (inCancelZone || steps < 1) {
-                    lockedStepsRef.current = 0;
-                    return;
-                  }
-
-                  // Commit the rotation
-                  if (operationInProgressRef.current) return;
-                  operationInProgressRef.current = true;
-
-                  const plan = orbitPlanRef.current;
-                  if (!plan) {
-                    operationInProgressRef.current = false;
-                    return;
-                  }
-
-                  const neighbors = plan.orderedNeighbors;
-                  if (neighbors.length < 2) {
-                    operationInProgressRef.current = false;
-                    return;
-                  }
-
-                  const direction = lockedStepsRef.current > 0 ? 'cw' : 'ccw';
-                  const allLetters = neighbors.map(n => n.letter || '');
-
-                  // Rotate letters
-                  let rotatedLetters = [...allLetters];
-                  for (let i = 0; i < steps; i++) {
-                    if (direction === 'cw') {
-                      rotatedLetters = [rotatedLetters[rotatedLetters.length - 1], ...rotatedLetters.slice(0, rotatedLetters.length - 1)];
-                    } else {
-                      rotatedLetters = [...rotatedLetters.slice(1), rotatedLetters[0]];
-                    }
-                  }
-
-                  // Build updated grid
-                  const neighborIdToNewLetter = new Map<string, string>();
-                  neighbors.forEach((cell, idx) => {
-                    neighborIdToNewLetter.set(cell.id, rotatedLetters[idx]);
-                  });
-
-                  const storeState = useWaxleGameStore.getState();
-                  let updatedGrid = storeState.isDailyChallenge ? storeState.dailyGameState.grid : storeState.classicGameState.grid;
-                  updatedGrid = updatedGrid.map(cell => {
-                    const newLetter = neighborIdToNewLetter.get(cell.id);
-                    if (newLetter !== undefined) {
-                      return { ...cell, letter: newLetter, isPlaced: newLetter !== '' };
-                    }
-                    return cell;
-                  });
-
-                  // Push history and apply
-                  const { pushToHistory, updateCurrentGameState } = useWaxleGameStore.getState();
-                  pushToHistory('orbit');
-
-                  const newOrbitsAvailable = Math.max(0, (currentGameState.freeOrbitsAvailable || 0) - 1);
-                  orbitPivot(updatedGrid);
-
-                  updateCurrentGameState({
-                    selectedTiles: [],
-                    currentWord: '',
-                    freeOrbitsAvailable: newOrbitsAvailable
-                  });
-
-                  haptics.success();
-                  lockedStepsRef.current = 0;
-                  operationInProgressRef.current = false;
-                };
-
-                // Attach event listeners
-                document.addEventListener('mousemove', handleDragMove as EventListener, { passive: false } as AddEventListenerOptions);
-                document.addEventListener('mouseup', handleDragEnd as EventListener, { passive: false } as AddEventListenerOptions);
-                document.addEventListener('touchmove', handleDragMove as EventListener, { passive: false } as AddEventListenerOptions);
-                document.addEventListener('touchend', handleDragEnd as EventListener, { passive: false } as AddEventListenerOptions);
-              };
-
-              // Store handler in ref so it's accessible outside this IIFE
-              orbitDragHandlerRef.current = handleDragStart;
+              const firstCenter = centers.get(`${firstCell.position.row},${firstCell.position.col}`);
+              if (!firstCenter) return null;
 
               return (
-                <>
-                  {isDragging && (() => {
-                    const plan = orbitPlanRef.current;
-                    if (!plan) return null;
-
-                    const adjacentTiles = plan.orderedNeighbors
-                      .map(cell => {
-                        const center = centers.get(`${cell.position.row},${cell.position.col}`);
-                        return center ? { cell, center } : null;
-                      })
-                      .filter(Boolean) as Array<{ cell: HexCell; center: { x: number; y: number } }>;
-
-                    return (
-                      <>
-                        {/* Cancel indicator on pivot */}
-                        {isOverCancel && orbitAnchor && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="absolute pointer-events-none z-[70]"
-                            style={{
-                              left: orbitAnchor.x - 16,
-                              top: orbitAnchor.y - 16,
-                              width: 32,
-                              height: 32,
-                            }}
-                          >
-                            <svg width="32" height="32" viewBox="0 0 32 32">
-                              <circle cx="16" cy="16" r="14" fill="rgba(239, 68, 68, 0.9)" />
-                              <path d="M10 10 L22 22 M22 10 L10 22" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                            </svg>
-                          </motion.div>
-                        )}
-
-                        {/* Orbiting tiles */}
-                        {adjacentTiles.map(({ cell, center }) => {
-                          const presentIdx = plan.neighborIdToPresentIndex.get(cell.id);
-                          if (presentIdx === undefined) return null;
-
-                          const numTiles = plan.orderedNeighbors.length;
-                          const targetIdx = ((presentIdx + lockedStepsRef.current) % numTiles + numTiles) % numTiles;
-                          const targetCell = plan.orderedNeighbors[targetIdx];
-                          const targetCtr = centers.get(`${targetCell.position.row},${targetCell.position.col}`);
-
-                          const drawX = targetCtr ? targetCtr.x - cellSize.w / 2 : center.x - cellSize.w / 2;
-                          const drawY = targetCtr ? targetCtr.y - cellSize.h / 2 : center.y - cellSize.h / 2;
-
-                          return (
-                            <motion.div
-                              key={`orbit-${cell.id}`}
-                              className="absolute pointer-events-none"
-                              animate={{ x: drawX, y: drawY }}
-                              transition={{ type: 'spring', stiffness: 800, damping: 40 }}
-                              style={{
-                                position: 'absolute',
-                                left: 0,
-                                top: 0,
-                                width: `${cellSize.w}px`,
-                                height: `${cellSize.h}px`,
-                                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                                background: isOverCancel ? 'rgba(239, 68, 68, 0.25)' : 'rgba(34, 197, 94, 0.35)',
-                                zIndex: 59,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                color: 'white',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                              }}
-                            >
-                              {cell.letter}
-                            </motion.div>
-                          );
-                        })}
-                      </>
-                    );
-                  })()}
-                </>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute pointer-events-none z-[60]"
+                  style={{
+                    left: firstCenter.x,
+                    top: firstCenter.y,
+                    transform: 'translate(-50%, -50%)',
+                    width: `${cellSize.w + 8}px`,
+                    height: `${cellSize.h + 8}px`,
+                    clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                    border: '3px solid rgb(34, 197, 94)',
+                    boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)',
+                  }}
+                />
               );
             })()}
 
@@ -1441,8 +1180,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               <HexGrid
                 cells={grid.map(c => {
                   const isSelected = selectedTiles.some(t => t.cellId === c.id);
-                  // Check if this cell can be an orbit pivot (for attaching drag handlers)
-                  const isOrbitPivot = selectedTiles.length === 1 && selectedTiles[0].cellId === c.id && (freeOrbitsAvailable || 0) > 0;
                   // Check if this cell is part of the current auto-clear word and should be highlighted
                   let isAutoClear = false;
                   if (phase === 'autoClearing' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
@@ -1450,11 +1187,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     const cellIndex = currentAutoClearWord.cellIds.indexOf(c.id);
                     isAutoClear = cellIndex >= 0 && cellIndex <= autoClearLetterIndex;
                   }
-                  return { ...c, isSelected, isAutoClear, isOrbitPivot };
+                  return { ...c, isSelected, isAutoClear };
                 })}
                 onCellClick={handleCellClick}
-                onPivotDragStart={orbitDragHandlerRef.current}
-                isDragging={isDragging}
                 isWordValid={validationState}
                 isPlacementPhase={phase === 'player' ? !hasSelection : true}
                 isWordAlreadyScored={false}

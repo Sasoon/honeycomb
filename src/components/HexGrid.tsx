@@ -18,7 +18,6 @@ export type HexCell = {
   isDoubleScore: boolean;
   placedThisTurn?: boolean;
   isAutoClear?: boolean;
-  isOrbitPivot?: boolean;
 };
 
 export interface HexGridProps {
@@ -35,8 +34,6 @@ export interface HexGridProps {
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
   enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
   isSettling?: boolean; // When true, tiles ease-out settle on new game
-  onPivotDragStart?: (e: React.MouseEvent | React.TouchEvent) => void; // Orbit drag handlers for pivot tile only
-  isDragging?: boolean; // Whether an orbit drag is currently active
 }
 
 
@@ -46,7 +43,6 @@ const CellView = memo(function CellView({
   containerClass,
   setRef,
   showLetter,
-  onDragStart,
   enableLayout = true,
   isSettling,
 }: {
@@ -55,19 +51,12 @@ const CellView = memo(function CellView({
   containerClass: string;
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
-  onDragStart?: (e: React.MouseEvent | React.TouchEvent) => void;
   enableLayout?: boolean;
   isSettling?: boolean;
 }) {
   const layoutProps = enableLayout ? { layout: true } : {};
   const settleDelay = ((cell.position.row * 5 + cell.position.col * 2) % 7) * 0.02;
   const applySettle = !!isSettling;
-
-  // Only attach drag handlers if cell is orbit pivot
-  const dragHandlers = cell.isOrbitPivot && onDragStart ? {
-    onMouseDown: onDragStart,
-    onTouchStart: onDragStart,
-  } : {};
 
   return (
     <motion.div
@@ -79,7 +68,6 @@ const CellView = memo(function CellView({
       data-placed-this-turn={cell.placedThisTurn ? 'true' : 'false'}
       className={`hex-grid__item ${containerClass} ${applySettle ? 'settle-tile' : ''}`}
       onClick={() => onClick(cell)}
-      {...dragHandlers}
       {...layoutProps}
       style={{ position: 'relative', ...(applySettle ? { animationDelay: `${settleDelay}s` } : {}) }}
     >
@@ -336,9 +324,6 @@ const HexGrid = ({
                     showLetter={showLetter}
                     enableLayout={enableLayout}
                     isSettling={isSettling}
-                    onDragStart={onPivotDragStart}
-                    // showBorder={styles.showBorder} // Disabled - borders removed
-                    // borderColor={styles.borderColor} // Disabled - borders removed
                   />
                 </div>
               );
