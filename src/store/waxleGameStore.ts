@@ -343,9 +343,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             startPlayerPhase: () => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
-                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                    console.log(`[STORE] Starting player phase with ${state.freeOrbitsAvailable || 0} orbits`);
-                }
                 updateCurrentGameState({
                     phase: 'player',
                     selectedTiles: [],
@@ -380,13 +377,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 } else if (newRound >= 8) {
                     currentTilesPerDrop = 5; // Round 8-10: 5 tiles
                 } else if (newRound >= 5) {
-                    currentTilesPerDrop = 4; // Round 5-7: 4 tiles  
+                    currentTilesPerDrop = 4; // Round 5-7: 4 tiles
                 }
                 // Round 2-4: 3 tiles (default, Round 1 has no flood)
-
-                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                    console.log(`[STORE] Round ${newRound}: ${currentTilesPerDrop} tiles per drop`);
-                }
 
                 // Generate flood tiles for this round
                 const rewardCreative = (!state.freeMoveAvailable) || ((state.freeOrbitsAvailable || 0) <= 0);
@@ -402,33 +395,14 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     actualFallingLetters = fallingLetters.slice(0, currentTilesPerDrop);
                 }
 
-                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                    console.log(`[STORE] Round ${newRound}: Processing ${actualFallingLetters.length} falling tiles`);
-                }
-
                 // Apply the flood to the grid
                 const { newGrid, finalPaths, placedCount, unplacedLetters } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
-
-                if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                    console.log(`[STORE] Flood complete: ${placedCount} tiles placed out of ${actualFallingLetters.length} attempted`);
-                }
 
                 // Game over only if tiles couldn't be placed AND top row is actually full
                 const topRowCells = newGrid.filter(cell => cell.position.row === 0);
                 const topRowFull = topRowCells.every(cell => cell.letter && cell.isPlaced);
 
                 if (unplacedLetters.length > 0 && topRowFull) {
-                    if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                        console.log(`[DEBUG] GAME OVER triggered at round ${newRound}`);
-                        console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
-                        console.log(`[DEBUG] Attempted to place:`, actualFallingLetters);
-                        console.log(`[DEBUG] Successfully placed:`, placedCount);
-                        console.log(`[DEBUG] Total tiles on grid:`, newGrid.filter(cell => cell.letter && cell.isPlaced).length);
-                        console.log(`[DEBUG] Empty cells available:`, newGrid.filter(cell => !cell.letter).length);
-                        console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length);
-                        console.log(`[DEBUG] Top row full:`, topRowFull);
-                    }
-
                     // Toast removed - game over modal shows this information
                     updateCurrentGameState({ phase: 'gameOver', grid: newGrid, floodPaths: {}, gravityMoves: undefined, selectedTiles: [], currentWord: '' });
 
@@ -436,18 +410,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     if (get().isDailyChallenge && get().getCurrentGameState().dailyDate) {
                         const completedKey = `waxle-daily-completed-${get().getCurrentGameState().dailyDate}`;
                         localStorage.setItem(completedKey, 'true');
-                        if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                            console.log(`Daily challenge completed for ${get().getCurrentGameState().dailyDate}`);
-                        }
                     }
 
                     return;
-                } else if (unplacedLetters.length > 0) {
-                    if (typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugStore') === '1') {
-                        console.log(`[DEBUG] ${unplacedLetters.length} tiles failed to place, but top row not full - continuing game`);
-                        console.log(`[DEBUG] Unplaced letters:`, unplacedLetters);
-                        console.log(`[DEBUG] Top row occupied:`, newGrid.filter(cell => cell.position.row === 0 && cell.letter).length, '/ 3');
-                    }
                 }
 
                 // Generate fresh previews for the upcoming turns using correct tile count for each future round
@@ -721,7 +686,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const state = getCurrentGameState();
 
                 if (state.phase !== 'player') {
-                    console.warn('[ORBIT] Cannot orbit during non-player phase');
                     return;
                 }
 
@@ -742,15 +706,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         gravitySource: 'orbit', // Mark this as orbit-triggered gravity
                         phase: 'gravitySettle'
                     });
-
-                    console.log(`[ORBIT-GRAVITY] ${gravityMoves.size} tiles settled after orbit`);
                 } else {
                     // No gravity movement, just update grid and stay in player phase
                     updateCurrentGameState({
                         grid: settledGrid
                     });
-
-                    console.log('[ORBIT-GRAVITY] No tiles moved after orbit');
                 }
             },
 
@@ -760,7 +720,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const state = getCurrentGameState();
 
                 if (!state.currentAutoClearWord) {
-                    console.warn('[AUTO-CLEAR] No auto-clear word to process');
                     return;
                 }
 
@@ -770,7 +729,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 if (state.autoClearPhase === 'highlight') {
                     // HIGHLIGHT PHASE: Just transition to 'clear' phase
                     // UI will handle letter-by-letter animation before calling again
-                    console.log(`[AUTO-CLEAR] Starting highlight for word "${currentWord.word}"`);
                     updateCurrentGameState({
                         phase: 'autoClearing',
                         autoClearPhase: 'clear',
@@ -779,7 +737,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 }
 
                 // CLEAR PHASE: Actually clear the tiles
-                console.log(`[AUTO-CLEAR] Clearing word "${currentWord.word}"`);
 
                 // Clear the current word's tiles and apply gravity
                 const { newGrid, moveSources } = clearTilesAndApplyGravity(state.grid, currentWord.cellIds);
@@ -804,11 +761,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 });
 
                 toastService.success(`Auto-cleared "${currentWord.word}"! +1 orbit`);
-                console.log(`[AUTO-CLEAR] Cleared word "${currentWord.word}"`);
 
                 // If no gravity, continue cascade immediately by scanning for next word
                 if (moveSources.size === 0) {
-                    console.log('[AUTO-CLEAR] No gravity, continuing cascade immediately');
                     get().findAndStartNextAutoClear();
                 }
             },
@@ -818,25 +773,13 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
-                // Log current board state
-                console.log('[AUTO-CLEAR] Current board state:');
-                const maxRow = Math.max(...state.grid.map(c => c.position.row));
-                for (let r = 0; r <= maxRow; r++) {
-                    const rowCells = state.grid.filter(c => c.position.row === r).sort((a, b) => a.position.col - b.position.col);
-                    const rowStr = rowCells.map(c => c.letter || '.').join(' ');
-                    console.log(`  Row ${r}: ${rowStr}`);
-                }
-
                 // Scan for next word on current grid
                 const axisLines = getAllAxisLines(state.grid);
                 const foundWords = await findValidWordsInLines(axisLines);
 
-                console.log(`[AUTO-CLEAR] Found ${foundWords.length} words:`, foundWords.map(w => w.word));
-
                 if (foundWords.length > 0) {
                     // Found another word - start highlighting it
                     const nextWord = foundWords[0];
-                    console.log(`[AUTO-CLEAR] Starting auto-clear for: "${nextWord.word}"`);
 
                     updateCurrentGameState({
                         currentAutoClearWord: nextWord,
@@ -849,7 +792,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     get().processNextAutoClearWord();
                 } else {
                     // No more words found - return to player phase
-                    console.log('[AUTO-CLEAR] No more words found, returning to player phase');
                     updateCurrentGameState({
                         phase: 'player',
                         currentAutoClearWord: undefined,

@@ -61,7 +61,6 @@ const Leaderboard = () => {
 
       setLeaderboardData(result);
     } catch (err) {
-      console.error('Error loading leaderboard:', err);
       setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
     } finally {
       setIsLoading(false);

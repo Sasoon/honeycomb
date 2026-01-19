@@ -1,7 +1,6 @@
 // Remove React import
 import { useState, useRef, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
-// import HexagonBorder from './HexagonBorder'; // Available for future use
 
 // Define types for our grid
 export type CellPosition = {
@@ -47,8 +46,6 @@ const CellView = memo(function CellView({
   containerClass,
   setRef,
   showLetter,
-  // showBorder, // Disabled - borders removed from selected tiles
-  // borderColor, // Disabled - borders removed from selected tiles
   onDragStart,
   enableLayout = true,
   isSettling,
@@ -58,8 +55,6 @@ const CellView = memo(function CellView({
   containerClass: string;
   setRef: (el: HTMLDivElement | null) => void;
   showLetter: boolean;
-  // showBorder?: boolean; // Disabled - borders removed from selected tiles
-  // borderColor?: string; // Disabled - borders removed from selected tiles
   onDragStart?: (e: React.MouseEvent | React.TouchEvent) => void;
   enableLayout?: boolean;
   isSettling?: boolean;

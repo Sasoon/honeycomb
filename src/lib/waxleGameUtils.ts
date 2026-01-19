@@ -467,32 +467,6 @@ export function clearTilesAndApplyGravity(
 
     // Post-gravity validation: check for floating tiles
     const fullyResolved = iterations < maxIterations;
-    if (!fullyResolved) {
-        console.warn(`[GRAVITY] Hit max iterations (${maxIterations}) - gravity may not be fully resolved`);
-    }
-
-    // Validate no tiles have accessible empty space below
-    let floatingTileCount = 0;
-    newGrid.forEach(cell => {
-        if (cell.letter && cell.isPlaced && cell.position.row < gridSizeLocal - 1) {
-            // Check if this tile has any adjacent empty cells below it
-            const cellsBelow = newGrid.filter(belowCell =>
-                belowCell.position.row === cell.position.row + 1 &&
-                isHexAdjacent(cell, belowCell) &&
-                !belowCell.letter &&
-                !belowCell.isPlaced
-            );
-
-            if (cellsBelow.length > 0) {
-                floatingTileCount++;
-                console.warn(`[GRAVITY] Floating tile detected at ${cell.position.row},${cell.position.col} - has ${cellsBelow.length} empty adjacent cells below`);
-            }
-        }
-    });
-
-    if (floatingTileCount > 0) {
-        console.error(`[GRAVITY] ${floatingTileCount} floating tiles detected after gravity resolution!`);
-    }
 
     return { newGrid, tilesCleared, moveSources, fullyResolved };
 }
@@ -745,14 +719,8 @@ export async function findValidWordsInLines(
                     const isValid = await wordValidator.validateWordAsync(word);
 
                     if (isValid) {
-                        console.log(`[AUTO-CLEAR SCAN] Found "${word}" at positions:`, subsequence.map(c => `(${c.position.row},${c.position.col})`).join(' -> '));
                         foundWords.push({ word, cellIds });
                         seenWordCombinations.add(key);
-                    } else {
-                        // Log invalid words for debugging
-                        if (word.length >= 3) {
-                            console.log(`[AUTO-CLEAR SCAN] Rejected "${word}" - not in dictionary`);
-                        }
                     }
                 }
             }

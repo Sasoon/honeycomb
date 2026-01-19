@@ -70,181 +70,6 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   return { w: r.width, h: r.height };
 }
 
-// Simulate tile settling to find actual landing positions (unused)
-/* function simulateTileSettling(
-  startingGrid: Array<{ position: { row: number; col: number }; letter?: string; isPlaced?: boolean }>,
-  newTiles: Array<{ letter: string; startCol: number }>
-): Array<{ letter: string; finalRow: number; finalCol: number; path: Array<{ row: number; col: number }> }> {
-  // Clone grid for simulation
-  const simGrid = startingGrid.map(cell => ({ ...cell }));
-  const results: Array<{ letter: string; finalRow: number; finalCol: number; path: Array<{ row: number; col: number }> }> = [];
-  
-  // Helper to check if a position is empty
-  const isEmpty = (row: number, col: number) => {
-    const tolerance = 0.1;
-    return !simGrid.some(cell => 
-      Math.abs(cell.position.row - row) < tolerance && 
-      Math.abs(cell.position.col - col) < tolerance && 
-      cell.letter && cell.isPlaced
-    );
-  };
-  
-  // Helper to find cells below (using same logic as game)
-  const findCellsBelow = (row: number, col: number) => {
-    const cellsInRowBelow = simGrid.filter(c => c.position.row === row + 1);
-    return cellsInRowBelow.filter(belowCell => {
-      const colDiff = Math.abs(belowCell.position.col - col);
-      return colDiff < 0.6 && isEmpty(belowCell.position.row, belowCell.position.col);
-    });
-  };
-  
-  // Place and settle each tile
-  newTiles.forEach(tile => {
-    const startRow = 0;
-    const startCol = tile.startCol;
-    const path: Array<{ row: number; col: number }> = [{ row: startRow, col: startCol }];
-    
-    let currentRow = startRow;
-    let currentCol = startCol;
-    
-    // Settle the tile step by step
-    let canFall = true;
-    while (canFall) {
-      const cellsBelow = findCellsBelow(currentRow, currentCol);
-      
-      if (cellsBelow.length > 0) {
-        // Prefer straight down, then leftmost
-        const directBelow = cellsBelow.find(c => Math.abs(c.position.col - currentCol) < 0.1);
-        const targetCell = directBelow || cellsBelow.sort((a, b) => a.position.col - b.position.col)[0];
-        
-        currentRow = targetCell.position.row;
-        currentCol = targetCell.position.col;
-        path.push({ row: currentRow, col: currentCol });
-      } else {
-        canFall = false;
-      }
-    }
-    
-    // Mark this position as occupied for next tiles
-    const occupiedCell = simGrid.find(c => 
-      Math.abs(c.position.row - currentRow) < 0.1 && 
-      Math.abs(c.position.col - currentCol) < 0.1
-    );
-    if (occupiedCell) {
-      occupiedCell.letter = tile.letter;
-      occupiedCell.isPlaced = true;
-    }
-    
-    results.push({
-      letter: tile.letter,
-      finalRow: currentRow,
-      finalCol: currentCol,
-      path
-    });
-  });
-  
-  return results;
-}*/
-
-// Compute a visual path of centers by walking rows toward the target and choosing the cell whose x is closest to the target x in each row
-// The path stops when it encounters a blockage (no valid adjacent empty cells)
-// Currently unused - replaced by settling simulation
-/* function computeCenterPath(
-  grid: Array<{ position: { row: number; col: number }; letter?: string; isPlaced?: boolean }>,
-  centers: Map<string, { x: number; y: number; row: number; col: number }>,
-  startRow: number,
-  target: { row: number; col: number },
-  occupiedPreFlood: Set<string>
-): Array<{ row: number; col: number; center: { x: number; y: number } }> {
-  type CenterCandidate = { key: string; row: number; col: number; center: { x: number; y: number } };
-  const rows = Array.from(new Set(grid.map(c => c.position.row))).sort((a, b) => a - b);
-  const targetCenter = centers.get(`${target.row},${target.col}`);
-  if (!targetCenter) {
-    console.warn(`[PATH-DEBUG] No center found for target (${target.row}, ${target.col})`);
-    return [];
-  }
-  const path: Array<{ row: number; col: number; center: { x: number; y: number } }> = [];
-  
-  const isDebug = typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugAnim') === '1';
-  if (isDebug) {
-    console.log(`[PATH-DEBUG] Computing path to target (${target.row}, ${target.col})`);
-  }
-
-  let previous: { row: number; col: number } | null = null;
-  for (const r of rows) {
-    if (r < startRow) continue;
-    const rowCells = grid.filter(c => c.position.row === r);
-    const rawCandidates: CenterCandidate[] = [];
-    for (const rc of rowCells) {
-      const ctr = centers.get(`${rc.position.row},${rc.position.col}`);
-      if (!ctr) continue;
-      rawCandidates.push({
-        key: `${rc.position.row},${rc.position.col}`,
-        row: rc.position.row,
-        col: rc.position.col,
-        center: { x: ctr.x, y: ctr.y },
-      });
-    }
-    if (rawCandidates.length === 0) continue;
-
-    // Restrict to adjacency with previous selection to ensure contiguous steps
-    const candidates: CenterCandidate[] = previous
-      ? rawCandidates.filter(c => areCellsAdjacent(
-          { position: { row: previous!.row, col: previous!.col } } as any,
-          { position: { row: c.row, col: c.col } } as any
-        ))
-      : rawCandidates;
-
-    // Filter out occupied cells (except the final target if we've reached it)
-    const validCandidates = candidates.filter(c => {
-      const key = `${c.row},${c.col}`;
-      const isFinal = c.row === target.row && c.col === target.col;
-      // Allow the final target even if occupied, but only if we can reach it
-      return !occupiedPreFlood.has(key) || (isFinal && r === target.row);
-    });
-
-    // If no valid candidates, we're blocked - stop here
-    if (validCandidates.length === 0) {
-      if (isDebug) {
-        console.log(`[PATH-DEBUG] Blocked at row ${r}, no valid adjacent cells. Path so far:`, 
-          path.map(p => `(${p.row},${p.col})`).join(' -> '));
-        console.log(`[PATH-DEBUG] Raw candidates:`, rawCandidates.map(c => `(${c.row},${c.col})`));
-        console.log(`[PATH-DEBUG] Adjacent candidates:`, candidates.map(c => `(${c.row},${c.col})`));
-        console.log(`[PATH-DEBUG] Occupied positions:`, Array.from(occupiedPreFlood));
-      }
-      return path;
-    }
-
-    // Prefer the closest x to target from valid candidates
-    let best: CenterCandidate | null = null;
-    let bestDx = Infinity;
-    for (const c of validCandidates) {
-      const dx = Math.abs(c.center.x - targetCenter.x);
-      if (dx < bestDx) { best = c; bestDx = dx; }
-    }
-    
-    if (!best) {
-      if (isDebug) console.log(`[PATH-DEBUG] No best candidate found at row ${r}`);
-      return path;
-    }
-    
-    path.push({ row: best.row, col: best.col, center: { x: best.center.x, y: best.center.y } });
-    previous = { row: best.row, col: best.col };
-    
-    if (isDebug) {
-      console.log(`[PATH-DEBUG] Added step (${best.row}, ${best.col}) to path`);
-    }
-    
-    // Stop if we've reached a position that matches our actual settling point
-    const bestKey = `${best.row},${best.col}`;
-    if (occupiedPreFlood.has(bestKey) && best.row === target.row && best.col === target.col) {
-      if (isDebug) console.log(`[PATH-DEBUG] Reached final target at (${best.row}, ${best.col})`);
-      break;
-    }
-  }
-  return path;
-}*/
-
 type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'orbit' | 'move' | 'flood'; duration?: number };
 
 // (no-op placeholder removed)
@@ -351,7 +176,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   // Clear daily challenge state when navigating to regular game (runtime fix)
   useEffect(() => {
     if (location.pathname === '/' && !onBackToDailyChallenge && isDailyChallenge) {
-      console.log('Resetting game state on navigation to / from daily challenge');
       // Reset entire game state to start fresh regular game
       resetGame();
       // Initialize a new regular game after reset
@@ -409,7 +233,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       } else {
         // All letters highlighted, linger then clear
         const timer = window.setTimeout(() => {
-          console.log('[AUTO-CLEAR UI] All letters highlighted, triggering clear');
           processNextAutoClearWord();
         }, LINGER_AFTER_COMPLETE);
 
@@ -423,7 +246,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     if (phase === 'flood') {
       const newlyPlaced = grid.filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn);
       if (newlyPlaced.length > 0) {
-        console.log('[FLOOD-DEBUG] Hiding tiles synchronously before paint:', newlyPlaced.map(c => c.id));
         setHiddenCellIds(prev => [...new Set([...prev, ...newlyPlaced.map(c => c.id)])]);
       }
     }
@@ -480,11 +302,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     // Check gravity source to determine next action
                     if (gravitySource === 'autoClear') {
                         // Auto-clear cascade: look for next word
-                        console.log(`[AUTO-CLEAR] Gravity settled after auto-clear, looking for next word`);
                         findAndStartNextAutoClear();
                     } else if (gravitySource === 'wordSubmit') {
                         // Player word submit: trigger flood
-                        console.log(`[GRAVITY] Gravity settled after word submission, ending round`);
                         endRound();
                     } else if (gravitySource === 'orbit') {
                         // Orbit gravity: return to player phase
@@ -580,11 +400,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 // Check gravity source to determine next action
                 if (gravitySource === 'autoClear') {
                   // Auto-clear cascade: look for next word
-                  console.log(`[AUTO-CLEAR] Gravity settled after auto-clear, looking for next word`);
                   findAndStartNextAutoClear();
                 } else if (gravitySource === 'wordSubmit') {
                   // Player word submit: trigger flood
-                  console.log(`[GRAVITY] Gravity settled after word submission, ending round`);
                   endRound();
                 } else if (gravitySource === 'orbit') {
                   // Orbit gravity: return to player phase
@@ -609,7 +427,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             const advanceT = window.setTimeout(() => {
               // After flood, check if we should scan for auto-clear words
               if (justScoredWord) {
-                console.log(`[AUTO-CLEAR] Flood complete, scanning for auto-clear words`);
                 findAndStartNextAutoClear();
               } else {
                 startPlayerPhase();
@@ -625,12 +442,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
           // Use the provided flood paths from the new flood logic
           const centers = mapCenters(containerRef.current!);
-          
-          if (debugAnim) {
-            console.log('[FLOOD-DEBUG] Starting synchronized animation for', newlyFilled.length, 'tiles');
-            console.log('[FLOOD-DEBUG] Flood paths available:', Object.keys(floodPaths || {}).length);
-          }
-          
+
                  // Prevent top-row overlap: ensure one overlay per top-row entry at t=0
           const usedTopEntries = new Set<string>();
           const floodPathsTyped = (floodPaths || {}) as FloodPathsMap;
@@ -675,14 +487,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             }
             
             if (pathCenters.length === 0) {
-              console.warn(`[FLOOD-ERROR] No valid path centers for tile ${cell.id}`);
               return null;
             }
-            
-            if (debugAnim) {
-              console.log(`[FLOOD-DEBUG] Synchronized path for ${cell.id}: ${pathCenters.map(p => `(${p.row},${p.col})`).join(' -> ')}`);
-            }
-            
+
             return { cell, pathCenters };
           }).filter(tp => tp !== null) as Array<{ cell: HexCell; pathCenters: TilePathCenters }>;
 
@@ -800,11 +607,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
           animationDoneSignal = () => {
             const advanceDelay = tilePaths.length === 0 ? GRAVITY_SHORT_DELAY_MS + 20 : maxFinalDelay + PHASE_GAP_MS;
             const advanceT = window.setTimeout(() => {
-              if (debugAnim) console.log('[FLD] ADVANCE', { at: tNow() });
-
               // After flood, check if we should scan for auto-clear words
               if (justScoredWord) {
-                console.log(`[AUTO-CLEAR] Flood complete, scanning for auto-clear words`);
                 findAndStartNextAutoClear();
               } else {
                 startPlayerPhase();
@@ -948,7 +752,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const handleRestart = () => {
     // Prevent restart during daily challenges
     if (isDailyChallenge) {
-      console.warn('Restart blocked: Daily challenge cannot be restarted');
       return;
     }
 
