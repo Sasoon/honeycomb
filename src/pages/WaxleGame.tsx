@@ -702,9 +702,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const handleCellClick = useCallback((cell: HexCell) => {
     if (phase !== 'player') return;
 
-    // Check if we're in swap mode (have available swaps and first tile selected)
-    if (swapFirstTile && (freeSwapsAvailable || 0) > 0) {
-      // Second tile click - perform swap
+    // Check if we're in swap mode (first tile already selected)
+    if (swapFirstTile) {
+      // Second tile click - perform swap or cancel
       if (swapFirstTile === cell.id) {
         // Clicked same tile - cancel swap mode
         setSwapFirstTile(null);
@@ -714,7 +714,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
       // Both tiles must have letters to swap
       const firstTile = grid.find(c => c.id === swapFirstTile);
-      if (!firstTile?.letter || !cell.letter) {
+      if (!firstTile?.letter || !cell.letter || !cell.isPlaced) {
         setSwapFirstTile(null);
         haptics.error();
         return;
@@ -739,10 +739,21 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       return;
     }
 
+    // Check if we should enter swap mode:
+    // - Have available swaps
+    // - Clicked a placed tile with a letter
+    // - No current word selection
+    if ((freeSwapsAvailable || 0) > 0 && cell.letter && cell.isPlaced && selectedTiles.length === 0) {
+      // Enter swap mode - store first tile
+      setSwapFirstTile(cell.id);
+      haptics.select();
+      return;
+    }
+
     // Normal word selection mode
     haptics.select();
     selectTile(cell.id);
-  }, [phase, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile]);
+  }, [phase, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile, selectedTiles]);
 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
   
