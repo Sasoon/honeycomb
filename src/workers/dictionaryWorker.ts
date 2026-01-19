@@ -49,9 +49,12 @@ async function loadDictionaries(): Promise<void> {
             console.error('Failed to load dictionaries:', error);
             dictionary = {};
             blacklist = new Set();
+        } catch {
+            dictionary = {};
+            blacklist = new Set();
         }
     })();
-    
+
     return loadingPromise;
 }
 
@@ -68,13 +71,6 @@ function buildPrefixIndex(): void {
         if (!prefixIndex.has(key)) prefixIndex.set(key, []);
         const arr = prefixIndex.get(key)!;
         if (arr.length < 500) arr.push(w); // cap per-bucket to bound memory
-    }
-    
-    // Guard console in prod builds
-    const __DEV__ = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
-    if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log(`[DictionaryWorker] Loaded ${Object.keys(dictionary).length.toLocaleString()} words`);
     }
 }
 

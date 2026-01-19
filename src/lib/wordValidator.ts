@@ -178,10 +178,6 @@ class WordValidator {
         return this.loadDictionaryIfNeeded()
             .then(() => {
                 this._isReady = true;
-                if (import.meta.env.DEV) {
-                    // eslint-disable-next-line no-console
-                    console.log('Dictionary preloaded and ready');
-                }
             });
     }
 
@@ -228,15 +224,9 @@ class WordValidator {
 
                 this.dictionary = dict;
                 this.blacklist = new Set((blList as unknown as string[]).map(w => w.toLowerCase()));
-                if (import.meta.env.DEV) {
-                    // eslint-disable-next-line no-console
-                    console.log(`Dictionary loaded (${Object.keys(this.dictionary).length}) with blacklist (${this.blacklist.size})`);
-                }
                 this.isLoading = false;
                 this._isReady = true;
             } catch (err) {
-                // eslint-disable-next-line no-console
-                console.error('Error loading dictionary/blacklist', err);
                 this.isLoading = false;
             }
         })();
@@ -265,12 +255,7 @@ class WordValidator {
         }
 
         if (!this.isLoading) {
-            this.loadDictionaryIfNeeded().then(() => {
-                if (import.meta.env.DEV) {
-                    // eslint-disable-next-line no-console
-                    console.log(`Dictionary loaded, "${normalized}" can now be validated`);
-                }
-            });
+            this.loadDictionaryIfNeeded();
         }
         return false;
     }

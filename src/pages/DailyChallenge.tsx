@@ -54,7 +54,6 @@ const DailyChallenge = () => {
         const hasCompleted = localStorage.getItem(completedKey) === 'true';
         setIsCompleted(hasCompleted);
       } catch (err) {
-        console.error('Error loading daily seed:', err);
         setError(err instanceof Error ? err.message : 'Failed to load daily challenge');
       } finally {
         setIsLoading(false);

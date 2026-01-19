@@ -134,9 +134,8 @@ const WaxleGameOverModal = ({
       if (dailyDate) {
         localStorage.setItem(`waxle-daily-submitted-${dailyDate}`, JSON.stringify(submissionData));
       }
-      
+
     } catch (error) {
-      console.error('Error submitting score:', error);
       setSubmissionResult({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to submit score'
