@@ -115,8 +115,6 @@ const HexGrid = ({
   hiddenLetterCellIds = [],
   enableLayout = true,
   isSettling = false,
-  onPivotDragStart,
-  isDragging = false,
 }: HexGridProps) => {
   // drag-to-select removed: revert to tap/click only
   
@@ -275,11 +273,6 @@ const HexGrid = ({
           // borderColor = 'var(--color-2)';
         }
       }
-    }
-
-    // Orbit pivot glow (blue) - add on top of selected styling, only during active orbit
-    if (cell.isOrbitPivot && isDragging) {
-      extraClasses = `${extraClasses} orbit-pivot-glow`.trim();
     }
 
     return {

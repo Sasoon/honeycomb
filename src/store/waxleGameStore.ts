@@ -28,7 +28,7 @@ interface GameModeState {
     score: number;
     round: number;
     gravityMoves?: Map<string, string>;
-    gravitySource?: 'orbit' | 'wordSubmit' | 'autoClear'; // Track what triggered gravity
+    gravitySource?: 'swap' | 'wordSubmit' | 'autoClear'; // Track what triggered gravity
     floodPaths?: Record<string, { path: string[]; batch: number }>;
     tilesHiddenForAnimation?: string[];
     freeMoveAvailable?: boolean;
@@ -341,8 +341,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             startPlayerPhase: () => {
-                const { getCurrentGameState, updateCurrentGameState } = get();
-                const state = getCurrentGameState();
+                const { updateCurrentGameState } = get();
                 updateCurrentGameState({
                     phase: 'player',
                     selectedTiles: [],
@@ -396,7 +395,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 }
 
                 // Apply the flood to the grid
-                const { newGrid, finalPaths, placedCount, unplacedLetters } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
+                const { newGrid, finalPaths, unplacedLetters } = applyFallingTiles(state.grid, actualFallingLetters, state.gridSize);
 
                 // Game over only if tiles couldn't be placed AND top row is actually full
                 const topRowCells = newGrid.filter(cell => cell.position.row === 0);

@@ -30,5 +30,8 @@ export const haptics = {
     },
     success(): void {
         vibrate([12, 30, 40]);
+    },
+    error(): void {
+        vibrate([18, 40, 18]);
     }
 }; 

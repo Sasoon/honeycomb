@@ -18,7 +18,8 @@ const debounce = <T extends (...args: any[]) => void>(func: T, wait: number): T 
   }) as T;
 };
 import HexGrid, { HexCell } from '../components/HexGrid';
-import { areCellsAdjacent, countAdjacentEdges } from '../lib/waxleGameUtils';
+import { runGravityDrop } from '../lib/gravityPhysics';
+import { countAdjacentEdges } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
 import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
@@ -83,6 +84,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [fxOverlays, setFxOverlays] = useState<FxOverlay[]>([]);
   const timersRef = useRef<number[]>([]);
   const uiTimersRef = useRef<number[]>([]);
+  const rafIdsRef = useRef<number[]>([]);
+  const gravityCancelRef = useRef<(() => void) | null>(null);
   const transitionTokenRef = useRef(0);
   const desiredIsDesktopRef = useRef<boolean | null>(null);
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
@@ -276,9 +279,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 timersRef.current.push(advanceT);
             };
         } else {
-            // Group tiles by their settling distance for staggered animation
-            const tilesByDistance = new Map<number, Array<{ cell: HexCell; sourceCell: HexCell; from: { x: number; y: number }; to: { x: number; y: number } }>>();
-            
+            // Collect every tile that needs to drop, with its source and
+            // destination pixel centres. A physics simulation handles the rest.
+            const fallingTiles: Array<{ id: string; cellId: string; letter: string; from: { x: number; y: number }; to: { x: number; y: number } }> = [];
+            const dropStamp = Date.now();
+
             newlySettled.forEach((cell) => {
                 const sourceId = gravityMoves.get(cell.id);
                 const sourceCell = previousGrid.find(c => c.id === sourceId);
@@ -287,100 +292,71 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 const from = centers.get(`${sourceCell.position.row},${sourceCell.position.col}`);
                 const to = centers.get(`${cell.position.row},${cell.position.col}`);
                 if (!from || !to) return;
-                
-                const distance = Math.abs(cell.position.row - sourceCell.position.row);
-                if (!tilesByDistance.has(distance)) {
-                    tilesByDistance.set(distance, []);
-                }
-                tilesByDistance.get(distance)!.push({ cell, sourceCell, from, to });
-            });
-            
-            let maxDelay = 0;
 
-            // ==================== GRAVITY ANIMATION TIMING (Tunable) ====================
-            // Base fall duration in ms (lower = faster falls)
-            const baseDelay = 120; // default: 120ms
-
-            // Time between distance groups starting their animations (lower = more simultaneous)
-            const staggerDelay = 80; // default: 80ms
-
-            // Duration formula: baseDelay + (distance * 30)
-            // Distance 1: 120 + 30 = 150ms
-            // Distance 2: 120 + 60 = 180ms
-            // Distance 3: 120 + 90 = 210ms, etc.
-            // ============================================================================
-
-            // Animate by distance groups (shorter distances first)
-            const sortedDistances = Array.from(tilesByDistance.keys()).sort((a, b) => a - b);
-            
-            sortedDistances.forEach((distance, distanceIdx) => {
-                const tilesAtDistance = tilesByDistance.get(distance)!;
-                
-                tilesAtDistance.forEach((tileData, tileIdx) => {
-                    const { cell, from, to } = tileData;
-                    const ovKey = `gset-${cell.id}-${Date.now()}`;
-
-                    // Calculate animation duration based on distance (longer falls take more time)
-                    const animDuration = baseDelay + (distance * 30);
-
-                    // Spawn overlay at source with calculated duration
-                    setFxOverlays(prev => [...prev, {
-                        key: ovKey,
-                        letter: cell.letter,
-                        x: from.x,
-                        y: from.y,
-                        kind: 'gravity',
-                        duration: animDuration / 1000  // Convert ms to seconds for framer-motion
-                    }]);
-
-                    // Smooth staggered start within distance group
-                    const groupStartDelay = distanceIdx * staggerDelay;
-                    const tileStartDelay = groupStartDelay + (tileIdx * 25); // Small stagger within group
-
-                    // Start animation
-                    const animT = window.setTimeout(() => {
-                        setFxOverlays(prev => prev.map(o =>
-                            o.key === ovKey ? { ...o, x: to.x, y: to.y } : o
-                        ));
-                    }, tileStartDelay);
-                    timersRef.current.push(animT);
-
-                    const finalDelay = tileStartDelay + animDuration;
-                    maxDelay = Math.max(maxDelay, finalDelay);
-                    
-                    // Clean up overlay and reveal tile
-                    const doneT = window.setTimeout(() => {
-                        setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
-                        setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
-                    }, finalDelay);
-                    timersRef.current.push(doneT);
+                fallingTiles.push({
+                    id: `gset-${cell.id}-${dropStamp}`,
+                    cellId: cell.id,
+                    letter: cell.letter,
+                    from,
+                    to,
                 });
             });
 
-            animationDoneSignal = () => {
-              const advanceT = window.setTimeout(() => {
+            const advanceAfterGravity = () => {
                 // Check gravity source to determine next action
                 if (gravitySource === 'autoClear') {
-                  // Auto-clear cascade: look for next word
-                  findAndStartNextAutoClear();
+                    findAndStartNextAutoClear();
                 } else if (gravitySource === 'wordSubmit') {
-                  // Player word submit: trigger flood
-                  endRound();
-                } else if (gravitySource === 'orbit') {
-                  // Orbit gravity: return to player phase
-                  startPlayerPhase();
+                    endRound();
+                } else if (gravitySource === 'swap') {
+                    startPlayerPhase();
                 }
-              }, maxDelay + 100);
-              timersRef.current.push(advanceT);
             };
+
+            if (fallingTiles.length === 0) {
+                animationDoneSignal = () => {
+                    const advanceT = window.setTimeout(advanceAfterGravity, GRAVITY_SHORT_DELAY_MS);
+                    timersRef.current.push(advanceT);
+                };
+            } else {
+                // Render the floating tiles at their source slots; the physics
+                // loop then drives their positions imperatively.
+                setFxOverlays(fallingTiles.map(t => ({
+                    key: t.id,
+                    letter: t.letter,
+                    x: t.from.x,
+                    y: t.from.y,
+                    kind: 'gravity' as const,
+                })));
+
+                const cellIdByTile = new Map(fallingTiles.map(t => [t.id, t.cellId]));
+
+                // Start the simulation on the next frame, once the floating
+                // tiles have been painted and can be moved.
+                const startRaf = requestAnimationFrame(() => {
+                    gravityCancelRef.current = runGravityDrop({
+                        tiles: fallingTiles.map(t => ({ id: t.id, from: t.from, to: t.to })),
+                        cellSize,
+                        getElement: (id) => document.querySelector<HTMLElement>(`[data-fx-id="${CSS.escape(id)}"]`),
+                        onTileSettled: (id) => {
+                            const cellId = cellIdByTile.get(id);
+                            setFxOverlays(prev => prev.filter(o => o.key !== id));
+                            if (cellId) setHiddenCellIds(prev => prev.filter(c => c !== cellId));
+                        },
+                        onComplete: () => {
+                            gravityCancelRef.current = null;
+                            const advanceT = window.setTimeout(advanceAfterGravity, GRAVITY_SHORT_DELAY_MS);
+                            timersRef.current.push(advanceT);
+                        },
+                    });
+                });
+                rafIdsRef.current.push(startRaf);
+            }
         }
     } else if (phase === 'flood') {
         const newlyFilled = grid
           .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
           .sort((a, b) => (a.position.row - b.position.row) || (a.position.col - b.position.col));
-        
-        const debugAnim = typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugAnim') === '1';
-        const tNow = () => (typeof performance !== 'undefined' ? Math.round(performance.now()) : Date.now());
 
         if (prefersReducedMotion) {
           // Reveal immediately and skip path animation
@@ -586,8 +562,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     return () => {
       timersRef.current.forEach(t => window.clearTimeout(t));
       timersRef.current = [];
+      rafIdsRef.current.forEach(id => cancelAnimationFrame(id));
+      rafIdsRef.current = [];
+      if (gravityCancelRef.current) {
+        gravityCancelRef.current();
+        gravityCancelRef.current = null;
+      }
     };
-  }, [phase, grid, previousGrid, cellSize.h, startPlayerPhase, gravityMoves, floodPaths, endRound, prefersReducedMotion]);
+  }, [phase, grid, previousGrid, cellSize.w, cellSize.h, startPlayerPhase, gravityMoves, floodPaths, endRound, prefersReducedMotion]);
 
   // Performance optimization: Memoize resize handler
   const checkScreenSize = useCallback(() => {
@@ -778,8 +760,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     setIsSettling(true);
     window.setTimeout(() => setIsSettling(false), 700);
   };
-
-  const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
     <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-[height,padding] duration-300 ease-in-out relative">
@@ -1039,8 +1019,32 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
           <div ref={containerRef} className="absolute inset-0 px-2">
             {/* FX overlays (gravity/flood/orbit/move) */}
             <div className="pointer-events-none absolute inset-0 z-50">
+              {/* Gravity tiles: positions driven imperatively by the physics engine */}
+              {fxOverlays.filter(fx => fx.kind === 'gravity').map(fx => (
+                <div
+                  key={fx.key}
+                  data-fx-id={fx.key}
+                  className="absolute flex items-center justify-center"
+                  style={{
+                    left: 0,
+                    top: 0,
+                    width: `${cellSize.w}px`,
+                    height: `${cellSize.h}px`,
+                    transform: `translate(${fx.x - cellSize.w / 2}px, ${fx.y - cellSize.h / 2}px)`,
+                    clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                    background: 'rgba(229,231,235,0.96)',
+                    borderRadius: 8,
+                    boxShadow: '0 6px 14px rgba(0,0,0,0.12)',
+                    willChange: 'transform',
+                  }}
+                >
+                  <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
+                </div>
+              ))}
+
+              {/* Flood / move FX: framer-motion keyframe animation */}
               <AnimatePresence>
-                {fxOverlays.map(fx => (
+                {fxOverlays.filter(fx => fx.kind !== 'gravity').map(fx => (
                   <motion.div
                     key={fx.key}
                     initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1, rotateZ: 0 }}
@@ -1053,19 +1057,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       scale: [1, 1, 1.08, 0.96, 1],
                       // Subtle wobble
                       rotateZ: [0, 0, 1.5, -0.5, 0]
-                      // ================================================================
-                    } : (fx.kind === 'gravity') ? {
-                      x: fx.x - cellSize.w / 2,
-                      y: fx.y - cellSize.h / 2,
-                      opacity: 1,
-                      // ==================== GRAVITY FEEL (Tunable) ====================
-                      // Bounce on landing: [start, hold, squash, stretch, settle]
-                      // Increase middle values for more bounce
-                      scale: [1, 1, 1.15, 0.92, 1],
-
-                      // Wobble during fall: [start, hold, tilt-right, tilt-left, settle]
-                      // Increase values for more wobble
-                      rotateZ: [0, 0, 3, -1, 0]
                       // ================================================================
                     } : {
                       x: fx.x - cellSize.w / 2,
@@ -1080,26 +1071,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       // ==================== FLOOD TIMING (Tunable) ====================
                       // Fixed duration per step (from FLOOD_STEP_MS constant)
                       duration: FLOOD_STEP_MS / 1000,
-
-                      // Keyframe timing: [start, accel-start, landing, bounce, settle]
                       times: [0, 0.5, 0.75, 0.9, 1],
-
-                      // Same gravity acceleration curve for weight
-                      ease: [0.5, 2, 0.5, 1]
-                      // ===================================================================
-                    } : (fx.kind === 'gravity') ? {
-                      // ==================== GRAVITY TIMING (Tunable) ====================
-                      // Use calculated duration based on fall distance (automatically set)
-                      duration: fx.duration || 0.18,
-
-                      // Keyframe timing: [start, accel-start, landing, bounce, settle]
-                      // Adjust to change when bounce happens (0-1 range, must match scale/rotateZ length)
-                      times: [0, 0.5, 0.75, 0.9, 1],
-
-                      // Acceleration curve: [x1, y1, x2, y2] cubic bezier
-                      // Strong gravity feel with impact
-                      // More weight: try [0.6, 2, 0.4, 1]
-                      // Less weight: try [0.25, 1, 0.5, 1]
                       ease: [0.5, 2, 0.5, 1]
                       // ===================================================================
                     } : {
@@ -1209,13 +1181,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 isTetrisVariant={true}
                 enableLayout={!isTransitioning}
                 isSettling={isSettling}
-                hiddenLetterCellIds={[
-                  ...hiddenCellIds,
-                  ...(isDragging && selectedSingle ?
-                    grid.filter(c => c.id !== selectedSingle.cellId && areCellsAdjacent(c, grid.find(g => g.id === selectedSingle.cellId)!) && c.letter && c.isPlaced)
-                      .map(c => c.id) : []
-                  )
-                ]}
+                hiddenLetterCellIds={hiddenCellIds}
               />
               
               {/* Unified Game Controls */}
