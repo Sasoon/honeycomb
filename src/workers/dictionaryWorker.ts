@@ -49,9 +49,6 @@ async function loadDictionaries(): Promise<void> {
             console.error('Failed to load dictionaries:', error);
             dictionary = {};
             blacklist = new Set();
-        } catch {
-            dictionary = {};
-            blacklist = new Set();
         }
     })();
 

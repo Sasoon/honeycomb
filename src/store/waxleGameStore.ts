@@ -28,7 +28,7 @@ interface GameModeState {
     score: number;
     round: number;
     gravityMoves?: Map<string, string>;
-    gravitySource?: 'orbit' | 'wordSubmit' | 'autoClear'; // Track what triggered gravity
+    gravitySource?: 'swap' | 'wordSubmit' | 'autoClear'; // Track what triggered gravity
     floodPaths?: Record<string, { path: string[]; batch: number }>;
     tilesHiddenForAnimation?: string[];
     freeMoveAvailable?: boolean;
