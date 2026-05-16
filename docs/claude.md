@@ -139,13 +139,13 @@ curl -X POST "http://localhost:43067/.netlify/functions/submit-score" \
 
 ```bash
 # Get daily leaderboard
-curl -s "https://upbank-financial-dashboard.netlify.app/.netlify/functions/get-leaderboard?type=daily" | jq '.'
+curl -s "https://waxle.netlify.app/.netlify/functions/get-leaderboard?type=daily" | jq '.'
 
 # Get all-time leaderboard
-curl -s "https://upbank-financial-dashboard.netlify.app/.netlify/functions/get-leaderboard?type=alltime" | jq '.'
+curl -s "https://waxle.netlify.app/.netlify/functions/get-leaderboard?type=alltime" | jq '.'
 
 # Submit score (use with caution - this affects production data!)
-curl -X POST "https://upbank-financial-dashboard.netlify.app/.netlify/functions/submit-score" \
+curl -X POST "https://waxle.netlify.app/.netlify/functions/submit-score" \
   -H "Content-Type: application/json" \
   -d '{
     "playerName": "prodtester",

@@ -147,7 +147,7 @@ const WaxleGameOverModal = ({
 
   const handleShare = () => {
     const shareText = isDailyChallenge 
-      ? `🎯 WAXLE - Daily Challenge\n\nScore: ${score}\nWords: ${totalWords}\nRounds: ${round}\nLongest: ${longestWord}\n\nPlay today's challenge: https://honeycomb-game.netlify.app/daily`
+      ? `🎯 WAXLE - Daily Challenge\n\nScore: ${score}\nWords: ${totalWords}\nRounds: ${round}\nLongest: ${longestWord}\n\nPlay today's challenge: https://waxle.netlify.app/daily`
       : `🎯 WAXLE\n\nFinal Score: ${score}\nWords Found: ${totalWords}\nRounds Survived: ${round}\nLongest Word: ${longestWord}\n\nPlay at: ${window.location.origin}`;
     
     // Copy to clipboard only
