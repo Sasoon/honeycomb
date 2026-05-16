@@ -160,9 +160,9 @@ const WaxleMobileGameControls = ({
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <DynamicZapIcon 
-                  orbitsAvailable={freeOrbitsAvailable || 0}
-                  maxOrbits={2}
+                <DynamicZapIcon
+                  swapsAvailable={freeSwapsAvailable || 0}
+                  maxSwaps={2}
                   size={14}
                   className="flex-shrink-0"
                   animationDelay={400}

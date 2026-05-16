@@ -19,7 +19,7 @@ const debounce = <T extends (...args: any[]) => void>(func: T, wait: number): T 
 };
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { runGravityDrop } from '../lib/gravityPhysics';
-import { areCellsAdjacent, countAdjacentEdges } from '../lib/waxleGameUtils';
+import { countAdjacentEdges } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
 import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
@@ -357,9 +357,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         const newlyFilled = grid
           .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
           .sort((a, b) => (a.position.row - b.position.row) || (a.position.col - b.position.col));
-        
-        const debugAnim = typeof window !== 'undefined' && window.localStorage.getItem('waxleDebugAnim') === '1';
-        const tNow = () => (typeof performance !== 'undefined' ? Math.round(performance.now()) : Date.now());
 
         if (prefersReducedMotion) {
           // Reveal immediately and skip path animation
@@ -763,8 +760,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     setIsSettling(true);
     window.setTimeout(() => setIsSettling(false), 700);
   };
-
-  const selectedSingle = selectedTiles.length === 1 ? selectedTiles[0] : null;
 
   return (
     <div className="game-container flex-1 bg-bg-primary overflow-hidden mobile-height transition-[height,padding] duration-300 ease-in-out relative">
@@ -1186,13 +1181,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 isTetrisVariant={true}
                 enableLayout={!isTransitioning}
                 isSettling={isSettling}
-                hiddenLetterCellIds={[
-                  ...hiddenCellIds,
-                  ...(isDragging && selectedSingle ?
-                    grid.filter(c => c.id !== selectedSingle.cellId && areCellsAdjacent(c, grid.find(g => g.id === selectedSingle.cellId)!) && c.letter && c.isPlaced)
-                      .map(c => c.id) : []
-                  )
-                ]}
+                hiddenLetterCellIds={hiddenCellIds}
               />
               
               {/* Unified Game Controls */}

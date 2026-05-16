@@ -164,8 +164,8 @@ export const DynamicZapIcon = ({
               }}
             />
             
-            {/* Filled icon (amber background fill) - show if orbits > 0 and not in empty state */}
-            {effectiveOrbits > 0 && (
+            {/* Filled icon (amber background fill) - show if swaps > 0 and not in empty state */}
+            {effectiveSwaps > 0 && (
               <IconComponent 
                 size={size}
                 className={cn(
