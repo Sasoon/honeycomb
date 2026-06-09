@@ -308,7 +308,8 @@ const HexGrid = ({
               const showLetter = !hiddenLetterCellIds.includes(cell.id);
               const styles = cellStyles(cell);
               return (
-                <div key={cell.id} style={{ width: '70px', margin: '0 5px' }}> {/* Adjust width and horizontal overlap */}
+                // Narrower cells below 420px so the widest (5-cell) row fits small phone screens
+                <div key={cell.id} className="w-[58px] mx-[3px] min-[420px]:w-[70px] min-[420px]:mx-[5px]">
                   <CellView
                     cell={cell}
                     onClick={onCellClick}

@@ -64,18 +64,20 @@ export const OptimizedCounter = ({
         animationRef.current = requestAnimationFrame(animate);
       } else {
         // Instant update for slide/tick animations (CSS handles the transition)
+        let resetTimeout: ReturnType<typeof setTimeout> | undefined;
         const timeout = setTimeout(() => {
           setDisplayValue(value);
           prevValueRef.current = value;
-          
-          const resetTimeout = setTimeout(() => {
+
+          resetTimeout = setTimeout(() => {
             setIsAnimating(false);
           }, duration * 1000);
-          
-          return () => clearTimeout(resetTimeout);
         }, delay);
-        
-        return () => clearTimeout(timeout);
+
+        return () => {
+          clearTimeout(timeout);
+          if (resetTimeout) clearTimeout(resetTimeout);
+        };
       }
     }
     

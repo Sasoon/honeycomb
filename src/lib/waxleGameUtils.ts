@@ -480,11 +480,12 @@ export function countAdjacentEdges(selectedTiles: string[], grid: HexCell[]): nu
         const tile1 = grid.find(c => c.id === selectedTiles[i]);
         if (!tile1) continue;
 
-        for (let j = i + 1; j < selectedTiles.length; j++) {
+        // j starts at i + 2 so sequential path connections don't count —
+        // only extra adjacencies between non-consecutive tiles earn the bonus
+        for (let j = i + 2; j < selectedTiles.length; j++) {
             const tile2 = grid.find(c => c.id === selectedTiles[j]);
             if (!tile2) continue;
 
-            // Count adjacency between non-sequential tiles in the word
             if (isHexAdjacent(tile1, tile2)) {
                 edges++;
             }

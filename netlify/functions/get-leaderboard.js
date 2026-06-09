@@ -66,7 +66,7 @@ async function getDailyLeaderboard(isLocal, context, limit) {
       if (built) data = built;
     }
 
-    const entries = Array.isArray(data?.leaderboard) ? data.leaderboard : [];
+    const entries = (Array.isArray(data?.leaderboard) ? data.leaderboard : []).filter(isPlausibleEntry);
 
     // Sort by score (descending), then by submission time (ascending - earlier is better for ties)
     const sorted = [...entries].sort((a, b) => {
@@ -147,7 +147,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
       if (built) data = built;
     }
 
-    const entries = Array.isArray(data?.leaderboard) ? data.leaderboard : [];
+    const entries = (Array.isArray(data?.leaderboard) ? data.leaderboard : []).filter(isPlausibleEntry);
 
     // Sort by score (descending), then by submission time (ascending)
     const sorted = [...entries].sort((a, b) => {
@@ -195,6 +195,12 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
       }
     );
   }
+}
+
+// Hide implausible legacy/forged entries (~50 points per word is unreachable)
+function isPlausibleEntry(entry) {
+  if (!entry) return false;
+  return entry.score <= Math.max(entry.totalWords || 0, 1) * 50;
 }
 
 async function buildDailyIndex({ siteID, isLocal, date }) {

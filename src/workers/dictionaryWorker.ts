@@ -45,8 +45,8 @@ async function loadDictionaries(): Promise<void> {
                     }
                 }
             }
-        } catch (error) {
-            console.error('Failed to load dictionaries:', error);
+        } catch {
+            // Fall back to empty dictionaries; main thread falls back to its own loader
             dictionary = {};
             blacklist = new Set();
         }
@@ -90,7 +90,7 @@ interface SuggestionsMessage extends BaseMessage {
 self.addEventListener('message', async (event: MessageEvent<BaseMessage | ValidateMessage | SuggestionsMessage>) => {
     const msg = event.data;
 
-    if (!msg || typeof msg !== 'object' || typeof (msg as any).type !== 'string') return;
+    if (!msg || typeof msg !== 'object' || typeof (msg as { type?: unknown }).type !== 'string') return;
 
     switch (msg.type) {
         case 'preload': {
@@ -116,7 +116,7 @@ self.addEventListener('message', async (event: MessageEvent<BaseMessage | Valida
                                blacklist && 
                                !blacklist.has(normalized);
                 (self as unknown as Worker).postMessage({ id, type: 'validate', isValid });
-            } catch (error) {
+            } catch {
                 (self as unknown as Worker).postMessage({ id, type: 'validate', isValid: false });
             }
             break;
@@ -134,7 +134,7 @@ self.addEventListener('message', async (event: MessageEvent<BaseMessage | Valida
                 await loadDictionaries();
                 buildPrefixIndex();
                 
-                let candidates: string[] = [];
+                const candidates: string[] = [];
                 if (prefixIndex) {
                     const bucket = prefixIndex.get(normalizedPrefix.slice(0, 2));
                     if (bucket && bucket.length) {
@@ -155,7 +155,7 @@ self.addEventListener('message', async (event: MessageEvent<BaseMessage | Valida
                     }
                 }
                 (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: candidates.slice(0, limit) });
-            } catch (error) {
+            } catch {
                 (self as unknown as Worker).postMessage({ id, type: 'suggestions', suggestions: [] });
             }
             break;

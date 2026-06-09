@@ -64,6 +64,42 @@ export default async function handler(request, context) {
       });
     }
 
+    // Plausibility validation
+    const numericTotalWords = parseInt(totalWords) || 0;
+    if (!Number.isInteger(numericScore) || numericScore < 1) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (!Number.isInteger(numericTotalWords) || numericTotalWords < 0 || numericTotalWords > 500) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (!Number.isInteger(numericRound) || numericRound < 1 || numericRound > 500) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    // Generous upper bound: ~50 points per word is unreachable
+    if (numericScore > Math.max(numericTotalWords, 1) * 50) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (longestWord !== undefined && longestWord !== null && longestWord !== '') {
+      if (typeof longestWord !== 'string' || !/^[a-zA-Z]{1,19}$/.test(longestWord)) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     const isLocal = !context.site?.id;
     const timestamp = new Date().toISOString();
 
