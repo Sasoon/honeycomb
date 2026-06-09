@@ -19,6 +19,14 @@ export interface SelectedTile {
     position: number; // Order in which it was selected
 }
 
+// Shape of the pre-generated daily seed payload from /api/daily-seed
+export interface DailySeedGameState {
+    startingLetters: string[];
+    firstDrop: string[];
+    secondDrop: string[];
+    rngState: number;
+}
+
 // Individual game state that can be stored separately for Classic and Daily
 interface GameModeState {
     gameInitialized: boolean;
@@ -100,7 +108,7 @@ interface WaxleGameState {
     // Actions
     setGameState: (state: Partial<WaxleGameState>) => void;
     initializeGame: () => void;
-    initializeDailyChallenge: (seed: number, gameState: any, date: string) => void;
+    initializeDailyChallenge: (seed: number, gameState: DailySeedGameState, date: string) => void;
     resetGame: () => void;
 
     // Game flow actions
@@ -204,17 +212,16 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
             // Timeout management to prevent memory leaks
             addTimeout: (timeout: NodeJS.Timeout) => {
-                set((prev) => {
-                    prev.pendingTimeouts.add(timeout);
-                    return prev;
-                });
+                set((prev) => ({
+                    ...prev,
+                    pendingTimeouts: new Set([...prev.pendingTimeouts, timeout])
+                }));
             },
 
             clearAllTimeouts: () => {
                 set((prev) => {
                     prev.pendingTimeouts.forEach((timeout) => clearTimeout(timeout));
-                    prev.pendingTimeouts.clear();
-                    return prev;
+                    return { ...prev, pendingTimeouts: new Set<NodeJS.Timeout>() };
                 });
             },
 
@@ -270,7 +277,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 }));
             },
 
-            initializeDailyChallenge: (seed: number, gameState: any, date: string) => {
+            initializeDailyChallenge: (seed: number, gameState: DailySeedGameState, date: string) => {
                 const gridSize = 5;
                 const initialGrid = generateInitialGrid(gridSize, true); // Skip pre-placed tiles for daily challenges
                 const seededRNG = createSeededRNG(seed);
@@ -382,7 +389,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
                 // Generate flood tiles for this round
                 const rewardCreative = (!state.freeMoveAvailable) || ((state.freeSwapsAvailable || 0) <= 0);
-                const rng = state.seededRNG && typeof (state.seededRNG as any).next === 'function' ? state.seededRNG : undefined;
+                const rng = state.seededRNG && typeof (state.seededRNG as Partial<SeededRNG>).next === 'function' ? state.seededRNG : undefined;
                 const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative, rng);
 
                 // Ensure we have exactly 3 tiles
@@ -777,7 +784,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     wordsThisRound: updatedWordsThisRound,
                 });
 
-                toastService.success(`Auto-cleared "${currentWord.word}"! +1 orbit`);
+                toastService.success(`Auto-cleared "${currentWord.word}"! +1 swap`);
 
                 // If no gravity, continue cascade immediately by scanning for next word
                 if (moveSources.size === 0) {
@@ -824,9 +831,10 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
-                // Create snapshot of current state
+                // Create snapshot of current state (cells deep-copied so later
+                // in-place grid mutations can't corrupt undo history)
                 const snapshot = {
-                    grid: [...state.grid],
+                    grid: state.grid.map(cell => ({ ...cell })),
                     freeSwapsAvailable: state.freeSwapsAvailable,
                     score: state.score,
                     wordsThisRound: [...state.wordsThisRound],

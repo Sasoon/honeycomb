@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Undo2, RotateCw } from 'lucide-react';
+import { Undo2, RotateCw, ArrowLeftRight } from 'lucide-react';
+import { cn } from '../lib/utils';
 import { Button } from './ui/Button';
 
 type GameControlsProps = {
@@ -7,16 +8,20 @@ type GameControlsProps = {
   currentWord: string;
   phase: 'flood' | 'player' | 'gameOver' | 'gravitySettle' | 'autoClearing';
   validationState?: boolean;
-  
+
   // Actions
   onSubmitWord: () => void;
   onEndTurn: () => void;
   onUndo: () => void;
   onRestart?: () => void;
-  
+  onToggleSwapMode?: () => void;
+
   // Conditionals
   canUndo: boolean;
   isDailyChallenge: boolean;
+  swapsAvailable?: number;
+  swapModeActive?: boolean;
+  swapFirstTileSelected?: boolean;
 };
 
 const GameControls = ({
@@ -27,13 +32,18 @@ const GameControls = ({
   onEndTurn,
   onUndo,
   onRestart,
+  onToggleSwapMode,
   canUndo,
-  isDailyChallenge
+  isDailyChallenge,
+  swapsAvailable = 0,
+  swapModeActive = false,
+  swapFirstTileSelected = false
 }: GameControlsProps) => {
   const isPlayerPhase = phase === 'player';
   const canSubmit = currentWord.length >= 3 && isPlayerPhase && validationState === true;
   const canEndTurn = isPlayerPhase;
   const canRestart = !isDailyChallenge && phase !== 'flood' && phase !== 'gravitySettle';
+  const canSwap = isPlayerPhase && (swapsAvailable > 0 || swapModeActive);
 
   // Removed fixed dimensions - now handled by Button component gameControl size
 
@@ -86,6 +96,31 @@ const GameControls = ({
 
       {/* Secondary Actions Row */}
       <div className="flex gap-2 sm:gap-3 items-center justify-center mt-2 sm:mt-3 transition-[transform,opacity] duration-300 ease-in-out">
+        {/* Swap mode toggle */}
+        {onToggleSwapMode && (
+          <Button
+            onClick={onToggleSwapMode}
+            disabled={!canSwap}
+            variant={swapModeActive ? 'default' : 'secondary'}
+            size="gameControl"
+            className={cn(
+              'gap-1 sm:gap-2 relative',
+              swapModeActive && 'ring-2 ring-green-500 ring-offset-1'
+            )}
+            aria-pressed={swapModeActive}
+            aria-label={`Swap tiles (${swapsAvailable} available)`}
+          >
+            <ArrowLeftRight className="w-4 h-4 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Swap</span>
+            <span className={cn(
+              'text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center',
+              swapModeActive ? 'bg-white/25' : 'bg-secondary/30'
+            )}>
+              {swapsAvailable}
+            </span>
+          </Button>
+        )}
+
         {/* Undo - Secondary Action */}
         <Button 
           onClick={onUndo}
@@ -112,7 +147,16 @@ const GameControls = ({
           </Button>
         )}
       </div>
-      
+
+      {/* Swap mode hint */}
+      {swapModeActive && (
+        <div className="mt-2 text-center text-xs font-medium text-green-600" role="status">
+          {swapFirstTileSelected
+            ? 'Now tap the tile to swap it with'
+            : 'Swap mode: tap two tiles to swap their letters'}
+        </div>
+      )}
+
       {/* Restart Confirmation Modal */}
       {showRestartConfirm && (
         <div className="fixed inset-0 flex items-center justify-center z-50" onClick={cancelRestart}>

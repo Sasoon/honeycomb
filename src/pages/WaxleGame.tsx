@@ -10,9 +10,9 @@ import { calculateDisplayWordScore } from '../lib/gameUtils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 
 // Performance optimization: Debounce utility for resize handler
-const debounce = <T extends (...args: any[]) => void>(func: T, wait: number): T => {
-  let timeout: NodeJS.Timeout;
-  return ((...args: any[]) => {
+const debounce = <T extends (...args: never[]) => void>(func: T, wait: number): T => {
+  let timeout: ReturnType<typeof setTimeout>;
+  return ((...args: Parameters<T>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
   }) as T;
@@ -71,7 +71,7 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   return { w: r.width, h: r.height };
 }
 
-type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'orbit' | 'move' | 'flood'; duration?: number };
+type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'swap' | 'move' | 'flood'; duration?: number };
 
 // (no-op placeholder removed)
 
@@ -91,6 +91,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
   const [swapFirstTile, setSwapFirstTile] = useState<string | null>(null);
+  const [swapModeActive, setSwapModeActive] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
@@ -187,6 +188,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       // Reset contextual UI state at start of player phase
       setFxOverlays([]);
       setSwapFirstTile(null);
+      setSwapModeActive(false);
     }
   }, [phase, grid]);
 
@@ -389,10 +391,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             const p = floodPathsTyped && floodPathsTyped[cell.id];
             const pathIds: string[] | null = p && Array.isArray(p.path) ? p.path : null;
             if (!pathIds || pathIds.length === 0) {
-              console.warn(`[FLOOD-ERROR] No path found for tile ${cell.id} in flood paths`);
+              // No recorded flood path; tile is revealed without animation below
               return null;
             }
-            let pathIdsCopy = [...pathIds];
+            const pathIdsCopy = [...pathIds];
             
             // Convert path IDs to centers, ensuring we follow the exact flood path
             const pathCenters: TilePathCenters = [];
@@ -407,13 +409,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             for (const pathId of pathIds) {
               const pathCell = grid.find(g => g.id === pathId);
               if (!pathCell) {
-                console.warn(`[FLOOD-ERROR] Path cell ${pathId} not found in grid`);
                 continue;
               }
               
               const center = centers.get(`${pathCell.position.row},${pathCell.position.col}`);
               if (!center) {
-                console.warn(`[FLOOD-ERROR] Center not found for path cell (${pathCell.position.row},${pathCell.position.col})`);
                 continue;
               }
               
@@ -446,7 +446,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
           batches.forEach((paths, batchIdx) => {
             const occupancy = new Map<string, Set<number>>();
             paths.sort((a, b) => a.pathCenters.length - b.pathCenters.length);
-            paths.forEach((tp: any) => {
+            paths.forEach((tp) => {
               let offset = 0;
               const maxOffset = 20;
               while (offset < maxOffset) {
@@ -475,7 +475,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             });
 
             // longest duration within this batch (steps)
-            const longestSteps = Math.max(...paths.map((p: any)=>p.pathCenters.length));
+            const longestSteps = Math.max(...paths.map((p)=>p.pathCenters.length));
             perBatchMaxDelay.set(batchIdx, (longestSteps-1)*perStep);
           });
 
@@ -488,7 +488,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
           batchesSorted.forEach(([batchIdx, batchPaths])=>{
             const batchStart = cumulativeStart;
 
-            (batchPaths as any).forEach(({ cell, pathCenters }: any)=>{
+            batchPaths.forEach(({ cell, pathCenters })=>{
               const offset = batchOffsets.get(cell.id) ?? 0;
               const baseDelay = batchStart + offset*perStep;
 
@@ -515,7 +515,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               }
 
               // Animate through each step in the path
-              pathCenters.forEach((pc: any, stepIndex: number) => {
+              pathCenters.forEach((pc, stepIndex) => {
                 const stepDelay = baseDelay + stepIndex * perStep;
                 const arriveT = window.setTimeout(() => {
                   setFxOverlays(prev => prev.map(o =>
@@ -680,25 +680,37 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     return 0;
   }, [currentWord, round, validationState, selectedTiles, grid]);
 
-  // Handle cell clicks: word selection or swap mode
+  // Handle cell clicks: word selection by default; swaps only when swap mode
+  // has been explicitly armed via the Swap button
   const handleCellClick = useCallback((cell: HexCell) => {
     if (phase !== 'player') return;
 
-    // Check if we're in swap mode (first tile already selected)
-    if (swapFirstTile) {
-      // Second tile click - perform swap or cancel
+    if (swapModeActive) {
+      // Swap mode only operates on placed tiles with letters
+      if (!cell.letter || !cell.isPlaced) {
+        haptics.error();
+        return;
+      }
+
+      if (!swapFirstTile) {
+        // First tile of the pair
+        setSwapFirstTile(cell.id);
+        haptics.select();
+        return;
+      }
+
       if (swapFirstTile === cell.id) {
-        // Clicked same tile - cancel swap mode
+        // Clicked same tile - deselect it but stay in swap mode
         setSwapFirstTile(null);
         haptics.select();
         return;
       }
 
-      // Both tiles must have letters to swap
       const firstTile = grid.find(c => c.id === swapFirstTile);
-      if (!firstTile?.letter || !cell.letter || !cell.isPlaced) {
-        setSwapFirstTile(null);
-        haptics.error();
+      if (!firstTile?.letter) {
+        // First tile vanished (e.g. gravity); restart the pair from this tile
+        setSwapFirstTile(cell.id);
+        haptics.select();
         return;
       }
 
@@ -717,25 +729,29 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       });
 
       setSwapFirstTile(null);
+      setSwapModeActive(false);
       haptics.success();
-      return;
-    }
-
-    // Check if we should enter swap mode:
-    // - Have available swaps
-    // - Clicked a placed tile with a letter
-    // - No current word selection
-    if ((freeSwapsAvailable || 0) > 0 && cell.letter && cell.isPlaced && selectedTiles.length === 0) {
-      // Enter swap mode - store first tile
-      setSwapFirstTile(cell.id);
-      haptics.select();
       return;
     }
 
     // Normal word selection mode
     haptics.select();
     selectTile(cell.id);
-  }, [phase, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile, selectedTiles]);
+  }, [phase, swapModeActive, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile]);
+
+  // Arm/disarm swap mode from the Swap button
+  const toggleSwapMode = useCallback(() => {
+    if (phase !== 'player') return;
+    if (!swapModeActive && (freeSwapsAvailable || 0) <= 0) return;
+
+    setSwapFirstTile(null);
+    if (!swapModeActive) {
+      // Entering swap mode clears any in-progress word selection
+      useWaxleGameStore.getState().clearSelection();
+    }
+    setSwapModeActive(prev => !prev);
+    haptics.select();
+  }, [phase, swapModeActive, freeSwapsAvailable]);
 
   // Animated move: slide letter from source to target, hide letters during animation, then commit move
   
@@ -1017,7 +1033,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         <div className="flex-1 h-full overflow-hidden relative">
 
           <div ref={containerRef} className="absolute inset-0 px-2">
-            {/* FX overlays (gravity/flood/orbit/move) */}
+            {/* FX overlays (gravity/flood/swap/move) */}
             <div className="pointer-events-none absolute inset-0 z-50">
               {/* Gravity tiles: positions driven imperatively by the physics engine */}
               {fxOverlays.filter(fx => fx.kind === 'gravity').map(fx => (
@@ -1195,6 +1211,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 onRestart={!isDailyChallenge ? handleRestart : undefined}
                 canUndo={canUndo()}
                 isDailyChallenge={isDailyChallenge}
+                swapsAvailable={freeSwapsAvailable || 0}
+                swapModeActive={swapModeActive}
+                swapFirstTileSelected={!!swapFirstTile}
+                onToggleSwapMode={toggleSwapMode}
               />
             </div>
 

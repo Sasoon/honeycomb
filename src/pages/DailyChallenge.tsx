@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, Play, CheckCircle, RotateCcw, Trophy } from 'lucide-react';
 import { useWaxleGameStore } from '../store/waxleGameStore';
-import { Button } from '../components/ui/Button';
+import { Button, buttonVariants } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import WaxleGame from './WaxleGame';
 
@@ -207,16 +207,16 @@ const DailyChallenge = () => {
 
                 {/* Primary action */}
                 {isCompleted ? (
-                  <Button
-                    variant="default"
-                    size="lg"
-                    className="w-full bg-amber hover:bg-amber/90 text-white border-amber hover:border-amber/90"
-                    asChild
+                  <a
+                    href="/leaderboard"
+                    className={buttonVariants({
+                      variant: 'default',
+                      size: 'lg',
+                      className: 'w-full bg-amber hover:bg-amber/90 text-white border-amber hover:border-amber/90'
+                    })}
                   >
-                    <a href="/leaderboard">
-                      View Leaderboard
-                    </a>
-                  </Button>
+                    View Leaderboard
+                  </a>
                 ) : (
                   <Button
                     onClick={handleStartChallenge}

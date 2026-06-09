@@ -166,7 +166,7 @@ class WordValidator {
         const id = this.nextRequestId++;
         return new Promise<TResponse>((resolve) => {
             this.pending.set(id, (msg) => resolve(msg as TResponse));
-            (this.worker as Worker).postMessage({ id, ...(payload as any) });
+            (this.worker as Worker).postMessage(Object.assign({ id }, payload));
         });
     }
 
@@ -207,7 +207,7 @@ class WordValidator {
                     blResponse.json()
                 ]);
 
-                let dict: Dictionary = {};
+                const dict: Dictionary = {};
                 if (Array.isArray(rawDict)) {
                     // Array of words
                     for (const w of rawDict) {
@@ -226,7 +226,7 @@ class WordValidator {
                 this.blacklist = new Set((blList as unknown as string[]).map(w => w.toLowerCase()));
                 this.isLoading = false;
                 this._isReady = true;
-            } catch (err) {
+            } catch {
                 this.isLoading = false;
             }
         })();

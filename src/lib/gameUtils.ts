@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { HexCell } from '../components/HexGrid';
+import { isHexAdjacent } from './waxleGameUtils';
 
 // Letter distribution based on common English frequency
 export const LETTER_FREQUENCY: { [key: string]: 'common' | 'medium' | 'uncommon' | 'rare' } = {
@@ -96,7 +97,7 @@ export const generateInitialGrid = (size: number, skipPrePlaced = false): HexCel
         if (centerTile) { // Only proceed if center tile exists
             // Find tiles adjacent to the center
             const adjacentTiles = centerTiles.filter(cell =>
-                isAdjacent(cell, centerTile) &&
+                isHexAdjacent(cell, centerTile) &&
                 cell.id !== centerTile.id
             );
 
@@ -136,98 +137,3 @@ export const generateInitialGrid = (size: number, skipPrePlaced = false): HexCel
 
     return grid;
 };
-
-// Simple adjacency check for clicking on cells
-export const isAdjacentToCell = (cell1: HexCell, cell2: HexCell): boolean => {
-    const p1 = cell1.position;
-    const p2 = cell2.position;
-
-    // Same cell
-    if (p1.row === p2.row && p1.col === p2.col) return false;
-
-    // Distance between cells - using Manhattan distance for simplicity
-    const rowDiff = Math.abs(p1.row - p2.row);
-    const colDiff = Math.abs(p1.col - p2.col);
-
-    // Hexagonal grids have special adjacency rules
-    // For simplicity, we'll use a more permissive rule:
-    // Cells are adjacent if they are at most 1 row and 1 column apart
-    return rowDiff <= 1 && colDiff <= 1 && !(rowDiff === 0 && colDiff === 0);
-};
-
-// More detailed adjacency check for score calculation
-export const isAdjacent = (cell1: HexCell, cell2: HexCell): boolean => {
-    const p1 = cell1.position;
-    const p2 = cell2.position;
-
-    // Same position
-    if (p1.row === p2.row && p1.col === p2.col) return false;
-
-    // Row difference more than 1, not adjacent
-    if (Math.abs(p1.row - p2.row) > 1) return false;
-
-    // Even rows connect differently than odd rows
-    if (p1.row % 2 === 0) {
-        // Even row
-        if (p1.row === p2.row) {
-            // Same row, must be 1 column apart
-            return Math.abs(p1.col - p2.col) === 1;
-        } else if (p1.row + 1 === p2.row) {
-            // Below, column must be same or one less
-            return p1.col === p2.col || p1.col - 1 === p2.col;
-        } else if (p1.row - 1 === p2.row) {
-            // Above, column must be same or one less
-            return p1.col === p2.col || p1.col - 1 === p2.col;
-        }
-    } else {
-        // Odd row
-        if (p1.row === p2.row) {
-            // Same row, must be 1 column apart
-            return Math.abs(p1.col - p2.col) === 1;
-        } else if (p1.row + 1 === p2.row) {
-            // Below, column must be same or one more
-            return p1.col === p2.col || p1.col + 1 === p2.col;
-        } else if (p1.row - 1 === p2.row) {
-            // Above, column must be same or one more
-            return p1.col === p2.col || p1.col + 1 === p2.col;
-        }
-    }
-
-    return false;
-};
-
-// Calculate the score for a word
-export const calculateWordScore = (path: HexCell[], grid: HexCell[]): number => {
-    // Basic score: 1 point per letter
-    let wordScore = path.length;
-
-    // Check for double letter bonus
-    const letters = path.map(cell => cell.letter);
-    for (let i = 0; i < letters.length - 1; i++) {
-        if (letters[i] === letters[i + 1]) {
-            wordScore += 2;
-            break;
-        }
-    }
-
-    // Check for double score hex
-    if (path.some(cell => cell.isDoubleScore)) {
-        wordScore *= 2;
-    }
-
-    // Adjacency bonus: +1 for each adjacent letter not in the word path
-    const adjacentBonus = path.reduce((bonus, cell) => {
-        const adjacentCells = grid.filter((c: HexCell) =>
-            c.letter &&
-            !path.includes(c) &&
-            isAdjacent(cell, c)
-        );
-        return bonus + adjacentCells.length;
-    }, 0);
-
-    wordScore += adjacentBonus;
-
-    return wordScore;
-};
-
-// Game over logic moved to Tetris store - this was for classic game 

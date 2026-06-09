@@ -2,11 +2,14 @@ import { getStore } from '@netlify/blobs';
 
 export default async function handler(request, context) {
     try {
-        // Optional guard: in production, require an admin key if provided via env
+        // Fail-closed guard: in production, an admin key is mandatory (header only)
         const isLocal = !context.site?.id;
-        const adminKey = process.env.REBUILD_KEY;
-        if (!isLocal && adminKey) {
-            const provided = request.headers.get('x-admin-key') || new URL(request.url).searchParams.get('key');
+        if (!isLocal) {
+            const adminKey = process.env.REBUILD_KEY;
+            if (!adminKey) {
+                return new Response(JSON.stringify({ success: false, error: 'Service unavailable' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+            }
+            const provided = request.headers.get('x-admin-key');
             if (provided !== adminKey) {
                 return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
             }

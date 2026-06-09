@@ -18,7 +18,7 @@ export const DynamicZapIcon = ({
   className,
   animationDelay = 0
 }: DynamicZapIconProps) => {
-  const [previousSwaps, setPreviousOrbits] = useState(swapsAvailable);
+  const [previousSwaps, setPreviousSwaps] = useState(swapsAvailable);
   const [isRecharging, setIsRecharging] = useState(false);
   const [showEmptyState, setShowEmptyState] = useState(false);
   const [animatedFillPercentage, setAnimatedFillPercentage] = useState((swapsAvailable / maxSwaps) * 100);
@@ -76,7 +76,7 @@ export const DynamicZapIcon = ({
         }, animationDelay);
       }
     }
-    setPreviousOrbits(swapsAvailable);
+    setPreviousSwaps(swapsAvailable);
   }, [swapsAvailable, previousSwaps, animationDelay]);
 
   // Calculate fill percentage - use animated value during recharge, or current swaps otherwise
