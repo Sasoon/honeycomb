@@ -901,7 +901,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   <div className="text-xl font-semibold text-text-primary flex items-center justify-center space-x-2">
                     <DynamicZapIcon
                       swapsAvailable={freeSwapsAvailable || 0}
-                      maxSwaps={2}
+                      maxSwaps={3}
                       size={20}
                       className="flex-shrink-0"
                       animationDelay={400}
@@ -1134,21 +1134,33 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               if (!firstCenter) return null;
 
               return (
-                <motion.div
+                <motion.svg
                   initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: 1, scale: [1, 1.06, 1] }}
+                  transition={{ scale: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } }}
                   className="absolute pointer-events-none z-[60]"
                   style={{
                     left: firstCenter.x,
                     top: firstCenter.y,
-                    transform: 'translate(-50%, -50%)',
-                    width: `${cellSize.w + 8}px`,
-                    height: `${cellSize.h + 8}px`,
-                    clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                    border: '3px solid rgb(34, 197, 94)',
-                    boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)',
+                    translateX: '-50%',
+                    translateY: '-50%',
+                    width: `${cellSize.w + 10}px`,
+                    height: `${cellSize.h + 10}px`,
+                    filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.7))',
+                    overflow: 'visible',
                   }}
-                />
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  <polygon
+                    points="50,1 99,25.5 99,74.5 50,99 1,74.5 1,25.5"
+                    fill="rgba(34, 197, 94, 0.12)"
+                    stroke="rgb(34, 197, 94)"
+                    strokeWidth={3}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinejoin="round"
+                  />
+                </motion.svg>
               );
             })()}
 

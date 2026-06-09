@@ -66,7 +66,7 @@ const GameControls = ({
   };
 
   return (
-    <div className="game-controls-container transition-[transform,opacity] duration-300 ease-in-out">
+    <div className="game-controls-container relative transition-[transform,opacity] duration-300 ease-in-out">
       {/* Primary Actions - Always visible */}
       <div className="flex gap-2 sm:gap-3 items-center justify-center transition-[transform,opacity] duration-300 ease-in-out">
         {/* End Turn - Primary Action (first) */}
@@ -148,9 +148,12 @@ const GameControls = ({
         )}
       </div>
 
-      {/* Swap mode hint */}
+      {/* Swap mode hint (absolutely positioned so the grid doesn't shift) */}
       {swapModeActive && (
-        <div className="mt-2 text-center text-xs font-medium text-green-600" role="status">
+        <div
+          className="absolute left-1/2 -translate-x-1/2 -bottom-7 w-max text-center text-xs font-medium text-green-600"
+          role="status"
+        >
           {swapFirstTileSelected
             ? 'Now tap the tile to swap it with'
             : 'Swap mode: tap two tiles to swap their letters'}
