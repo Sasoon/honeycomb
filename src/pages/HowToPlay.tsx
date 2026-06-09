@@ -43,11 +43,10 @@ const HowToPlay = () => {
         </h2>
         <div className="space-y-2 text-text-secondary">
           <p>
-            Stuck one letter short? Press the <span className="font-semibold text-text-primary">Swap</span> button (it shows how many swaps you have), then tap any two tiles to exchange their letters.
+            Stuck one letter short? Press the <span className="font-semibold text-text-primary">Swap</span> button (it shows how many swaps you have), then tap any two tiles to exchange their letters. Swapping doesn't end your turn — swap, then submit!
           </p>
-          <p>Swaps trigger gravity — tiles settle after swapping, so think before you swap!</p>
           <p className="text-sm">
-            You start with 1 swap. Earn more from auto-clears, and unused swaps carry over between rounds. Press the Swap button again to cancel swap mode.
+            You start with 1 swap and can hold up to <span className="font-semibold text-text-primary">3</span>. Earn one for every <span className="font-semibold text-text-primary">5+ letter word</span> you submit, and one for every auto-clear. Unused swaps carry over between rounds. Press the Swap button again to cancel swap mode.
           </p>
         </div>
       </div>
@@ -113,8 +112,8 @@ const HowToPlay = () => {
             <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
             <ul className="space-y-2 text-text-secondary text-sm">
               <li>• Plan ahead — the NEXT preview shows exactly what drops next</li>
-              <li>• Every swap triggers gravity — tiles settle immediately!</li>
-              <li>• Swaps accumulate across rounds, so save them for emergencies</li>
+              <li>• Swapping doesn't end your turn — fix a near-word, then submit it</li>
+              <li>• 5+ letter words earn a swap as well as big points</li>
               <li>• Auto-clears grant bonus swaps — line up words deliberately!</li>
               <li>• Keep the top of the board clear at all costs</li>
             </ul>

@@ -19,6 +19,11 @@ export interface SelectedTile {
     position: number; // Order in which it was selected
 }
 
+// Swap economy: start with 1, earn +1 per auto-clear and +1 per 5+ letter
+// word submitted, never hold more than the cap
+export const SWAP_CAP = 3;
+export const SWAP_EARN_WORD_LENGTH = 5;
+
 // Shape of the pre-generated daily seed payload from /api/daily-seed
 export interface DailySeedGameState {
     startingLetters: string[];
@@ -634,6 +639,10 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const wordScore = calculateWaxleScore(wordLength, state.round, adjacentEdges);
 
 
+                // Long words earn a swap (capped)
+                const earnedSwap = wordLength >= SWAP_EARN_WORD_LENGTH
+                    && (state.freeSwapsAvailable || 0) < SWAP_CAP;
+
                 // Update state
                 const updates: Partial<GameModeState> = {
                     grid: newGrid,
@@ -646,6 +655,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     gravityMoves: moveSources,
                     gravitySource: 'wordSubmit', // Mark this as word-submit gravity
                     justScoredWord: true, // Flag that we just scored a word
+                    ...(earnedSwap ? { freeSwapsAvailable: (state.freeSwapsAvailable || 0) + 1 } : {}),
                     // Only set gravitySettle phase if there are moves to animate
                     // Otherwise stay in player phase and let endRound() handle flood transition
                     ...(moveSources.size > 0 ? { phase: 'gravitySettle' } : {}),
@@ -662,10 +672,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Show simple additive score breakdown
                 const lettersPart = 2 * wordLength;
                 const adjPart = Math.min(adjacentEdges, 4);
+                const swapPart = earnedSwap ? ' · +1 swap' : '';
                 if (adjPart > 0) {
-                    toastService.success(`+${wordScore} points! (letters ${lettersPart}, adj +${adjPart})`);
+                    toastService.success(`+${wordScore} points! (letters ${lettersPart}, adj +${adjPart})${swapPart}`);
                 } else {
-                    toastService.success(`+${wordScore} points! (letters ${lettersPart})`);
+                    toastService.success(`+${wordScore} points! (letters ${lettersPart})${swapPart}`);
                 }
                 haptics.success();
 
@@ -765,8 +776,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Clear the current word's tiles and apply gravity
                 const { newGrid, moveSources } = clearTilesAndApplyGravity(state.grid, currentWord.cellIds);
 
-                // Grant +1 swap for this auto-clear word
-                const newSwapsAvailable = (state.freeSwapsAvailable || 0) + 1;
+                // Grant +1 swap for this auto-clear word (capped)
+                const newSwapsAvailable = Math.min(SWAP_CAP, (state.freeSwapsAvailable || 0) + 1);
+                const swapGranted = newSwapsAvailable > (state.freeSwapsAvailable || 0);
 
                 // Add word to wordsThisRound
                 const updatedWordsThisRound = [...state.wordsThisRound, currentWord.word];
@@ -784,7 +796,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     wordsThisRound: updatedWordsThisRound,
                 });
 
-                toastService.success(`Auto-cleared "${currentWord.word}"! +1 swap`);
+                toastService.success(swapGranted
+                    ? `Auto-cleared "${currentWord.word}"! +1 swap`
+                    : `Auto-cleared "${currentWord.word}"!`);
 
                 // If no gravity, continue cascade immediately by scanning for next word
                 if (moveSources.size === 0) {

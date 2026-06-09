@@ -122,7 +122,7 @@ const WaxleMobileGameControls = ({
                 <div className="flex items-center space-x-1 text-text-secondary">
                   <DynamicZapIcon
                     swapsAvailable={freeSwapsAvailable || 0}
-                    maxSwaps={2}
+                    maxSwaps={3}
                     size={12}
                     className="flex-shrink-0"
                     animationDelay={400}
@@ -162,7 +162,7 @@ const WaxleMobileGameControls = ({
               <div className="flex items-center space-x-1">
                 <DynamicZapIcon
                   swapsAvailable={freeSwapsAvailable || 0}
-                  maxSwaps={2}
+                  maxSwaps={3}
                   size={14}
                   className="flex-shrink-0"
                   animationDelay={400}
