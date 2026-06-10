@@ -1,4 +1,3 @@
-import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import toastService from '../lib/toastService';
 
@@ -160,32 +159,24 @@ const WaxleGameOverModal = ({
     if (onShare) onShare();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 ${
-            isDailyChallenge ? 'z-30' : 'z-50'
-          }`}
-          onClick={(e) => e.target === e.currentTarget && !isDailyChallenge && onRestart()}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="waxle-gameover-title"
-        >
-          <motion.div
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.7, opacity: 0 }}
-            transition={{ type: "spring", damping: 15 }}
-            className="bg-bg-primary rounded-3xl p-8 max-w-md w-full shadow-2xl border border-secondary/20"
-            style={{ willChange: 'transform, opacity' }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && !isDailyChallenge) onRestart();
-            }}
-          >
+    <div
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 anim-backdrop-in ${
+        isDailyChallenge ? 'z-30' : 'z-50'
+      }`}
+      onClick={(e) => e.target === e.currentTarget && !isDailyChallenge && onRestart()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="waxle-gameover-title"
+    >
+      <div
+        className="bg-bg-primary rounded-3xl p-8 max-w-md w-full shadow-2xl border border-secondary/20 anim-modal-in"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && !isDailyChallenge) onRestart();
+        }}
+      >
             <div className="text-center space-y-6">
               {/* Header */}
               <div className="space-y-2">
@@ -206,22 +197,18 @@ const WaxleGameOverModal = ({
               </div>
               
               {/* Compact Score Display */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, type: 'spring', stiffness: 300, damping: 24 }}
-                className="bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20 rounded-xl p-4 shadow-sm"
+              <div
+                className="bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20 rounded-xl p-4 shadow-sm anim-rise-in"
+                style={{ animationDelay: '0.12s' }}
               >
                 <div className="text-2xl font-bold text-amber mb-1">{score}</div>
                 <div className="text-text-secondary text-xs font-medium uppercase tracking-wide">Final Score</div>
-              </motion.div>
+              </div>
 
               {/* Compact Stats Row */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.28, type: 'spring', stiffness: 300, damping: 24 }}
-                className="flex justify-center gap-4"
+              <div
+                className="flex justify-center gap-4 anim-rise-in"
+                style={{ animationDelay: '0.22s' }}
               >
                 <div className="text-center space-y-1">
                   <div className="text-lg font-semibold text-text-primary">{totalWords}</div>
@@ -239,7 +226,7 @@ const WaxleGameOverModal = ({
                   </div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Best Word</div>
                 </div>
-              </motion.div>
+              </div>
 
               {/* Daily Challenge Submission (needs a positive score) */}
               {isDailyChallenge && !hasAlreadySubmitted && score < 1 && (
@@ -371,10 +358,8 @@ const WaxleGameOverModal = ({
                 )}
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </div>
+    </div>
   );
 };
 

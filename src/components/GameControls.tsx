@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Undo2, RotateCw, ArrowLeftRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from './ui/Button';
@@ -164,43 +163,31 @@ const GameControls = ({
 
       {/* Restart Confirmation Modal (portaled: the grid container's CSS
           transform would otherwise clip the fixed backdrop) */}
-      {createPortal(
-      <AnimatePresence>
-        {showRestartConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-            onClick={cancelRestart}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="restart-confirm-title"
+      {showRestartConfirm && createPortal(
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in"
+          onClick={cancelRestart}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="restart-confirm-title"
+        >
+          <div
+            className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in"
+            onClick={e => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 4 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-              className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full"
-              onClick={e => e.stopPropagation()}
-            >
-              <h3 id="restart-confirm-title" className="text-lg font-semibold text-text-primary mb-3">Restart Game?</h3>
-              <p className="text-text-secondary mb-6">Your current progress will be lost. Are you sure you want to restart?</p>
-              <div className="flex gap-3 justify-end">
-                <Button variant="secondary" onClick={cancelRestart} className="px-4">
-                  Cancel
-                </Button>
-                <Button variant="destructive" onClick={confirmRestart} className="px-4">
-                  Restart
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>,
-      document.body)}
+            <h3 id="restart-confirm-title" className="text-lg font-semibold text-text-primary mb-3">Restart Game?</h3>
+            <p className="text-text-secondary mb-6">Your current progress will be lost. Are you sure you want to restart?</p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="secondary" onClick={cancelRestart} className="px-4">
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmRestart} className="px-4">
+                Restart
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body)}
     </div>
   );
 };
