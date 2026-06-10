@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, Trophy, Hourglass } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { calculateDisplayWordScore } from '../lib/gameUtils';
-import { countAdjacentEdges } from '../lib/waxleGameUtils';
+import { countAdjacentEdges, calculateWaxleScore } from '../lib/waxleGameUtils';
 import { HexCell } from './HexGrid';
 import { OptimizedCounter } from './OptimizedCounter';
 import { DynamicZapIcon } from './DynamicZapIcon';
@@ -11,11 +10,10 @@ type WaxleMobileGameControlsProps = {
   score: number;
   round: number;
   wordsThisRound: number;
-  wordsThisRoundList: string[];
+  wordLog: Array<{ word: string; auto: boolean }>;
   currentWord: string;
   freeSwapsAvailable: number;
   nextRows: string[][];
-  previewLevel: number;
   isWordValid?: boolean;
   selectedTiles: Array<{ cellId: string; letter: string; position: number }>;
   grid: HexCell[];
@@ -25,11 +23,10 @@ const WaxleMobileGameControls = ({
   score,
   round,
   wordsThisRound,
-  wordsThisRoundList,
+  wordLog,
   currentWord,
   freeSwapsAvailable,
   nextRows,
-  previewLevel,
   isWordValid,
   selectedTiles,
   grid
@@ -53,7 +50,7 @@ const WaxleMobileGameControls = ({
         <div className="flex justify-between items-center w-full">
           <div className="flex items-center space-x-3">
             {/* Next Drop Preview with responsive sizing */}
-            {previewLevel > 0 && nextRows.length > 0 && (
+            {nextRows.length > 0 && (
               <div className={cn(
                 "flex items-center",
                 "bg-amber/10 border border-amber/20",
@@ -210,14 +207,16 @@ const WaxleMobileGameControls = ({
                     {wordsThisRound}
                   </span>
                 </div>
-                {wordsThisRoundList.length > 0 ? (
+                {wordLog.length > 0 ? (
                   <div className="space-y-1 max-h-20 overflow-y-auto">
-                    {wordsThisRoundList.slice().reverse().map((word, idx) => (
+                    {wordLog.slice().reverse().map((entry, idx) => (
                       <div key={idx} className={cn(
-                        "text-xs font-mono text-text-secondary",
-                        "bg-success/5 px-2 py-1 rounded-lg"
+                        "text-xs font-mono px-2 py-1 rounded-lg",
+                        entry.auto
+                          ? "text-amber bg-amber/5"
+                          : "text-text-secondary bg-success/5"
                       )}>
-                        {word}
+                        {entry.auto ? '⚡ ' : ''}{entry.word}
                       </div>
                     ))}
                   </div>
@@ -247,7 +246,7 @@ const WaxleMobileGameControls = ({
                         [{(() => {
                           const selectedTileIds = selectedTiles.map(t => t.cellId);
                           const adjacentEdges = countAdjacentEdges(selectedTileIds, grid);
-                          return calculateDisplayWordScore(currentWord, round, adjacentEdges);
+                          return calculateWaxleScore(currentWord.length, adjacentEdges);
                         })()}]
                       </span>
                     )}

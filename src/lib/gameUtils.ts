@@ -2,46 +2,6 @@ import { nanoid } from 'nanoid';
 import { HexCell } from '../components/HexGrid';
 import { isHexAdjacent } from './waxleGameUtils';
 
-// Letter distribution based on common English frequency
-export const LETTER_FREQUENCY: { [key: string]: 'common' | 'medium' | 'uncommon' | 'rare' } = {
-    'E': 'common', 'A': 'common', 'I': 'common', 'O': 'common', 'N': 'common', 'R': 'common',
-    'T': 'common', 'L': 'common', 'S': 'common', 'U': 'common',
-    'D': 'medium', 'G': 'medium', 'B': 'medium', 'C': 'medium', 'M': 'medium', 'P': 'medium',
-    'F': 'medium', 'H': 'medium', 'V': 'medium', 'W': 'medium', 'Y': 'medium',
-    'K': 'uncommon', 'J': 'uncommon', 'X': 'uncommon', 'Q': 'uncommon', 'Z': 'uncommon',
-};
-
-// Letter scoring values based on rarity (Scrabble-like)
-export const LETTER_VALUES: { [key: string]: number } = {
-    'A': 1, 'E': 1, 'I': 1, 'O': 1, 'N': 1, 'R': 1, 'T': 1, 'L': 1, 'S': 1, 'U': 1,
-    'D': 2, 'G': 2,
-    'B': 3, 'C': 3, 'M': 3, 'P': 3,
-    'F': 4, 'H': 4, 'V': 4, 'W': 4, 'Y': 4,
-    'K': 5,
-    'J': 8, 'X': 8,
-    'Q': 10, 'Z': 10
-};
-
-// Calculate estimated word score for preview (matches new golden rules scoring)
-export const calculateDisplayWordScore = (
-    word: string,
-    _round: number = 1,
-    adjacentEdges: number = 0
-): number => {
-    if (!word || word.length < 3) return 0;
-    const letterPoints = 2 * word.length;
-    const adjacencyBonus = Math.min(adjacentEdges, 4);
-    return letterPoints + adjacencyBonus;
-};
-
-// Target score to win
-export const TARGET_SCORE = 100;
-
-// Max tiles that can be placed per turn
-export const MAX_PLACEMENT_TILES = 2;
-
-// Removed unused letter tile generation functions - now using Tetris variant
-
 // Generate the initial grid
 export const generateInitialGrid = (size: number, skipPrePlaced = false): HexCell[] => {
     const grid: HexCell[] = [];
@@ -59,27 +19,10 @@ export const generateInitialGrid = (size: number, skipPrePlaced = false): HexCel
                 letter: '',
                 isPrePlaced: false,
                 isSelected: false,
-                isPlaced: false,
-                isDoubleScore: false
+                isPlaced: false
             });
         }
     }
-
-    // Add 2 double score tiles at symmetric positions
-    const doubleScorePositions = [
-        { row: mid - 1, col: mid - 1 },
-        { row: mid + 1, col: mid + 1 }
-    ];
-
-    doubleScorePositions.forEach(pos => {
-        const cell = grid.find(c =>
-            c.position.row === pos.row &&
-            c.position.col === pos.col
-        );
-        if (cell) {
-            cell.isDoubleScore = true;
-        }
-    });
 
     // Pre-place 3 random tiles in a cluster in the center (skip for daily challenges)
     if (!skipPrePlaced) {
