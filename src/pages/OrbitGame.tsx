@@ -22,7 +22,9 @@ const ROW_COUNTS = [3, 4, 5, 4, 3];
 // least as long as the wave pushes it back one (out-spell the flood).
 // The floor (sea level) creeps up every 4 waves
 const METER_START = 3;
-const meterFloor = (waves: number) => 1 + Math.floor(waves / 4);
+// The sea never sits below 3: cooling brakes your own ratcheting, it
+// can't drain the opening to a trickle
+const meterFloor = (waves: number) => 3 + Math.floor(waves / 4);
 const SEED_TILES = 8;
 const WORD_MIN = 3; // smallest playable word
 const WORD_MAX = 8; // largest word indexed
@@ -1168,7 +1170,7 @@ const OrbitGame = () => {
                                 : 'text-amber bg-amber/10 border border-amber/30'
                         )}>
                             {selectedLetters
-                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter ? ' 🌊↓' : ''}</span>}</>
+                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter && meter > meterFloor(wavesDropped) ? ' 🌊↓' : ''}</span>}</>
                                 : <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>}
                         </div>
                         <div className="absolute -top-3 left-4">
@@ -1282,7 +1284,7 @@ const OrbitGame = () => {
                             wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
                         )}>
                             {selectedLetters}
-                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter ? ' 🌊↓' : ''}</span>}
+                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter && meter > meterFloor(wavesDropped) ? ' 🌊↓' : ''}</span>}
                         </span>
                     ) : (
                         <span className="text-xs text-text-muted italic">
