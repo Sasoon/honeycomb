@@ -32,6 +32,7 @@ export interface HexGridProps {
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
   hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
   swappingCellIds?: string[]; // cells currently playing the swap-exchange animation
+  landedCellIds?: string[]; // cells that just received a falling tile (landing squash)
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
   enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
   isSettling?: boolean; // When true, tiles ease-out settle on new game
@@ -115,6 +116,7 @@ const HexGrid = ({
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
   swappingCellIds = [],
+  landedCellIds = [],
   enableLayout = true,
   isSettling = false,
 }: HexGridProps) => {
@@ -309,9 +311,9 @@ const HexGrid = ({
             {rowCells.map(cell => {
               const showLetter = !hiddenLetterCellIds.includes(cell.id);
               const styles = cellStyles(cell);
-              const containerClass = swappingCellIds.includes(cell.id)
-                ? `${styles.container} swap-exchange`
-                : styles.container;
+              let containerClass = styles.container;
+              if (swappingCellIds.includes(cell.id)) containerClass += ' swap-exchange';
+              if (landedCellIds.includes(cell.id)) containerClass += ' tile-landed-effect';
               return (
                 // Narrower cells below 420px so the widest (5-cell) row fits small phone screens
                 <div key={cell.id} className="w-[58px] mx-[3px] min-[420px]:w-[70px] min-[420px]:mx-[5px]">
