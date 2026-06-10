@@ -17,9 +17,10 @@ import { haptics } from '../lib/haptics';
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
 // path words + orbits (free, but each pivot spot is single-use) are the power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
-// The flood is endless and grows every few waves; the run ends when a tile
-// can't fit. Score = letters cleared before the board fills
-const waveSize = (wave: number) => 3 + Math.floor(wave / 3);
+// The flood mirrors the board: every wave half-fills the empty space, so
+// big clears invite big waves and a crowded board gets gentle ones. The
+// run ends when the board fills. Score = letters cleared
+const waveSizeFor = (grid: HexCell[]) => Math.ceil(grid.filter(c => !c.letter).length / 2);
 const SEED_TILES = 8;
 const WORD_MIN = 3; // smallest playable word
 const WORD_MAX = 8; // largest word indexed
@@ -302,7 +303,7 @@ const OrbitGame = () => {
         pendingAnimsRef.current.clear();
         recordedRef.current = false;
         setGrid(newGrid);
-        setNextWave(generateDropLettersSmart(waveSize(0), newGrid, rng));
+        setNextWave(generateDropLettersSmart(waveSizeFor(newGrid), newGrid, rng));
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -419,7 +420,13 @@ const OrbitGame = () => {
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm') {
             const rng = rngRef.current;
-            const letters = nextWave.length ? nextWave : generateDropLettersSmart(waveSize(wavesDropped), g, rng);
+            // Wave size is set by the board being flooded; the pre-generated
+            // preview is trimmed or topped up if the player's clears changed it
+            const needed = waveSizeFor(g);
+            let letters = nextWave.slice(0, needed);
+            if (letters.length < needed) {
+                letters = [...letters, ...generateDropLettersSmart(needed - letters.length, g, rng)];
+            }
             const { newGrid, paths, unplaced } = orbitFlood(g, letters, rng);
 
             const placed = newGrid.filter(c => c.placedThisTurn);
@@ -454,11 +461,12 @@ const OrbitGame = () => {
                 });
             });
 
-            const nextWaves = wavesDropped + 1;
-            setWavesDropped(nextWaves);
+            setWavesDropped(wavesDropped + 1);
             setGrid(newGrid);
-            setNextWave(generateDropLettersSmart(waveSize(nextWaves), newGrid, rng));
-            if (unplaced.length > 0) {
+            setNextWave(generateDropLettersSmart(waveSizeFor(newGrid), newGrid, rng));
+            // Half-the-empties waves always fit, so the run ends when the
+            // last cell fills (drown kept as a belt-and-braces check)
+            if (unplaced.length > 0 || newGrid.every(c => c.letter)) {
                 setPhase('over');
                 haptics.error();
             }
@@ -1350,7 +1358,7 @@ const OrbitGame = () => {
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
                                 <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — each spot pivots only once, but clearing a word over it wins it back.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass floods half of the empty space — keep clearing or get buried. The run ends when the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
