@@ -42,7 +42,7 @@ const WaxleMobileGameControls = ({
       {/* Flush Compact Header */}
       <div 
         className={cn(
-          "bg-bg-primary/95 backdrop-blur-sm border-b border-secondary/20",
+          "bg-bg-primary border-b border-secondary/20",
           "px-4 shadow-lg shadow-secondary/10",
           "transition-[background-color,box-shadow] duration-300 ease-out cursor-pointer",
           "hover:shadow-xl hover:shadow-secondary/20",
@@ -205,7 +205,7 @@ const WaxleMobileGameControls = ({
             exit={{ opacity: 0, height: 0, scale: 0.95 }}
             transition={{ duration: 0.3, type: "spring", damping: 15 }}
             className={cn(
-              "bg-bg-primary/95 backdrop-blur-sm border-b border-secondary/20",
+              "bg-bg-primary border-b border-secondary/20",
               "shadow-xl shadow-secondary/20",
               "overflow-hidden"
             )}

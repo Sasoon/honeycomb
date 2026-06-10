@@ -513,6 +513,19 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     return 0;
   }, [currentWord, round, validationState, selectedTiles, grid]);
 
+  // Memoised display cells: stable object identity between renders keeps
+  // CellView's memo() effective while animation timers update other state
+  const displayCells = useMemo(() => grid.map(c => {
+    const isSelected = selectedTiles.some(t => t.cellId === c.id);
+    let isAutoClear = false;
+    if (phase === 'autoClearing' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
+      // Only highlight cells up to the current letter index
+      const cellIndex = currentAutoClearWord.cellIds.indexOf(c.id);
+      isAutoClear = cellIndex >= 0 && cellIndex <= autoClearLetterIndex;
+    }
+    return { ...c, isSelected, isAutoClear };
+  }), [grid, selectedTiles, phase, currentAutoClearWord, autoClearLetterIndex]);
+
   // Handle cell clicks: word selection by default; swaps only when swap mode
   // has been explicitly armed via the Swap button
   const handleCellClick = useCallback((cell: HexCell) => {
@@ -693,7 +706,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               style={{ willChange: 'transform', overflow: 'hidden' }}
               className={cn(
                 "flex game-sidebar flex-col",
-                "bg-bg-primary/95 backdrop-blur-sm border-r border-secondary/20",
+                "bg-bg-primary border-r border-secondary/20",
                 "shadow-2xl shadow-secondary/20"
               )}
             >
@@ -929,7 +942,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
                       background: 'rgba(229,231,235,0.96)',
                       borderRadius: 8,
-                      boxShadow: '0 6px 14px rgba(0,0,0,0.12)',
                       willChange: 'transform',
                     }}
                   >
@@ -1009,17 +1021,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               }}
             >
               <HexGrid
-                cells={grid.map(c => {
-                  const isSelected = selectedTiles.some(t => t.cellId === c.id);
-                  // Check if this cell is part of the current auto-clear word and should be highlighted
-                  let isAutoClear = false;
-                  if (phase === 'autoClearing' && currentAutoClearWord && autoClearLetterIndex !== undefined) {
-                    // Only highlight cells up to the current letter index
-                    const cellIndex = currentAutoClearWord.cellIds.indexOf(c.id);
-                    isAutoClear = cellIndex >= 0 && cellIndex <= autoClearLetterIndex;
-                  }
-                  return { ...c, isSelected, isAutoClear };
-                })}
+                cells={displayCells}
                 onCellClick={handleCellClick}
                 isWordValid={validationState}
                 isPlacementPhase={phase === 'player' ? !hasSelection : true}
@@ -1027,7 +1029,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 placedTilesThisTurn={[]}
                 gridSize={gridSize}
                 isTetrisVariant={true}
-                enableLayout={!isTransitioning}
+                enableLayout={false}
                 isSettling={isSettling}
                 hiddenLetterCellIds={hiddenCellIds}
                 swappingCellIds={swappingCells}

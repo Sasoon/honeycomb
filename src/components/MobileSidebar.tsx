@@ -95,7 +95,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
         ref={sidebarRef}
         className={cn(
           "mobile-sidebar md:hidden flex flex-col overflow-hidden",
-          "bg-bg-primary/95 backdrop-blur-sm",
+          "bg-bg-primary",
           "shadow-xl shadow-secondary/20",
           "border-r border-secondary/20",
           isOpen && "show"

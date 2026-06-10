@@ -1,5 +1,5 @@
 // Remove React import
-import { useState, useRef, useEffect, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { motion } from 'framer-motion';
 
 // Define types for our grid
@@ -124,6 +124,12 @@ const HexGrid = ({
   
   // Refs to track positions of cells
   const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Single stable ref callback so CellView memo() isn't defeated by a fresh
+  // closure per cell per render; the cell id comes from the data attribute
+  const setCellRef = useCallback((el: HTMLDivElement | null) => {
+    const id = el?.dataset.cellId;
+    if (el && id) cellRefs.current.set(id, el);
+  }, []);
   
   
   // Animation states
@@ -321,7 +327,7 @@ const HexGrid = ({
                     cell={cell}
                     onClick={onCellClick}
                     containerClass={containerClass}
-                    setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
+                    setRef={setCellRef}
                     showLetter={showLetter}
                     enableLayout={enableLayout}
                     isSettling={isSettling}
