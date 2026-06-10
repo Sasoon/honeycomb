@@ -9,42 +9,46 @@ import {
     areCellsAdjacent,
 } from '../lib/waxleGameUtils';
 import { createSeededRNG, SeededRNG } from '../lib/seededRNG';
-import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
-const ROW_COUNTS = [4, 5, 6, 7, 6, 5, 4]; // regular hexagon, side 4 — 37 cells
-// Crescendo: the storm builds instead of droning
-const WAVE_SIZES = [3, 3, 4, 4, 4, 5, 5, 5, 6, 6];
+// Classic-size board: the 19-cell diamond. Small board is the pressure;
+// cluster words + the free spin are the player's power
+const ROW_COUNTS = [3, 4, 5, 4, 3];
+// The flood escalates: late waves nearly fill what early waves trickled
+const WAVE_SIZES = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6];
 const WAVES = WAVE_SIZES.length;
-const SEED_TILES = 12;
-const TOTAL_LETTERS = SEED_TILES + WAVE_SIZES.reduce((a, b) => a + b, 0);
+const SEED_TILES = 8;
+const TOTAL_LETTERS = SEED_TILES + WAVE_SIZES.reduce((a, b) => a + b, 0); // 50
+const CLUSTER_MIN = 3; // smallest playable word
+const CLUSTER_MAX = 8; // largest anagram indexed
 const FLOOD_STAGGER_MS = 50;
-const HANDLE_DELAY_MS = 250; // settle time before the ring arms
-const DRAG_THRESHOLD_PX = 8; // movement before a tap becomes a spin
-const DEG_PER_STEP = 60; // finger travel per detent
-const WHEEL_PER_STEP = 40; // wheel delta per detent
-const DAILY_UNDOS = 3; // undo charges per daily run (practice is unlimited)
-const DAILY_EPOCH = '2026-06-10'; // Daily #1
+const HANDLE_DELAY_MS = 250;
+const DRAG_THRESHOLD_PX = 8;
+const DEG_PER_STEP = 60;
+const WHEEL_PER_STEP = 40;
+const DAILY_UNDOS = 3;
+const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v1';
+const LS_RUN = 'waxle-orbit-run-v2';
 const LS_STATS = 'waxle-orbit-stats-v1';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v1';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v2';
 
-// Neighbour offsets in clockwise screen order, starting top-left
 const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
 ];
 
-const TILE_W = 54;
-const TILE_H = 62;
-const PITCH_X = 58;
-const PITCH_Y = 50;
-const BOARD_W = 6 * PITCH_X + TILE_W;
-const BOARD_H = 6 * PITCH_Y + TILE_H;
-const GUIDE_R = PITCH_X; // ring guide radius ≈ neighbour centre distance
+// Classic tile metrics (70px tiles, uniform hex lattice spacing)
+const TILE_W = 70;
+const TILE_H = 80;
+const PITCH_X = 76;
+const PITCH_Y = 65;
+const COLS = Math.max(...ROW_COUNTS);
+const BOARD_W = (COLS - 1) * PITCH_X + TILE_W;
+const BOARD_H = (ROW_COUNTS.length - 1) * PITCH_Y + TILE_H;
+const GUIDE_R = PITCH_X;
 
 const cellX = (c: HexCell) => c.position.col * PITCH_X;
 const cellY = (c: HexCell) => c.position.row * PITCH_Y;
@@ -53,7 +57,7 @@ const mod = (a: number, n: number) => ((a % n) + n) % n;
 function buildBoard(): HexCell[] {
     const cells: HexCell[] = [];
     ROW_COUNTS.forEach((count, row) => {
-        const offset = (7 - count) / 2;
+        const offset = (COLS - count) / 2;
         for (let i = 0; i < count; i++) {
             cells.push({
                 id: `o${row}-${i}`,
@@ -71,11 +75,12 @@ function buildBoard(): HexCell[] {
 type Phase = 'storm' | 'cleanup' | 'over';
 type EndReason = 'drowned' | 'finished' | 'swept';
 type Mode = 'daily' | 'practice';
-type Action = 'word' | 'orbit' | 'pass';
+type Action = 'word' | 'pass';
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 type ClearFx = { id: string; letter: string; left: number; top: number };
 type RingInfo = { pivotId: string; cells: HexCell[]; slots: Array<{ x: number; y: number }>; n: number };
 type Snapshot = {
+    kind: 'spin' | 'turn';
     letters: Array<[string, string]>;
     phase: Phase;
     wavesDropped: number;
@@ -83,6 +88,7 @@ type Snapshot = {
     score: number;
     words: string[];
     actionLog: Action[];
+    spinUsed: boolean;
     rngState: number;
 };
 
@@ -103,7 +109,7 @@ interface OrbitStats {
     results: Record<string, DailyResult>;
 }
 
-const ACTION_EMOJI: Record<Action, string> = { word: '🟩', orbit: '🔄', pass: '⏭' };
+const ACTION_EMOJI: Record<Action, string> = { word: '🟩', pass: '⏭' };
 
 const todayStr = () => {
     const d = new Date();
@@ -122,6 +128,7 @@ const yesterdayOf = (date: string) => {
     const d = new Date(Date.parse(date) - 86400000);
     return d.toISOString().slice(0, 10);
 };
+const sortKey = (letters: string) => letters.toLowerCase().split('').sort().join('');
 
 function loadStats(): OrbitStats {
     try {
@@ -131,8 +138,28 @@ function loadStats(): OrbitStats {
     return { streak: 0, lastDate: '', games: 0, sweeps: 0, results: {} };
 }
 
-// Flood placement: each tile takes the globally deepest cell reachable from
-// any empty top-row entry via a descending path of empty cells
+// Anagram index: sorted letters -> a representative dictionary word.
+// Cluster words match if the selected letters anagram to any entry
+let anagramPromise: Promise<Map<string, string>> | null = null;
+function loadAnagrams(): Promise<Map<string, string>> {
+    if (!anagramPromise) {
+        anagramPromise = fetch('/dictionary.txt')
+            .then(r => r.text())
+            .then(text => {
+                const map = new Map<string, string>();
+                for (const w of text.split('\n')) {
+                    if (w.length < CLUSTER_MIN || w.length > CLUSTER_MAX) continue;
+                    const key = sortKey(w);
+                    if (!map.has(key)) map.set(key, w);
+                }
+                return map;
+            })
+            .catch(() => { anagramPromise = null; return new Map<string, string>(); });
+    }
+    return anagramPromise;
+}
+
+// Flood placement: globally deepest reachable cell per tile
 function orbitFlood(
     grid: HexCell[],
     letters: string[],
@@ -186,40 +213,38 @@ function orbitFlood(
     return { newGrid, paths, unplaced };
 }
 
-// Cleanup dead-end detection: is any 3-6 letter dictionary word traceable?
-let shortWordsPromise: Promise<Set<string>> | null = null;
-function loadShortWords(): Promise<Set<string>> {
-    if (!shortWordsPromise) {
-        shortWordsPromise = fetch('/dictionary.txt')
-            .then(r => r.text())
-            .then(text => new Set(text.split('\n').filter(w => w.length >= 3 && w.length <= 6)))
-            .catch(() => { shortWordsPromise = null; return new Set<string>(); });
-    }
-    return shortWordsPromise;
-}
-
-function anyWordExists(grid: HexCell[], dict: Set<string>): boolean {
+// Cleanup dead-end detection: does any connected cluster of 3-5 tiles
+// anagram to a word? (clusters whose only words are 6+ letters are
+// practically nonexistent)
+function anyClusterWord(grid: HexCell[], index: Map<string, string>): boolean {
     const lettered = grid.filter(c => c.letter);
-    const byPosLocal = new Map(grid.map(c => [`${c.position.row},${c.position.col}`, c]));
-    const neighbors = (c: HexCell) =>
-        RING_OFFSETS
-            .map(([dr, dc]) => byPosLocal.get(`${c.position.row + dr},${c.position.col + dc}`))
-            .filter((n): n is HexCell => !!n && !!n.letter);
+    if (lettered.length < CLUSTER_MIN) return false;
+    const adj = new Map<string, HexCell[]>();
+    lettered.forEach(c => {
+        adj.set(c.id, lettered.filter(o => o.id !== c.id && areCellsAdjacent(c, o)));
+    });
+    const seen = new Set<string>();
+    let budget = 30000;
 
-    const used = new Set<string>();
-    const dfs = (cell: HexCell, word: string): boolean => {
-        used.add(cell.id);
-        const next = word + cell.letter.toLowerCase();
-        if (next.length >= 3 && dict.has(next)) { used.delete(cell.id); return true; }
-        if (next.length < 6) {
-            for (const n of neighbors(cell)) {
-                if (!used.has(n.id) && dfs(n, next)) { used.delete(cell.id); return true; }
-            }
+    const grow = (set: HexCell[]): boolean => {
+        if (budget-- <= 0) return false;
+        if (set.length >= CLUSTER_MIN) {
+            const key = sortKey(set.map(c => c.letter).join(''));
+            if (index.has(key)) return true;
         }
-        used.delete(cell.id);
+        if (set.length >= 5) return false;
+        const inSet = new Set(set.map(c => c.id));
+        const frontier = new Map<string, HexCell>();
+        set.forEach(c => adj.get(c.id)!.forEach(n => { if (!inSet.has(n.id)) frontier.set(n.id, n); }));
+        for (const n of frontier.values()) {
+            const ids = [...inSet, n.id].sort().join('|');
+            if (seen.has(ids)) continue;
+            seen.add(ids);
+            if (grow([...set, n])) return true;
+        }
         return false;
     };
-    return lettered.some(c => dfs(c, ''));
+    return lettered.some(c => grow([c]));
 }
 
 const OrbitGame = () => {
@@ -234,7 +259,8 @@ const OrbitGame = () => {
     const [words, setWords] = useState<string[]>([]);
     const [actionLog, setActionLog] = useState<Action[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
-    const [isValid, setIsValid] = useState(false);
+    const [match, setMatch] = useState<string | null>(null);
+    const [spinUsed, setSpinUsed] = useState(false);
     const [armed, setArmed] = useState(false);
     const [previewSteps, setPreviewSteps] = useState(0);
     const [dragging, setDragging] = useState(false);
@@ -321,7 +347,8 @@ const OrbitGame = () => {
         setWords([]);
         setActionLog([]);
         setSelected([]);
-        setIsValid(false);
+        setMatch(null);
+        setSpinUsed(false);
         setUndoStack([]);
         setUndosUsed(0);
     }, [dateStr]);
@@ -329,7 +356,7 @@ const OrbitGame = () => {
     const enterMode = useCallback((m: Mode) => {
         setMode(m);
         setSelected([]);
-        setIsValid(false);
+        setMatch(null);
         if (m === 'practice') {
             startFresh('practice');
             return;
@@ -371,6 +398,7 @@ const OrbitGame = () => {
                     setScore(run.score);
                     setWords(run.words);
                     setActionLog(run.actionLog);
+                    setSpinUsed(!!run.spinUsed);
                     setUndoStack(run.undoStack || []);
                     setUndosUsed(run.undosUsed || 0);
                     return;
@@ -393,13 +421,14 @@ const OrbitGame = () => {
                 score,
                 words,
                 actionLog,
+                spinUsed,
                 rngState: rngRef.current?.state ?? 0,
                 letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
                 undoStack,
                 undosUsed,
             }));
         } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, undoStack, undosUsed]);
+    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, spinUsed, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || !endReason || recordedRef.current) return;
@@ -428,6 +457,7 @@ const OrbitGame = () => {
 
     // ---------- game flow ----------
 
+    // Word/pass ends the turn: the next wave drops and the free spin resets
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm' && wavesDropped < WAVES) {
             const rng = rngRef.current;
@@ -469,6 +499,7 @@ const OrbitGame = () => {
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
             setGrid(newGrid);
+            setSpinUsed(false);
             setNextWave(nextWaves < WAVES ? generateDropLettersSmart(WAVE_SIZES[nextWaves], newGrid, rng) : []);
             if (unplaced.length > 0) {
                 setPhase('over');
@@ -486,12 +517,13 @@ const OrbitGame = () => {
         }
     }, [phase, wavesDropped, nextWave]);
 
+    // Cleanup dead-end watch
     useEffect(() => {
         if (phase !== 'cleanup') return;
         let cancelled = false;
-        loadShortWords().then(dict => {
-            if (cancelled || dict.size === 0) return;
-            if (!anyWordExists(grid, dict)) {
+        loadAnagrams().then(index => {
+            if (cancelled || index.size === 0) return;
+            if (!anyClusterWord(grid, index)) {
                 setPhase('over');
                 setEndReason(grid.every(c => !c.letter) ? 'swept' : 'finished');
                 if (grid.some(c => c.letter)) toastService.success('No words left — run complete');
@@ -502,7 +534,8 @@ const OrbitGame = () => {
 
     // ---------- undo ----------
 
-    const takeSnapshot = useCallback((): Snapshot => ({
+    const takeSnapshot = useCallback((kind: 'spin' | 'turn'): Snapshot => ({
+        kind,
         letters: grid.filter(c => c.letter).map(c => [c.id, c.letter] as [string, string]),
         phase,
         wavesDropped,
@@ -510,26 +543,26 @@ const OrbitGame = () => {
         score,
         words: [...words],
         actionLog: [...actionLog],
+        spinUsed,
         rngState: rngRef.current?.state ?? 0,
-    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog]);
+    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog, spinUsed]);
 
-    const pushUndo = useCallback(() => {
+    const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
         // after the action has already advanced the RNG
-        const snap = takeSnapshot();
+        const snap = takeSnapshot(kind);
         setUndoStack(s => [...s.slice(-9), snap]);
     }, [takeSnapshot]);
 
     const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
-    const canUndo = phase !== 'over' && undoStack.length > 0 && undosLeft > 0;
+    const topUndo = undoStack[undoStack.length - 1];
+    // Undoing a free spin is free; undoing a turn (and its wave) costs a charge
+    const canUndo = phase !== 'over' && !!topUndo && (topUndo.kind === 'spin' || undosLeft > 0);
 
-    // Reverts the last action AND its wave. The RNG state is restored too, so
-    // redoing drops the exact same letters — undo lets you reconsider, not
-    // re-roll
     const undo = useCallback(() => {
         if (phase === 'over' || undoStack.length === 0) return;
-        if (mode === 'daily' && undosUsed >= DAILY_UNDOS) return;
         const snap = undoStack[undoStack.length - 1];
+        if (snap.kind === 'turn' && mode === 'daily' && undosUsed >= DAILY_UNDOS) return;
         const board = buildBoard();
         const letterById = new Map(snap.letters);
         board.forEach(c => {
@@ -545,10 +578,11 @@ const OrbitGame = () => {
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
+        setSpinUsed(snap.spinUsed);
         setUndoStack(s => s.slice(0, -1));
-        setUndosUsed(u => u + 1);
+        if (snap.kind === 'turn') setUndosUsed(u => u + 1);
         setSelected([]);
-        setIsValid(false);
+        setMatch(null);
         setClearFx([]);
         setScoreFx(null);
         haptics.select();
@@ -556,18 +590,19 @@ const OrbitGame = () => {
 
     // ---------- ring arming ----------
 
-    const currentWord = useMemo(
+    const selectedLetters = useMemo(
         () => selected.map(id => grid.find(c => c.id === id)?.letter || '').join(''),
         [selected, grid]
     );
 
+    const spinAvailable = phase === 'cleanup' || (phase === 'storm' && !spinUsed);
+
     const pivotCell = useMemo(() => {
-        if (selected.length !== 1) return null;
+        if (!spinAvailable || selected.length !== 1) return null;
         const c = grid.find(x => x.id === selected[0]) || null;
         return c && ringOf(c).length >= 3 ? c : null;
-    }, [selected, grid, ringOf]);
+    }, [spinAvailable, selected, grid, ringOf]);
 
-    // Arm after a settle delay so the ring doesn't flicker while tracing
     useEffect(() => {
         setArmed(false);
         if (!pivotCell) return;
@@ -575,7 +610,6 @@ const OrbitGame = () => {
         return () => window.clearTimeout(t);
     }, [pivotCell]);
 
-    // Maintain ring info + clear stale preview transforms when the ring changes
     useEffect(() => {
         const prev = ringRef.current;
         if (prev) {
@@ -606,7 +640,6 @@ const OrbitGame = () => {
 
     // ---------- rotation preview / commit ----------
 
-    // Position ring letters at a (possibly fractional) rotation p
     const applyPreviewTransforms = useCallback((p: number, withTransition: boolean) => {
         const ring = ringRef.current;
         if (!ring) return;
@@ -652,15 +685,14 @@ const OrbitGame = () => {
         clearPreviewTransforms(true);
     }, [clearPreviewTransforms]);
 
-    // Commit a rotation of k steps; fromP is where the letters visually are now
+    // The free spin: rotates the ring without ending the turn
     const commitRotation = useCallback((k: number, fromP: number) => {
         const ring = ringRef.current;
         if (!ring || phase === 'over') return;
         const kk = mod(k, ring.n);
         if (kk === 0) return;
-        pushUndo();
+        pushUndo('spin');
 
-        // Settle animation: from the current preview position to the final slot
         const kf = Math.floor(fromP);
         const ff = fromP - kf;
         ring.cells.forEach((c, i) => {
@@ -688,11 +720,11 @@ const OrbitGame = () => {
         previewRef.current = 0;
         setPreviewSteps(0);
         setSelected([]);
-        setIsValid(false);
+        setMatch(null);
+        if (phase === 'storm') setSpinUsed(true);
         haptics.success();
-        if (phase === 'storm') setActionLog(log => [...log, 'orbit']);
-        afterAction(newGrid);
-    }, [phase, grid, queueMove, clearPreviewTransforms, afterAction, pushUndo]);
+        setGrid(newGrid);
+    }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
 
     // ---------- drag (the dial) ----------
 
@@ -710,8 +742,7 @@ const OrbitGame = () => {
         const cx = r.x + r.width / 2;
         const cy = r.y + r.height / 2;
         const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
-        const unit = r.width / TILE_W; // current scale
-        // Grab anywhere on the ring annulus (not the pivot itself)
+        const unit = r.width / TILE_W;
         if (dist < 0.55 * PITCH_X * unit || dist > 1.7 * PITCH_X * unit) return;
         dragRef.current = {
             pointerId: e.pointerId,
@@ -766,14 +797,11 @@ const OrbitGame = () => {
         if (!d.active) return;
         if (d.raf) cancelAnimationFrame(d.raf);
         setDragging(false);
-        // The drag's own click (if any) fires synchronously after pointerup;
-        // clear the suppression right after so the next real tap isn't eaten
         window.setTimeout(() => { suppressClickRef.current = false; }, 0);
         const p = d.pendingP;
         const k = Math.round(p);
         const ring = ringRef.current;
         if (!ring || mod(k, ring.n) === 0) {
-            // Back to start (or full loop): free cancel, stay armed
             previewRef.current = 0;
             setPreviewSteps(0);
             clearPreviewTransforms(true);
@@ -782,7 +810,7 @@ const OrbitGame = () => {
         commitRotation(k, p);
     }, [clearPreviewTransforms, commitRotation]);
 
-    // ---------- wheel + keyboard (desktop dial) ----------
+    // ---------- wheel + keyboard ----------
 
     useEffect(() => {
         const el = boardRef.current;
@@ -814,9 +842,8 @@ const OrbitGame = () => {
     // ---------- player actions ----------
 
     const submit = useCallback(() => {
-        if (phase === 'over' || !isValid || selected.length < 3) return;
-        pushUndo();
-        const word = currentWord;
+        if (phase === 'over' || !match || selected.length < CLUSTER_MIN) return;
+        pushUndo('turn');
         const clearedCells = selected
             .map(id => grid.find(c => c.id === id))
             .filter((c): c is HexCell => !!c);
@@ -825,7 +852,7 @@ const OrbitGame = () => {
         const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: `+${word.length}`, key: Date.now() });
+        setScoreFx({ x: cx, y: cy, text: `+${selected.length}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
         const t2 = window.setTimeout(() => setScoreFx(null), 750);
         fxTimersRef.current.push(t1, t2);
@@ -836,19 +863,20 @@ const OrbitGame = () => {
             const dst = newGrid.find(c => c.id === dstId);
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
-        setScore(s => s + word.length);
-        setWords(w => [...w, word]);
+        setScore(s => s + selected.length);
+        setWords(w => [...w, match]);
         setSelected([]);
-        setIsValid(false);
+        setMatch(null);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
+        haptics.success();
         afterAction(newGrid);
-    }, [phase, isValid, selected, currentWord, grid, queueMove, afterAction, pushUndo]);
+    }, [phase, match, selected, grid, queueMove, afterAction, pushUndo]);
 
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
-        pushUndo();
+        pushUndo('turn');
         setSelected([]);
-        setIsValid(false);
+        setMatch(null);
         setActionLog(log => [...log, 'pass']);
         afterAction(grid.map(c => ({ ...c })));
     }, [phase, grid, afterAction, pushUndo]);
@@ -861,7 +889,7 @@ const OrbitGame = () => {
 
     useEffect(() => () => { fxTimersRef.current.forEach(t => window.clearTimeout(t)); }, []);
 
-    // ---------- selection ----------
+    // ---------- cluster selection ----------
 
     const handleCellTap = useCallback((cell: HexCell) => {
         if (phase === 'over') return;
@@ -869,7 +897,6 @@ const OrbitGame = () => {
             suppressClickRef.current = false;
             return;
         }
-        // Tap on the pivot with a wheel/key preview pending = settle it
         if (ringRef.current && cell.id === ringRef.current.pivotId && previewRef.current !== 0) {
             commitRotation(previewRef.current, previewRef.current);
             return;
@@ -879,33 +906,51 @@ const OrbitGame = () => {
         }
         if (!cell.letter) {
             setSelected([]);
-            setIsValid(false);
             return;
         }
         const idx = selected.indexOf(cell.id);
         if (idx !== -1) {
-            setSelected(selected.slice(0, idx));
+            // Remove only if the remaining cluster stays connected
+            const rest = selected.filter(id => id !== cell.id);
+            if (rest.length <= 1) { setSelected(rest); return; }
+            const cells = rest.map(id => grid.find(c => c.id === id)!).filter(Boolean);
+            const seen = new Set<string>([cells[0].id]);
+            const queue = [cells[0]];
+            while (queue.length) {
+                const cur = queue.shift()!;
+                cells.forEach(o => {
+                    if (!seen.has(o.id) && areCellsAdjacent(cur, o)) { seen.add(o.id); queue.push(o); }
+                });
+            }
+            if (seen.size === cells.length) setSelected(rest);
+            else haptics.error();
             return;
         }
         if (selected.length === 0) {
             setSelected([cell.id]);
             return;
         }
-        const last = grid.find(c => c.id === selected[selected.length - 1]);
-        if (last && areCellsAdjacent(cell, last)) {
+        // Cluster rule: the tile just has to touch ANY selected tile
+        const touchesCluster = selected.some(id => {
+            const s = grid.find(c => c.id === id);
+            return s && areCellsAdjacent(cell, s);
+        });
+        if (touchesCluster) {
             setSelected([...selected, cell.id]);
         } else {
             setSelected([cell.id]);
         }
     }, [phase, selected, grid, commitRotation, resetPreview]);
 
+    // Anagram validation: any ordering of the cluster's letters
     useEffect(() => {
-        if (currentWord.length < 3) { setIsValid(false); return; }
+        if (selectedLetters.length < CLUSTER_MIN) { setMatch(null); return; }
         const seq = ++validateSeqRef.current;
-        wordValidator.validateWordAsync(currentWord).then(ok => {
-            if (validateSeqRef.current === seq) setIsValid(ok);
+        loadAnagrams().then(index => {
+            if (validateSeqRef.current !== seq) return;
+            setMatch(index.get(sortKey(selectedLetters)) ?? null);
         });
-    }, [currentWord]);
+    }, [selectedLetters]);
 
     // ---------- animation ----------
 
@@ -950,12 +995,11 @@ const OrbitGame = () => {
         const title = mode === 'daily' ? `WAXLE ORBIT #${dailyNo}` : 'WAXLE ORBIT (practice)';
         const stranded = endReason !== 'swept' && tilesLeft > 0 ? ` · ${tilesLeft} stranded` : '';
         const strip = actionLog.map(a => ACTION_EMOJI[a]).join('');
-        const text = `${title} — ${score}/${TOTAL_LETTERS} ${headline}${stranded}\n${strip}${bestWord ? `\nBest: ${bestWord}` : ''}\nhttps://waxle.netlify.app/orbit`;
+        const text = `${title} — ${score}/${TOTAL_LETTERS} ${headline}${stranded}\n${strip}${bestWord ? `\nBest: ${bestWord.toUpperCase()}` : ''}\nhttps://waxle.netlify.app/orbit`;
         const copy = () => navigator.clipboard.writeText(text).then(
             () => toastService.success('Result copied!'),
             () => toastService.error('Could not copy')
         );
-        // Native share sheet where available (mobile), clipboard elsewhere
         if (navigator.share) {
             navigator.share({ text }).catch(err => {
                 if (err?.name !== 'AbortError') copy();
@@ -970,7 +1014,7 @@ const OrbitGame = () => {
         try { localStorage.setItem(LS_ONBOARDED, '1'); } catch { /* non-fatal */ }
     }, []);
 
-    const wordState = currentWord.length >= 3 ? (isValid ? 'valid' : 'invalid') : 'neutral';
+    const wordState = selectedLetters.length >= CLUSTER_MIN ? (match ? 'valid' : 'invalid') : 'neutral';
     const dailyResult = stats.results[dateStr];
     const quietRing = previewSteps !== 0 || dragging;
 
@@ -1007,25 +1051,31 @@ const OrbitGame = () => {
                 )}
             </div>
 
-            {/* HUD */}
+            {/* HUD: classic card language */}
             <div className="w-full max-w-md flex items-center justify-between mb-1">
                 <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-bold text-text-primary tabular-nums">{score}</span>
                     <span className="text-xs text-text-secondary">/ {TOTAL_LETTERS}</span>
                 </div>
                 {phase === 'storm' && nextWave.length > 0 && (
-                    <div className="flex items-center gap-1.5 bg-amber/10 border border-amber/20 rounded-xl px-2.5 py-1.5">
-                        <span className="text-[10px] font-medium text-amber uppercase tracking-wide">Next</span>
-                        <div className="flex gap-1">
-                            {nextWave.map((letter, idx) => (
-                                <div
-                                    key={`${wavesDropped}-${idx}`}
-                                    className="w-5 h-5 bg-bg-secondary border border-secondary/30 rounded flex items-center justify-center text-[11px] font-semibold text-text-primary anim-chip-in"
-                                    style={{ animationDelay: `${idx * 50}ms` }}
-                                >
-                                    {letter}
-                                </div>
-                            ))}
+                    <div className="relative">
+                        <div className="bg-amber/10 border border-amber/20 rounded-xl px-3 py-1.5">
+                            <div className="flex gap-1">
+                                {nextWave.map((letter, idx) => (
+                                    <div
+                                        key={`${wavesDropped}-${idx}`}
+                                        className="w-6 h-6 bg-bg-secondary border border-secondary/30 rounded-lg flex items-center justify-center text-xs font-semibold text-text-primary anim-chip-in"
+                                        style={{ animationDelay: `${idx * 50}ms` }}
+                                    >
+                                        {letter}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="absolute -top-2 left-3">
+                            <span className="bg-bg-primary px-1.5 text-[10px] font-medium text-amber uppercase tracking-wide">
+                                Next
+                            </span>
                         </div>
                     </div>
                 )}
@@ -1042,8 +1092,10 @@ const OrbitGame = () => {
                 </div>
             </div>
             <p className="w-full max-w-md text-xs text-text-secondary mb-3 min-h-4">
-                {phase === 'storm' && 'Storm: every move drops more letters. Trace words or spin rings.'}
-                {phase === 'cleanup' && 'The flood has passed — clear everything for a Clean Sweep.'}
+                {phase === 'storm' && (spinUsed
+                    ? 'Spin used — play a word or pass to ride the next wave.'
+                    : 'One free spin per turn, then play a word or pass. The flood grows.')}
+                {phase === 'cleanup' && 'The flood has passed — spins are free. Clear everything for a Clean Sweep.'}
             </p>
 
             {/* Board */}
@@ -1057,7 +1109,6 @@ const OrbitGame = () => {
                     onPointerUp={onBoardPointerUp}
                     onPointerCancel={onBoardPointerUp}
                 >
-                    {/* Spin guide: dashed circle behind the armed ring */}
                     {pivotCell && armed && phase !== 'over' && (
                         <svg
                             className="orbit-guide"
@@ -1082,7 +1133,7 @@ const OrbitGame = () => {
                     )}
 
                     {grid.map(cell => {
-                        const selIdx = selected.indexOf(cell.id);
+                        const isSelected = selected.includes(cell.id);
                         const inRing = ringIds.has(cell.id);
                         const isPivot = pivotCell?.id === cell.id && armed;
                         return (
@@ -1102,7 +1153,7 @@ const OrbitGame = () => {
                                 {cell.letter && (
                                     <div className={cn(
                                         'orbit-tile',
-                                        selIdx !== -1 && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
+                                        isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
                                         isPivot && 'orbit-tile--pivot'
                                     )}>
                                         {cell.letter}
@@ -1112,7 +1163,6 @@ const OrbitGame = () => {
                         );
                     })}
 
-                    {/* Clear burst + score floater */}
                     {clearFx.map(fx => (
                         <div
                             key={fx.id}
@@ -1136,19 +1186,20 @@ const OrbitGame = () => {
                     <span className="text-xs font-medium text-amber">
                         Spun {Math.abs(previewSteps)} step{Math.abs(previewSteps) === 1 ? '' : 's'} — tap the centre tile or press Enter to settle, Esc to cancel
                     </span>
-                ) : currentWord ? (
+                ) : selectedLetters ? (
                     <span className={cn(
                         'px-4 py-1 rounded-xl font-mono font-bold text-lg',
                         wordState === 'valid' && 'text-amber bg-amber/10',
                         wordState === 'invalid' && 'text-red-500 bg-red-500/10',
                         wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
                     )}>
-                        {currentWord}
-                        {wordState === 'valid' && <span className="ml-2 text-sm">+{currentWord.length}</span>}
+                        {match
+                            ? <>{match.toUpperCase()}<span className="ml-2 text-sm">+{selected.length}</span></>
+                            : selectedLetters}
                     </span>
                 ) : (
                     <span className="text-xs text-text-muted italic">
-                        Tap tiles to trace a word · drag around a tile to spin its ring
+                        Tap touching tiles in any order · drag around a tile to spin
                     </span>
                 )}
             </div>
@@ -1173,7 +1224,7 @@ const OrbitGame = () => {
                         End Turn
                     </Button>
                 )}
-                <Button onClick={submit} disabled={!isValid || phase === 'over'} size="gameControl">
+                <Button onClick={submit} disabled={!match || phase === 'over'} size="gameControl">
                     Submit
                 </Button>
                 {phase === 'cleanup' && (
@@ -1182,6 +1233,24 @@ const OrbitGame = () => {
                     </Button>
                 )}
             </div>
+
+            {/* Found words */}
+            {words.length > 0 && phase !== 'over' && (
+                <div className="relative mt-4 max-w-md">
+                    <div className="bg-success/10 border border-success/20 rounded-xl px-3 py-2 flex flex-wrap gap-1.5 justify-center">
+                        {words.slice(-10).map((w, i) => (
+                            <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
+                                {w.toUpperCase()}
+                            </span>
+                        ))}
+                    </div>
+                    <div className="absolute -top-2 left-3">
+                        <span className="bg-bg-primary px-1.5 text-[10px] font-medium text-amber uppercase tracking-wide">
+                            Found ({words.length})
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Game over */}
             {phase === 'over' && !showOnboarding && (
@@ -1203,8 +1272,8 @@ const OrbitGame = () => {
                         )}
                         <p className="text-text-secondary text-sm mb-2">
                             {mode === 'daily' && dailyResult
-                                ? <>{dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best}</span></>}{dailyResult.stranded > 0 && <> · {dailyResult.stranded} stranded</>}</>
-                                : <>{words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord}</span></>}{endReason !== 'swept' && tilesLeft > 0 && <> · {tilesLeft} stranded</>}</>}
+                                ? <>{dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best.toUpperCase()}</span></>}{dailyResult.stranded > 0 && <> · {dailyResult.stranded} stranded</>}</>
+                                : <>{words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord.toUpperCase()}</span></>}{endReason !== 'swept' && tilesLeft > 0 && <> · {tilesLeft} stranded</>}</>}
                         </p>
                         {mode === 'daily' && (
                             <p className="text-xs text-text-secondary mb-4">
@@ -1227,9 +1296,9 @@ const OrbitGame = () => {
                     <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in">
                         <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                         <div className="space-y-3 text-sm text-text-secondary mb-5">
-                            <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Trace words.</span> Tap touching tiles to spell a word (3+ letters), then Submit to clear them.</p>
-                            <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin rings.</span> Tap a tile, then drag around it to spin its ring — release to lock it in. Release back at the start to cancel.</p>
-                            <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every move drops more letters — survive {WAVES} waves, then empty the board for a Clean Sweep.</p>
+                            <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap touching tiles in any order — if the letters spell a word, Submit clears them.</p>
+                            <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin free.</span> Once per turn, drag around a tile to spin its ring and herd letters together.</p>
+                            <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every word or pass drops a bigger wave — survive {WAVES}, then empty the board for a Clean Sweep.</p>
                         </div>
                         <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                     </div>
