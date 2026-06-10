@@ -18,7 +18,7 @@ const debounce = <T extends (...args: never[]) => void>(func: T, wait: number): 
   }) as T;
 };
 import HexGrid, { HexCell } from '../components/HexGrid';
-import { runGravityDrop } from '../lib/gravityPhysics';
+import { buildFallFrames, FallFrames, FallSpec, FALL_STAGGER_MS } from '../lib/fallAnimation';
 import { countAdjacentEdges } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
@@ -26,19 +26,16 @@ import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
 import GameControls from '../components/GameControls';
 
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
-// Flood animation timing constants
-const FLOOD_STEP_MS = 100; // movement time between centers (ms)
-const FLOOD_PAUSE_MS = 250; // dwell time at each slot (ms)
+// Tile-fall timing (flood and resolve share the same fall system)
 const GRAVITY_SHORT_DELAY_MS = 100;
 const PHASE_GAP_MS = 160;
+const RESOLVE_STAGGER_MS = 30; // tighter stagger for settling tiles
 
 // Round thresholds (for future difficulty scaling)
 // const ROUND_TILE_THRESHOLDS = { FOUR: 5, FIVE: 8, SIX: 11 } as const;
 
 type FloodPathEntry = { path: string[]; batch: number };
 type FloodPathsMap = Record<string, FloodPathEntry>;
-type TilePathCenters = Array<{ row: number; col: number; center: { x: number; y: number } }>;
-type BatchPaths = Map<number, Array<{ cell: HexCell; pathCenters: TilePathCenters }>>;
 
 // Memoized version to avoid expensive DOM walks on every call
 const _centersCache = new WeakMap<HTMLElement, { key: string; map: Map<string, { x:number;y:number;row:number;col:number }> }>();
@@ -71,7 +68,7 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   return { w: r.width, h: r.height };
 }
 
-type FxOverlay = { key: string; letter: string; x: number; y: number; kind?: 'gravity' | 'swap' | 'move' | 'flood'; duration?: number };
+type FxOverlay = { key: string; letter: string; x: number; y: number; kind: 'fall'; fall: FallFrames };
 
 // (no-op placeholder removed)
 
@@ -84,8 +81,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [fxOverlays, setFxOverlays] = useState<FxOverlay[]>([]);
   const timersRef = useRef<number[]>([]);
   const uiTimersRef = useRef<number[]>([]);
-  const rafIdsRef = useRef<number[]>([]);
-  const gravityCancelRef = useRef<(() => void) | null>(null);
   const transitionTokenRef = useRef(0);
   const desiredIsDesktopRef = useRef<boolean | null>(null);
   const [hiddenCellIds, setHiddenCellIds] = useState<string[]>([]);
@@ -93,6 +88,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [swapFirstTile, setSwapFirstTile] = useState<string | null>(null);
   const [swapModeActive, setSwapModeActive] = useState(false);
   const [swappingCells, setSwappingCells] = useState<string[]>([]);
+  const [landedCellIds, setLandedCellIds] = useState<string[]>([]);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
@@ -188,6 +184,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
       lastPlayerGridRef.current = grid;
       // Reset contextual UI state at start of player phase
       setFxOverlays([]);
+      setHiddenCellIds([]);
       setSwapFirstTile(null);
       setSwapModeActive(false);
     }
@@ -258,317 +255,152 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
     let animationDoneSignal = () => {};
 
+    // Land a finished fall: drop its overlay, reveal the real tile, squash it
+    const scheduleFalls = (frames: FallFrames[]) => {
+        if (frames.length === 0) return;
+        setFxOverlays(frames.map(f => ({
+            key: f.key,
+            letter: f.letter,
+            x: f.xs[0],
+            y: f.ys[0],
+            kind: 'fall' as const,
+            fall: f,
+        })));
+        frames.forEach(f => {
+            const landT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.filter(o => o.key !== f.key));
+                setHiddenCellIds(prev => prev.filter(id => id !== f.cellId));
+                setLandedCellIds(prev => (prev.includes(f.cellId) ? prev : [...prev, f.cellId]));
+                const offT = window.setTimeout(() => {
+                    setLandedCellIds(prev => prev.filter(id => id !== f.cellId));
+                }, 450);
+                uiTimersRef.current.push(offT);
+            }, f.delay + f.duration);
+            timersRef.current.push(landT);
+        });
+    };
+
+    const centerOf = (cellId: string) => {
+        const c = grid.find(g => g.id === cellId);
+        if (!c) return null;
+        const p = centers.get(`${c.position.row},${c.position.col}`);
+        return p ? { x: p.x, y: p.y } : null;
+    };
+
     if (phase === 'gravitySettle' && gravityMoves && gravityMoves.size > 0) {
         const newlySettled = grid.filter(cell => cell.placedThisTurn);
         setHiddenCellIds(newlySettled.map(c => c.id));
-        
-        // Handle case where gravity moves were detected but no tiles actually need animation
-        if (newlySettled.length === 0 || prefersReducedMotion) {
-            // No tiles to animate, or reduce motion
+
+        const advanceAfterGravity = () => {
+            if (gravitySource === 'autoClear') {
+                findAndStartNextAutoClear();
+            } else if (gravitySource === 'wordSubmit') {
+                endRound();
+            } else if (gravitySource === 'swap') {
+                startPlayerPhase();
+            }
+        };
+
+        const specs: FallSpec[] = prefersReducedMotion ? [] : newlySettled.map(cell => {
+            // Reconstruct the full fall by walking the move chain backwards
+            // (gravityMoves maps each landing cell to its immediate source)
+            const chain = [cell.id];
+            const seen = new Set(chain);
+            let cur = cell.id;
+            while (gravityMoves.has(cur)) {
+                const src = gravityMoves.get(cur)!;
+                if (seen.has(src)) break;
+                seen.add(src);
+                chain.unshift(src);
+                cur = src;
+            }
+            const points = chain
+                .map(centerOf)
+                .filter((pt): pt is { x: number; y: number } => !!pt);
+            return { key: `fall-${cell.id}-${Date.now()}`, cellId: cell.id, letter: cell.letter, points };
+        }).filter(spec => spec.points.length >= 2);
+
+        if (specs.length === 0) {
+            // Nothing to animate (or reduced motion): reveal and advance
+            setHiddenCellIds([]);
             animationDoneSignal = () => {
-                const advanceT = window.setTimeout(() => {
-                    // Check gravity source to determine next action
-                    if (gravitySource === 'autoClear') {
-                        // Auto-clear cascade: look for next word
-                        findAndStartNextAutoClear();
-                    } else if (gravitySource === 'wordSubmit') {
-                        // Player word submit: trigger flood
-                        endRound();
-                    } else if (gravitySource === 'swap') {
-                        // Swap gravity: return to player phase
-                        startPlayerPhase();
-                    }
-                }, GRAVITY_SHORT_DELAY_MS);
+                const advanceT = window.setTimeout(advanceAfterGravity, GRAVITY_SHORT_DELAY_MS);
                 timersRef.current.push(advanceT);
             };
         } else {
-            // Collect every tile that needs to drop, with its source and
-            // destination pixel centres. A physics simulation handles the rest.
-            const fallingTiles: Array<{ id: string; cellId: string; letter: string; from: { x: number; y: number }; to: { x: number; y: number } }> = [];
-            const dropStamp = Date.now();
-
-            newlySettled.forEach((cell) => {
-                const sourceId = gravityMoves.get(cell.id);
-                const sourceCell = previousGrid.find(c => c.id === sourceId);
-                if (!sourceCell) return;
-
-                const from = centers.get(`${sourceCell.position.row},${sourceCell.position.col}`);
-                const to = centers.get(`${cell.position.row},${cell.position.col}`);
-                if (!from || !to) return;
-
-                fallingTiles.push({
-                    id: `gset-${cell.id}-${dropStamp}`,
-                    cellId: cell.id,
-                    letter: cell.letter,
-                    from,
-                    to,
-                });
-            });
-
-            const advanceAfterGravity = () => {
-                // Check gravity source to determine next action
-                if (gravitySource === 'autoClear') {
-                    findAndStartNextAutoClear();
-                } else if (gravitySource === 'wordSubmit') {
-                    endRound();
-                } else if (gravitySource === 'swap') {
-                    startPlayerPhase();
-                }
+            // Left-to-right cascade for readability
+            specs.sort((a, b) => a.points[a.points.length - 1].x - b.points[b.points.length - 1].x);
+            const { frames, totalMs } = buildFallFrames(specs, cellSize.h, RESOLVE_STAGGER_MS);
+            scheduleFalls(frames);
+            animationDoneSignal = () => {
+                const advanceT = window.setTimeout(advanceAfterGravity, totalMs + GRAVITY_SHORT_DELAY_MS);
+                timersRef.current.push(advanceT);
             };
-
-            if (fallingTiles.length === 0) {
-                animationDoneSignal = () => {
-                    const advanceT = window.setTimeout(advanceAfterGravity, GRAVITY_SHORT_DELAY_MS);
-                    timersRef.current.push(advanceT);
-                };
-            } else {
-                // Render the floating tiles at their source slots; the physics
-                // loop then drives their positions imperatively.
-                setFxOverlays(fallingTiles.map(t => ({
-                    key: t.id,
-                    letter: t.letter,
-                    x: t.from.x,
-                    y: t.from.y,
-                    kind: 'gravity' as const,
-                })));
-
-                const cellIdByTile = new Map(fallingTiles.map(t => [t.id, t.cellId]));
-
-                // Start the simulation on the next frame, once the floating
-                // tiles have been painted and can be moved.
-                const startRaf = requestAnimationFrame(() => {
-                    gravityCancelRef.current = runGravityDrop({
-                        tiles: fallingTiles.map(t => ({ id: t.id, from: t.from, to: t.to })),
-                        cellSize,
-                        getElement: (id) => document.querySelector<HTMLElement>(`[data-fx-id="${CSS.escape(id)}"]`),
-                        onTileSettled: (id) => {
-                            const cellId = cellIdByTile.get(id);
-                            setFxOverlays(prev => prev.filter(o => o.key !== id));
-                            if (cellId) setHiddenCellIds(prev => prev.filter(c => c !== cellId));
-                        },
-                        onComplete: () => {
-                            gravityCancelRef.current = null;
-                            const advanceT = window.setTimeout(advanceAfterGravity, GRAVITY_SHORT_DELAY_MS);
-                            timersRef.current.push(advanceT);
-                        },
-                    });
-                });
-                rafIdsRef.current.push(startRaf);
-            }
         }
     } else if (phase === 'flood') {
-        const newlyFilled = grid
-          .filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn)
-          .sort((a, b) => (a.position.row - b.position.row) || (a.position.col - b.position.col));
+        const newlyFilled = grid.filter(cell => (cell as HexCell & { placedThisTurn?: boolean }).placedThisTurn);
 
-        if (prefersReducedMotion) {
-          // Reveal immediately and skip path animation
-          setHiddenCellIds(prev => prev.filter(id => !newlyFilled.some(c => c.id === id)));
-          animationDoneSignal = () => {
-            const advanceT = window.setTimeout(() => {
-              // After flood, check if we should scan for auto-clear words
-              if (justScoredWord) {
+        const advanceAfterFlood = () => {
+            if (justScoredWord) {
                 findAndStartNextAutoClear();
-              } else {
+            } else {
                 startPlayerPhase();
-              }
-            }, 120);
-            timersRef.current.push(advanceT);
-          };
+            }
+        };
+
+        if (prefersReducedMotion || newlyFilled.length === 0) {
+            setHiddenCellIds(prev => prev.filter(id => !newlyFilled.some(c => c.id === id)));
+            animationDoneSignal = () => {
+                const advanceT = window.setTimeout(advanceAfterFlood, GRAVITY_SHORT_DELAY_MS + 20);
+                timersRef.current.push(advanceT);
+            };
         } else {
-          // Animation constants
-          const stepMs = FLOOD_STEP_MS; // movement time between centers (ms)
-          const pauseMs = FLOOD_PAUSE_MS;  // dwell time at each slot (ms)
-          const perStep = stepMs + pauseMs;
-
-          // Use the provided flood paths from the new flood logic
-          const centers = mapCenters(containerRef.current!);
-
-                 // Prevent top-row overlap: ensure one overlay per top-row entry at t=0
-          const usedTopEntries = new Set<string>();
-          const floodPathsTyped = (floodPaths || {}) as FloodPathsMap;
-          const tilePaths = newlyFilled.map(cell => {
-            // Use the exact path from the flood logic
-            const p = floodPathsTyped && floodPathsTyped[cell.id];
-            const pathIds: string[] | null = p && Array.isArray(p.path) ? p.path : null;
-            if (!pathIds || pathIds.length === 0) {
-              // No recorded flood path; tile is revealed without animation below
-              return null;
-            }
-            const pathIdsCopy = [...pathIds];
-            
-            // Convert path IDs to centers, ensuring we follow the exact flood path
-            const pathCenters: TilePathCenters = [];
-
-            // Skip top-row duplicate at t=0 if multiple tiles share the same entry
-            const firstCell = grid.find(g => g.id === pathIdsCopy[0]);
-            if (firstCell && firstCell.position.row === 0) {
-              const entryKey = `${firstCell.position.row},${firstCell.position.col}`;
-              usedTopEntries.add(entryKey);
-            }
-            
-            for (const pathId of pathIds) {
-              const pathCell = grid.find(g => g.id === pathId);
-              if (!pathCell) {
-                continue;
-              }
-              
-              const center = centers.get(`${pathCell.position.row},${pathCell.position.col}`);
-              if (!center) {
-                continue;
-              }
-              
-              pathCenters.push({
-                row: pathCell.position.row,
-                col: pathCell.position.col,
-                center
-              });
-            }
-            
-            if (pathCenters.length === 0) {
-              return null;
-            }
-
-            return { cell, pathCenters };
-          }).filter(tp => tp !== null) as Array<{ cell: HexCell; pathCenters: TilePathCenters }>;
-
-          // ----- BATCH-AWARE OCCUPANCY / OFFSETS ----------------------------------
-          const batches: BatchPaths = new Map();
-          tilePaths.forEach(tp => {
-            const entry = floodPathsTyped && floodPathsTyped[tp.cell.id];
-            const batchIdx = entry ? entry.batch : 0;
-            if (!batches.has(batchIdx)) batches.set(batchIdx, []);
-            batches.get(batchIdx)!.push(tp);
-          });
-
-          const batchOffsets = new Map<string, number>();
-          const perBatchMaxDelay = new Map<number, number>();
-
-          batches.forEach((paths, batchIdx) => {
-            const occupancy = new Map<string, Set<number>>();
-            paths.sort((a, b) => a.pathCenters.length - b.pathCenters.length);
-            paths.forEach((tp) => {
-              let offset = 0;
-              const maxOffset = 20;
-              while (offset < maxOffset) {
-                let conflict = false;
-                for (let i = 0; i < tp.pathCenters.length; i++) {
-                  const pc = tp.pathCenters[i];
-                  const key = `${pc.row},${pc.col}`;
-                  const tIdx = i + offset;
-                  const set = occupancy.get(key);
-                  if (set && set.has(tIdx)) { conflict = true; break; }
-                }
-                if (!conflict) {
-                  for (let i = 0; i < tp.pathCenters.length; i++) {
-                    const pc = tp.pathCenters[i];
-                    if (pc.row === 0) continue;
-                    const key = `${pc.row},${pc.col}`;
-                    if (!occupancy.has(key)) occupancy.set(key, new Set());
-                    occupancy.get(key)!.add(i + offset);
-                  }
-                  batchOffsets.set(tp.cell.id, offset);
-                  break;
-                }
-                offset++;
-              }
-              if (!batchOffsets.has(tp.cell.id)) batchOffsets.set(tp.cell.id, maxOffset);
+            const floodPathsTyped = (floodPaths || {}) as FloodPathsMap;
+            type FloodSpec = FallSpec & { batch: number };
+            const specs: FloodSpec[] = newlyFilled.flatMap(cell => {
+                const entry = floodPathsTyped[cell.id];
+                const pathIds = entry && Array.isArray(entry.path) && entry.path.length > 0
+                    ? entry.path
+                    : [cell.id];
+                const points = pathIds
+                    .map(centerOf)
+                    .filter((pt): pt is { x: number; y: number } => !!pt);
+                if (points.length === 0) return [];
+                // Spawn just above the entry slot so tiles fade in mid-fall
+                points.unshift({ x: points[0].x, y: points[0].y - cellSize.h * 0.9 });
+                return [{
+                    key: `fall-${cell.id}-${Date.now()}`,
+                    cellId: cell.id,
+                    letter: cell.letter,
+                    points,
+                    spawn: true,
+                    batch: entry?.batch ?? 0,
+                }];
             });
 
-            // longest duration within this batch (steps)
-            const longestSteps = Math.max(...paths.map((p)=>p.pathCenters.length));
-            perBatchMaxDelay.set(batchIdx, (longestSteps-1)*perStep);
-          });
+            // Earlier batches first, then left-to-right within a batch
+            specs.sort((a, b) => (a.batch - b.batch) || (a.points[0].x - b.points[0].x));
 
-          // --------- SCHEDULING ----------------------------------------------------
-          let cumulativeStart = 0;
-          const batchesSorted = [...batches.entries()].sort((a,b)=>a[0]-b[0]);
+            // Reveal any tiles that couldn't be animated
+            const animatedIds = new Set(specs.map(spec => spec.cellId));
+            const unanimated = newlyFilled.filter(c => !animatedIds.has(c.id)).map(c => c.id);
+            if (unanimated.length > 0) {
+                setHiddenCellIds(prev => prev.filter(id => !unanimated.includes(id)));
+            }
 
-          let maxFinalDelay = 0;
-
-          batchesSorted.forEach(([batchIdx, batchPaths])=>{
-            const batchStart = cumulativeStart;
-
-            batchPaths.forEach(({ cell, pathCenters })=>{
-              const offset = batchOffsets.get(cell.id) ?? 0;
-              const baseDelay = batchStart + offset*perStep;
-
-              const initial = pathCenters[0].center;
-              const fadeDelay = batchIdx === 0 ? 0 : batchStart;
-
-              const ovKey = `flood-${cell.id}-${Date.now()}`;
-
-              // Create FxOverlay at start position
-              const createOv = () => setFxOverlays(prev => [...prev, {
-                key: ovKey,
-                letter: cell.letter,
-                x: initial.x,
-                y: initial.y,
-                kind: 'flood'
-                // No duration - flood uses fixed FLOOD_STEP_MS per step
-              }]);
-
-              if (fadeDelay === 0) {
-                createOv();
-              } else {
-                const ovT = window.setTimeout(createOv, fadeDelay);
-                timersRef.current.push(ovT);
-              }
-
-              // Animate through each step in the path
-              pathCenters.forEach((pc, stepIndex) => {
-                const stepDelay = baseDelay + stepIndex * perStep;
-                const arriveT = window.setTimeout(() => {
-                  setFxOverlays(prev => prev.map(o =>
-                    o.key === ovKey ? { ...o, x: pc.center.x, y: pc.center.y } : o
-                  ));
-                }, stepDelay);
-                timersRef.current.push(arriveT);
-              });
-
-              // Calculate when animation completes
-              const finalStepDelay = baseDelay + (pathCenters.length - 1) * perStep;
-              const finalDelay = finalStepDelay + stepMs; // Add movement time
-              if(finalDelay > maxFinalDelay) maxFinalDelay = finalDelay;
-
-              // Clean up overlay and reveal tile
-              const cleanupDelay = finalDelay + 50;
-              const doneT = window.setTimeout(() => {
-                setFxOverlays(prev => prev.filter(o => o.key !== ovKey));
-                setHiddenCellIds(prev => prev.filter(id => id !== cell.id));
-              }, cleanupDelay);
-              timersRef.current.push(doneT);
-            });
-
-            cumulativeStart += (perBatchMaxDelay.get(batchIdx) ?? 0) + PHASE_GAP_MS; // move to next batch start time
-          });
-
-          animationDoneSignal = () => {
-            const advanceDelay = tilePaths.length === 0 ? GRAVITY_SHORT_DELAY_MS + 20 : maxFinalDelay + PHASE_GAP_MS;
-            const advanceT = window.setTimeout(() => {
-              // After flood, check if we should scan for auto-clear words
-              if (justScoredWord) {
-                findAndStartNextAutoClear();
-              } else {
-                startPlayerPhase();
-              }
-            }, advanceDelay);
-            timersRef.current.push(advanceT);
-          };
+            const { frames, totalMs } = buildFallFrames(specs, cellSize.h, FALL_STAGGER_MS);
+            scheduleFalls(frames);
+            animationDoneSignal = () => {
+                const advanceT = window.setTimeout(advanceAfterFlood, totalMs + PHASE_GAP_MS);
+                timersRef.current.push(advanceT);
+            };
         }
     }
-    
     animationDoneSignal();
 
     return () => {
       timersRef.current.forEach(t => window.clearTimeout(t));
       timersRef.current = [];
-      rafIdsRef.current.forEach(id => cancelAnimationFrame(id));
-      rafIdsRef.current = [];
-      if (gravityCancelRef.current) {
-        gravityCancelRef.current();
-        gravityCancelRef.current = null;
-      }
     };
   }, [phase, grid, previousGrid, cellSize.w, cellSize.h, startPlayerPhase, gravityMoves, floodPaths, endRound, prefersReducedMotion]);
 
@@ -1063,90 +895,48 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         <div className="flex-1 h-full overflow-hidden relative">
 
           <div ref={containerRef} className="absolute inset-0 px-2">
-            {/* FX overlays (gravity/flood/swap/move) */}
+            {/* FX overlays: unified tile-fall animation (flood + resolve) */}
             <div className="pointer-events-none absolute inset-0 z-50">
-              {/* Gravity tiles: positions driven imperatively by the physics engine */}
-              {fxOverlays.filter(fx => fx.kind === 'gravity').map(fx => (
-                <div
-                  key={fx.key}
-                  data-fx-id={fx.key}
-                  className="absolute flex items-center justify-center"
-                  style={{
-                    left: 0,
-                    top: 0,
-                    width: `${cellSize.w}px`,
-                    height: `${cellSize.h}px`,
-                    transform: `translate(${fx.x - cellSize.w / 2}px, ${fx.y - cellSize.h / 2}px)`,
-                    clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                    background: 'rgba(229,231,235,0.96)',
-                    borderRadius: 8,
-                    boxShadow: '0 6px 14px rgba(0,0,0,0.12)',
-                    willChange: 'transform',
-                  }}
-                >
-                  <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
-                </div>
-              ))}
-
-              {/* Flood / move FX: framer-motion keyframe animation */}
-              <AnimatePresence>
-                {fxOverlays.filter(fx => fx.kind !== 'gravity').map(fx => (
+              {fxOverlays.map(fx => {
+                const f = fx.fall;
+                return (
                   <motion.div
                     key={fx.key}
-                    initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, opacity: 1, scale: 1, rotateZ: 0 }}
-                    animate={fx.kind === 'flood' ? {
-                      x: fx.x - cellSize.w / 2,
-                      y: fx.y - cellSize.h / 2,
-                      opacity: 1,
-                      // ==================== FLOOD FEEL (Tunable) ====================
-                      // Lighter bounce for short step-by-step movement
-                      scale: [1, 1, 1.08, 0.96, 1],
-                      // Subtle wobble
-                      rotateZ: [0, 0, 1.5, -0.5, 0]
-                      // ================================================================
-                    } : {
-                      x: fx.x - cellSize.w / 2,
-                      y: fx.y - cellSize.h / 2,
-                      opacity: 1,
-                      // Deep magnetic slingshot: dramatic burst, bounce, damped wobble
-                      scale: [1, 1.5, 0.6, 1.3, 0.5, 1],
-                      rotateZ: [0, 6, -8, 4, -2, 0]
+                    initial={{
+                      x: f.xs[0] - cellSize.w / 2,
+                      y: f.ys[0] - cellSize.h / 2,
+                      opacity: f.spawn ? 0 : 1,
+                      scale: f.spawn ? 0.75 : 1,
                     }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={fx.kind === 'flood' ? {
-                      // ==================== FLOOD TIMING (Tunable) ====================
-                      // Fixed duration per step (from FLOOD_STEP_MS constant)
-                      duration: FLOOD_STEP_MS / 1000,
-                      times: [0, 0.5, 0.75, 0.9, 1],
-                      ease: [0.5, 2, 0.5, 1]
-                      // ===================================================================
-                    } : {
-                      duration: 1.2,
-                      times: [0, 0.15, 0.35, 0.55, 0.75, 1],
-                      ease: 'anticipate' // pronounced ease-in then snap & wobble
+                    animate={{
+                      x: f.xs.map(v => v - cellSize.w / 2),
+                      y: f.ys.map(v => v - cellSize.h / 2),
+                      opacity: 1,
+                      scale: 1,
                     }}
-                    style={{ position: 'absolute', left: 0, top: 0 }}
+                    transition={{
+                      x: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
+                      y: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
+                      opacity: { delay: f.delay / 1000, duration: 0.1, ease: 'linear' },
+                      scale: { delay: f.delay / 1000, duration: 0.16, ease: 'easeOut' },
+                    }}
+                    className="absolute flex items-center justify-center"
+                    style={{
+                      left: 0,
+                      top: 0,
+                      width: `${cellSize.w}px`,
+                      height: `${cellSize.h}px`,
+                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                      background: 'rgba(229,231,235,0.96)',
+                      borderRadius: 8,
+                      boxShadow: '0 6px 14px rgba(0,0,0,0.12)',
+                      willChange: 'transform',
+                    }}
                   >
-                    <motion.div
-                      className="flex items-center justify-center relative"
-                      style={{
-                        width: `${cellSize.w}px`,
-                        height: `${cellSize.h}px`,
-                        clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                        background: 'rgba(229,231,235,0.96)',
-                        borderRadius: 8,
-                        boxShadow: '0 6px 14px rgba(0,0,0,0.12)'
-                      }}
-                      whileHover={{ scale: 1.05 }}
-                      initial={{ rotateZ: 0 }}
-                      animate={{ rotateZ: 0 }}
-                      transition={{ duration: 0.4, ease: "easeInOut" }}
-                    >
-                      <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
-                    </motion.div>
+                    <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
                   </motion.div>
-                ))}
-              </AnimatePresence>
+                );
+              })}
             </div>
 
             {/* Contextual move targets removed for now */}
@@ -1241,6 +1031,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 isSettling={isSettling}
                 hiddenLetterCellIds={hiddenCellIds}
                 swappingCellIds={swappingCells}
+                landedCellIds={landedCellIds}
               />
               
               {/* Unified Game Controls */}

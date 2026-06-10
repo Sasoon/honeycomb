@@ -211,6 +211,7 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .hex-grid__item.swap-exchange { animation: none; }
+  .hex-grid__item.tile-landed-effect { animation: none; }
 }
 
 .hex-grid__content {
