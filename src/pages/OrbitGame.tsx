@@ -53,6 +53,8 @@ const GUIDE_R = PITCH_X;
 const cellX = (c: HexCell) => c.position.col * PITCH_X;
 const cellY = (c: HexCell) => c.position.row * PITCH_Y;
 const mod = (a: number, n: number) => ((a % n) + n) % n;
+// Long words carry the run: +2 per letter beyond 4 (3=3, 4=4, 5=7, 6=10…)
+const wordPoints = (len: number) => len + 2 * Math.max(0, len - 4);
 
 function buildBoard(): HexCell[] {
     const cells: HexCell[] = [];
@@ -787,7 +789,7 @@ const OrbitGame = () => {
         const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: `+${selected.length}`, key: Date.now() });
+        setScoreFx({ x: cx, y: cy, text: `+${wordPoints(selected.length)}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
         const t2 = window.setTimeout(() => setScoreFx(null), 750);
         fxTimersRef.current.push(t1, t2);
@@ -798,7 +800,9 @@ const OrbitGame = () => {
             const dst = newGrid.find(c => c.id === dstId);
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
-        setScore(s => s + selected.length);
+        setScore(s => s + wordPoints(selected.length));
+        // Clearing a word over spent spots wins back their pivot rights
+        setUsedPivots(u => u.filter(id => !selected.includes(id)));
         setWords(w => [...w, match]);
         setSelected([]);
         setMatch(null);
@@ -885,6 +889,30 @@ const OrbitGame = () => {
         }
         m.clear();
     }, [grid, reducedMotion]);
+
+    // Lock stamp when a pivot spot is spent; amber release flash when a
+    // word clear wins it back
+    const prevPivotsRef = useRef<string[]>([]);
+    useLayoutEffect(() => {
+        const prev = prevPivotsRef.current;
+        prevPivotsRef.current = usedPivots;
+        if (reducedMotion || !boardRef.current) return;
+        usedPivots.filter(id => !prev.includes(id)).forEach(id => {
+            const bg = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-hexbg`);
+            bg?.animate([
+                { transform: 'scale(1.35)', opacity: 0.15 },
+                { transform: 'scale(1)', opacity: 1 },
+            ], { duration: 380, easing: 'cubic-bezier(0.3, 1.2, 0.5, 1)' });
+        });
+        prev.filter(id => !usedPivots.includes(id)).forEach((id, i) => {
+            const wrap = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"]`);
+            wrap?.animate([
+                { filter: 'drop-shadow(0 0 0 rgba(245, 158, 11, 0))' },
+                { filter: 'drop-shadow(0 0 12px rgba(245, 158, 11, 0.85))', offset: 0.4 },
+                { filter: 'drop-shadow(0 0 0 rgba(245, 158, 11, 0))' },
+            ], { duration: 650, delay: 150 + i * 60 });
+        });
+    }, [usedPivots, reducedMotion]);
 
     // ---------- responsive scale ----------
 
@@ -1105,7 +1133,7 @@ const OrbitGame = () => {
                                 : 'text-amber bg-amber/10 border border-amber/30'
                         )}>
                             {selectedLetters
-                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{selected.length}</span>}</>
+                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}</span>}</>
                                 : <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>}
                         </div>
                         <div className="absolute -top-3 left-4">
@@ -1243,7 +1271,7 @@ const OrbitGame = () => {
                             wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
                         )}>
                             {selectedLetters}
-                            {match && <span className="ml-2 text-sm">+{selected.length}</span>}
+                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}</span>}
                         </span>
                     ) : (
                         <span className="text-xs text-text-muted italic">
@@ -1320,8 +1348,8 @@ const OrbitGame = () => {
                         <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in">
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
-                                <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — Submit clears them.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — free, but each spot can only be the centre of a spin once, then it's marked spent.</p>
+                                <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — each spot pivots only once, but clearing a word over it wins it back.</p>
                                 <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
