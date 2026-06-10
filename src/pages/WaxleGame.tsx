@@ -224,6 +224,47 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     }
   }, [phase, autoClearPhase, currentAutoClearWord, autoClearLetterIndex, processNextAutoClearWord]);
 
+  // Start compositor-thread animations (WAAPI) for newly-rendered fall
+  // overlays. Transform/opacity keyframes with offsets are handed to the
+  // browser once; playback then happens entirely off the main thread.
+  const startedFallsRef = useRef<Map<string, Animation>>(new Map());
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const live = new Set<string>();
+
+    fxOverlays.forEach(fx => {
+      const f = fx.fall;
+      live.add(fx.key);
+      if (startedFallsRef.current.has(fx.key)) return;
+      const el = container.querySelector<HTMLElement>(`[data-fall-key="${CSS.escape(fx.key)}"]`);
+      if (!el || typeof el.animate !== 'function') return;
+
+      const keyframes = f.xs.map((x, i) => ({
+        transform: `translate(${x - cellSize.w / 2}px, ${f.ys[i] - cellSize.h / 2}px)`,
+        opacity: f.spawn && i === 0 ? 0 : 1,
+        offset: f.times[i],
+        easing: 'linear',
+      }));
+
+      const anim = el.animate(keyframes, {
+        duration: Math.max(f.duration, 1),
+        delay: f.delay,
+        fill: 'both',
+        easing: 'linear',
+      });
+      startedFallsRef.current.set(fx.key, anim);
+    });
+
+    // Drop handles for overlays that have been removed
+    for (const key of [...startedFallsRef.current.keys()]) {
+      if (!live.has(key)) {
+        startedFallsRef.current.get(key)?.cancel();
+        startedFallsRef.current.delete(key);
+      }
+    }
+  }, [fxOverlays, cellSize.w, cellSize.h]);
+
   // Use layout effect to hide tiles synchronously before painting
   useLayoutEffect(() => {
     if (phase === 'flood') {
@@ -908,45 +949,34 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         <div className="flex-1 h-full overflow-hidden relative">
 
           <div ref={containerRef} className="absolute inset-0 px-2">
-            {/* FX overlays: unified tile-fall animation (flood + resolve) */}
+            {/* FX overlays: unified tile-fall animation (flood + resolve).
+                Driven by the Web Animations API (see the layout effect above):
+                transform/opacity keyframes run on the compositor thread, so
+                falls stay at the display's native frame rate even when the
+                main thread is busy — critical on mobile. */}
             <div className="pointer-events-none absolute inset-0 z-50">
               {fxOverlays.map(fx => {
                 const f = fx.fall;
                 return (
-                  <motion.div
+                  <div
                     key={fx.key}
-                    initial={{
-                      x: f.xs[0] - cellSize.w / 2,
-                      y: f.ys[0] - cellSize.h / 2,
-                      opacity: f.spawn ? 0 : 1,
-                      scale: f.spawn ? 0.75 : 1,
-                    }}
-                    animate={{
-                      x: f.xs.map(v => v - cellSize.w / 2),
-                      y: f.ys.map(v => v - cellSize.h / 2),
-                      opacity: 1,
-                      scale: 1,
-                    }}
-                    transition={{
-                      x: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
-                      y: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
-                      opacity: { delay: f.delay / 1000, duration: 0.1, ease: 'linear' },
-                      scale: { delay: f.delay / 1000, duration: 0.16, ease: 'easeOut' },
-                    }}
+                    data-fall-key={fx.key}
                     className="absolute flex items-center justify-center"
                     style={{
                       left: 0,
                       top: 0,
                       width: `${cellSize.w}px`,
                       height: `${cellSize.h}px`,
+                      transform: `translate(${f.xs[0] - cellSize.w / 2}px, ${f.ys[0] - cellSize.h / 2}px)`,
+                      opacity: f.spawn ? 0 : 1,
                       clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
                       background: 'rgba(229,231,235,0.96)',
                       borderRadius: 8,
-                      willChange: 'transform',
+                      willChange: 'transform, opacity',
                     }}
                   >
                     <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>
