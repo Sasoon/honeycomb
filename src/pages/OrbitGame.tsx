@@ -15,7 +15,7 @@ import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
-// path words + orbits (free, but each spot freezes after one) are the power
+// path words + orbits (free, but each pivot spot is single-use) are the power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
 // The flood is endless and grows every few waves; the run ends when a tile
 // can't fit. Score = letters cleared before the board fills
@@ -266,16 +266,15 @@ const OrbitGame = () => {
         return m;
     }, [grid]);
 
-    // Spent spots are frozen for good: they drop out of every future orbit,
-    // so rings rotate through their remaining mobile slots only
+    // Spent spots only lose their PIVOT right; they still ride other rings
     const ringOf = useCallback((pivot: HexCell): HexCell[] => {
         const ring: HexCell[] = [];
         for (const [dr, dc] of RING_OFFSETS) {
             const n = byPos.get(`${pivot.position.row + dr},${pivot.position.col + dc}`);
-            if (n && !usedPivots.includes(n.id)) ring.push(n);
+            if (n) ring.push(n);
         }
         return ring;
-    }, [byPos, usedPivots]);
+    }, [byPos]);
 
     const tileEl = useCallback((id: string) =>
         boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`) ?? null, []);
@@ -1322,7 +1321,7 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — Submit clears them.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — free, but each spot orbits only once, then freezes for good.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — free, but each spot can only be the centre of a spin once, then it's marked spent.</p>
                                 <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
