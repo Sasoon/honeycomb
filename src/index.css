@@ -183,13 +183,34 @@ button {
   z-index: 1;
 }
 
-.hex-grid__item:hover {
-  transform: scale(1.05);
-  z-index: 5;
+/* Hover lift only on devices that actually hover (prevents sticky scale on touch) */
+@media (hover: hover) and (pointer: fine) {
+  .hex-grid__item:hover {
+    transform: scale(1.05);
+    z-index: 5;
+  }
 }
 
 .hex-grid__item:active {
-  transform: scale(1.02);
+  transform: scale(0.94);
+}
+
+/* Two tiles exchanging letters: squash to a point, letters change at the
+   midpoint, then pop back */
+.hex-grid__item.swap-exchange {
+  animation: swapExchange 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 6;
+}
+
+@keyframes swapExchange {
+  0% { transform: scale(1); }
+  42% { transform: scale(0.5); filter: brightness(1.12); }
+  58% { transform: scale(0.5); filter: brightness(1.12); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hex-grid__item.swap-exchange { animation: none; }
 }
 
 .hex-grid__content {

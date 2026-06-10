@@ -92,6 +92,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [cellSize, setCellSize] = useState<{ w: number; h: number }>({ w: 64, h: 56 });
   const [swapFirstTile, setSwapFirstTile] = useState<string | null>(null);
   const [swapModeActive, setSwapModeActive] = useState(false);
+  const [swappingCells, setSwappingCells] = useState<string[]>([]);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
@@ -714,30 +715,39 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         return;
       }
 
-      // Perform the swap
-      const { pushToHistory, updateCurrentGameState } = useWaxleGameStore.getState();
-      pushToHistory('swap');
-
-      swapTiles(swapFirstTile, cell.id);
-
-      // Deduct one swap
-      const newSwapsAvailable = Math.max(0, (freeSwapsAvailable || 0) - 1);
-      updateCurrentGameState({
-        freeSwapsAvailable: newSwapsAvailable,
-        selectedTiles: [],
-        currentWord: ''
-      });
-
+      // Perform the swap: play the exchange animation and commit the letter
+      // swap at its midpoint, when both tiles are squashed down
+      const firstId = swapFirstTile;
+      const secondId = cell.id;
       setSwapFirstTile(null);
       setSwapModeActive(false);
-      haptics.success();
+      setSwappingCells([firstId, secondId]);
+
+      const commitDelay = prefersReducedMotion ? 0 : 175;
+      const commitT = window.setTimeout(() => {
+        const { pushToHistory, updateCurrentGameState } = useWaxleGameStore.getState();
+        pushToHistory('swap');
+
+        swapTiles(firstId, secondId);
+
+        // Deduct one swap
+        const newSwapsAvailable = Math.max(0, (freeSwapsAvailable || 0) - 1);
+        updateCurrentGameState({
+          freeSwapsAvailable: newSwapsAvailable,
+          selectedTiles: [],
+          currentWord: ''
+        });
+        haptics.success();
+      }, commitDelay);
+      const clearT = window.setTimeout(() => setSwappingCells([]), 400);
+      uiTimersRef.current.push(commitT, clearT);
       return;
     }
 
     // Normal word selection mode
     haptics.select();
     selectTile(cell.id);
-  }, [phase, swapModeActive, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile]);
+  }, [phase, swapModeActive, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile, prefersReducedMotion]);
 
   // Arm/disarm swap mode from the Swap button
   const toggleSwapMode = useCallback(() => {
@@ -922,17 +932,30 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   <div className={cn(
                     "bg-amber/10 border border-amber/20 rounded-xl p-3"
                   )}>
-                    <div className="flex items-center justify-center gap-1">
+                    <motion.div
+                      key={nextRows[0]?.join('')}
+                      initial={prefersReducedMotion ? false : 'hidden'}
+                      animate="show"
+                      variants={{ show: { transition: { staggerChildren: 0.05 } } }}
+                      className="flex items-center justify-center gap-1"
+                    >
                       {nextRows[0]?.map((letter, idx) => (
-                        <div key={idx} className={cn(
-                          "w-7 h-7 bg-bg-secondary border border-secondary/30",
-                          "rounded-lg flex items-center justify-center",
-                          "text-xs font-semibold text-text-primary"
-                        )}>
+                        <motion.div
+                          key={idx}
+                          variants={{
+                            hidden: { opacity: 0, y: -6, scale: 0.8 },
+                            show: { opacity: 1, y: 0, scale: 1 }
+                          }}
+                          className={cn(
+                            "w-7 h-7 bg-bg-secondary border border-secondary/30",
+                            "rounded-lg flex items-center justify-center",
+                            "text-xs font-semibold text-text-primary"
+                          )}
+                        >
                           {letter}
-                        </div>
+                        </motion.div>
                       ))}
-                    </div>
+                    </motion.div>
                   </div>
                   <div className="absolute -top-3 left-4">
                     <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
@@ -971,13 +994,20 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             {currentWord && (
               <div className="relative">
                 <div className={cn(
-                  "text-lg font-mono text-amber font-bold text-center",
-                  "bg-amber/10 border border-amber/30 rounded-xl p-3"
+                  "text-lg font-mono font-bold text-center rounded-xl p-3 transition-colors duration-200",
+                  validationState === false
+                    ? "text-red-500 bg-red-500/10 border border-red-500/30"
+                    : "text-amber bg-amber/10 border border-amber/30"
                 )}>
                   {currentWord}
                   {currentWord.length >= 3 && validationState === true && (
                     <span className="text-amber-dark ml-2">
                       (+{currentWordScore})
+                    </span>
+                  )}
+                  {validationState === false && (
+                    <span className="text-red-400 ml-2 text-sm align-middle">
+                      not a word
                     </span>
                   )}
                 </div>
@@ -1136,7 +1166,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               return (
                 <motion.svg
                   initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: [1, 1.06, 1] }}
+                  animate={{ opacity: 1, scale: prefersReducedMotion ? 1 : [1, 1.06, 1] }}
                   transition={{ scale: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } }}
                   className="absolute pointer-events-none z-[60]"
                   style={{
@@ -1210,6 +1240,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 enableLayout={!isTransitioning}
                 isSettling={isSettling}
                 hiddenLetterCellIds={hiddenCellIds}
+                swappingCellIds={swappingCells}
               />
               
               {/* Unified Game Controls */}
