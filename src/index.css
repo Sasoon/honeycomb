@@ -1387,14 +1387,16 @@ button {
   user-select: none;
 }
 
-/* Armed ring: letter tiles jiggle gently; empty slots get a faint tint so
-   the full rotation membership stays visible */
+/* Armed ring: letter tiles jiggle gently — the only arming affordance */
 .orbit-cell--ring .orbit-tile {
   animation: orbitJiggle 230ms ease-in-out infinite;
 }
 
-.orbit-cell--ring .orbit-hexbg {
-  background-color: rgba(245, 158, 11, 0.18);
+/* Pivot accent: a drop-shadow on the UNCLIPPED wrapper (shadows on the
+   clipped tile itself would be cut to the border-box) */
+.orbit-cell--pivot {
+  filter: drop-shadow(0 4px 10px rgba(180, 83, 9, 0.55));
+  z-index: 2;
 }
 
 @keyframes orbitJiggle {
@@ -1433,11 +1435,6 @@ button {
 .orbit-tile--invalid {
   background-color: #57534e;
   color: #fff;
-}
-
-.orbit-tile--pivot {
-  background-color: #fde68a;
-  color: #92400e;
 }
 
 .orbit-cell--ring .orbit-tile {
