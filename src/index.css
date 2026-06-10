@@ -1371,11 +1371,12 @@ button {
   }
 }
 
-/* App shell height: dvh tracks the mobile URL bar showing/hiding, so
-   vertically centred content stays centred in the VISIBLE area */
+/* App shell height: svh sizes to the small viewport (mobile URL bar
+   visible), so the centred board is right on load and never shifts when
+   the bar hides on scroll */
 .app-height {
   height: 100vh; /* fallback */
-  height: 100dvh;
+  height: 100svh;
 }
 
 /* ==================== Orbit prototype (/orbit) ==================== */
@@ -1396,14 +1397,24 @@ button {
   background-color: rgba(245, 158, 11, 0.18);
 }
 
-/* Spent pivot spots: a ring was orbited off this cell, it can't pivot again.
-   Declared after the ring tint so the dark spot wins inside an armed ring */
+/* Spent pivot spots: each spot can be orbited OFF only once. The tile on
+   it still rides other rings; the dark bg + dot mark the SPOT as spent */
 .orbit-cell--spent .orbit-hexbg {
   background-color: rgba(68, 64, 60, 0.32);
 }
 
-.orbit-cell--spent .orbit-tile:not(.orbit-tile--selected):not(.orbit-tile--invalid) {
-  filter: brightness(0.88);
+.orbit-cell--spent::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 16%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background-color: rgba(68, 64, 60, 0.55);
+  pointer-events: none;
+  z-index: 5;
 }
 
 @keyframes orbitJiggle {
