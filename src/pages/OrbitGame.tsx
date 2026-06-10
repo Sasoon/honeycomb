@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { ChevronDown, Flame, Undo2 } from 'lucide-react';
+import { ChevronDown, Hourglass, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
@@ -15,13 +15,12 @@ import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
-// path words + orbits (free, but once per spot) are the player's power
+// path words + orbits (free, but each spot freezes after one) are the power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
-// The flood escalates: late waves nearly fill what early waves trickled
-const WAVE_SIZES = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6];
-const WAVES = WAVE_SIZES.length;
+// The flood is endless and grows every few waves; the run ends when a tile
+// can't fit. Score = letters cleared before the board fills
+const waveSize = (wave: number) => 3 + Math.floor(wave / 3);
 const SEED_TILES = 8;
-const TOTAL_LETTERS = SEED_TILES + WAVE_SIZES.reduce((a, b) => a + b, 0); // 50
 const WORD_MIN = 3; // smallest playable word
 const WORD_MAX = 8; // largest word indexed
 const FLOOD_STAGGER_MS = 50;
@@ -33,9 +32,9 @@ const DAILY_UNDOS = 3;
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v4';
+const LS_RUN = 'waxle-orbit-run-v5';
 const LS_STATS = 'waxle-orbit-stats-v1';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v3';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v4';
 
 const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
@@ -73,8 +72,7 @@ function buildBoard(): HexCell[] {
     return cells;
 }
 
-type Phase = 'storm' | 'cleanup' | 'over';
-type EndReason = 'drowned' | 'finished' | 'swept';
+type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
 type Action = 'word' | 'pass';
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
@@ -95,11 +93,10 @@ type Snapshot = {
 
 interface DailyResult {
     score: number;
-    reason: EndReason;
     strip: Action[];
     best: string;
     wordCount: number;
-    stranded: number;
+    waves: number;
 }
 
 interface OrbitStats {
@@ -210,40 +207,11 @@ function orbitFlood(
     return { newGrid, paths, unplaced };
 }
 
-// Cleanup dead-end detection: does any linear adjacent path of 3-5 tiles
-// spell a word?
-function anyPathWord(grid: HexCell[], words: Set<string>): boolean {
-    const lettered = grid.filter(c => c.letter);
-    if (lettered.length < WORD_MIN) return false;
-    const adj = new Map<string, HexCell[]>();
-    lettered.forEach(c => {
-        adj.set(c.id, lettered.filter(o => o.id !== c.id && areCellsAdjacent(c, o)));
-    });
-    let budget = 30000;
-
-    const walk = (path: HexCell[], used: Set<string>): boolean => {
-        if (budget-- <= 0) return false;
-        if (path.length >= WORD_MIN && words.has(path.map(c => c.letter).join('').toLowerCase())) {
-            return true;
-        }
-        if (path.length >= 5) return false;
-        for (const n of adj.get(path[path.length - 1].id)!) {
-            if (used.has(n.id)) continue;
-            used.add(n.id);
-            if (walk([...path, n], used)) return true;
-            used.delete(n.id);
-        }
-        return false;
-    };
-    return lettered.some(c => walk([c], new Set([c.id])));
-}
-
 const OrbitGame = () => {
     const [mode, setMode] = useState<Mode>('daily');
     const [dateStr] = useState(todayStr);
     const [grid, setGrid] = useState<HexCell[]>([]);
     const [phase, setPhase] = useState<Phase>('storm');
-    const [endReason, setEndReason] = useState<EndReason | null>(null);
     const [wavesDropped, setWavesDropped] = useState(0);
     const [nextWave, setNextWave] = useState<string[]>([]);
     const [score, setScore] = useState(0);
@@ -298,14 +266,16 @@ const OrbitGame = () => {
         return m;
     }, [grid]);
 
+    // Spent spots are frozen for good: they drop out of every future orbit,
+    // so rings rotate through their remaining mobile slots only
     const ringOf = useCallback((pivot: HexCell): HexCell[] => {
         const ring: HexCell[] = [];
         for (const [dr, dc] of RING_OFFSETS) {
             const n = byPos.get(`${pivot.position.row + dr},${pivot.position.col + dc}`);
-            if (n) ring.push(n);
+            if (n && !usedPivots.includes(n.id)) ring.push(n);
         }
         return ring;
-    }, [byPos]);
+    }, [byPos, usedPivots]);
 
     const tileEl = useCallback((id: string) =>
         boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`) ?? null, []);
@@ -331,9 +301,8 @@ const OrbitGame = () => {
         pendingAnimsRef.current.clear();
         recordedRef.current = false;
         setGrid(newGrid);
-        setNextWave(generateDropLettersSmart(WAVE_SIZES[0], newGrid, rng));
+        setNextWave(generateDropLettersSmart(waveSize(0), newGrid, rng));
         setPhase('storm');
-        setEndReason(null);
         setWavesDropped(0);
         setScore(0);
         setWords([]);
@@ -359,11 +328,10 @@ const OrbitGame = () => {
             const fresh = buildBoard();
             setGrid(fresh);
             setPhase('over');
-            setEndReason(result.reason);
             setScore(result.score);
             setWords(result.best ? [result.best] : []);
             setActionLog(result.strip);
-            setWavesDropped(WAVES);
+            setWavesDropped(result.waves ?? 0);
             setNextWave([]);
             return;
         }
@@ -384,7 +352,6 @@ const OrbitGame = () => {
                     pendingAnimsRef.current.clear();
                     setGrid(board);
                     setPhase(run.phase);
-                    setEndReason(null);
                     setWavesDropped(run.wavesDropped);
                     setNextWave(run.nextWave);
                     setScore(run.score);
@@ -423,37 +390,35 @@ const OrbitGame = () => {
     }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, usedPivots, undoStack, undosUsed]);
 
     useEffect(() => {
-        if (mode !== 'daily' || phase !== 'over' || !endReason || recordedRef.current) return;
+        if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
         recordedRef.current = true;
-        const stranded = grid.filter(c => c.letter).length;
         const best = words.reduce((a, b) => (b.length > a.length ? b : a), '');
         setStats(prev => {
             const next: OrbitStats = {
                 ...prev,
                 games: prev.games + 1,
-                sweeps: prev.sweeps + (endReason === 'swept' ? 1 : 0),
                 streak: prev.lastDate === yesterdayOf(dateStr) ? prev.streak + 1
                     : prev.lastDate === dateStr ? prev.streak
                     : 1,
                 lastDate: dateStr,
                 results: {
                     ...prev.results,
-                    [dateStr]: { score, reason: endReason, strip: actionLog, best, wordCount: words.length, stranded },
+                    [dateStr]: { score, strip: actionLog, best, wordCount: words.length, waves: wavesDropped },
                 },
             };
             try { localStorage.setItem(LS_STATS, JSON.stringify(next)); } catch { /* non-fatal */ }
             return next;
         });
         try { localStorage.removeItem(LS_RUN); } catch { /* non-fatal */ }
-    }, [mode, phase, endReason, grid, words, score, actionLog, dateStr]);
+    }, [mode, phase, words, score, actionLog, dateStr, wavesDropped]);
 
     // ---------- game flow ----------
 
-    // Word/pass ends the turn: the next wave drops
+    // Word/pass ends the turn: the next wave drops — endlessly, and growing
     const afterAction = useCallback((g: HexCell[]) => {
-        if (phase === 'storm' && wavesDropped < WAVES) {
+        if (phase === 'storm') {
             const rng = rngRef.current;
-            const letters = nextWave.length ? nextWave : generateDropLettersSmart(WAVE_SIZES[wavesDropped], g, rng);
+            const letters = nextWave.length ? nextWave : generateDropLettersSmart(waveSize(wavesDropped), g, rng);
             const { newGrid, paths, unplaced } = orbitFlood(g, letters, rng);
 
             const placed = newGrid.filter(c => c.placedThisTurn);
@@ -491,37 +456,15 @@ const OrbitGame = () => {
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
             setGrid(newGrid);
-            setNextWave(nextWaves < WAVES ? generateDropLettersSmart(WAVE_SIZES[nextWaves], newGrid, rng) : []);
+            setNextWave(generateDropLettersSmart(waveSize(nextWaves), newGrid, rng));
             if (unplaced.length > 0) {
                 setPhase('over');
-                setEndReason('drowned');
                 haptics.error();
-            } else if (nextWaves >= WAVES) {
-                setPhase('cleanup');
             }
         } else {
             setGrid(g);
-            if (phase === 'cleanup' && g.every(c => !c.letter)) {
-                setPhase('over');
-                setEndReason('swept');
-            }
         }
     }, [phase, wavesDropped, nextWave]);
-
-    // Cleanup dead-end watch
-    useEffect(() => {
-        if (phase !== 'cleanup') return;
-        let cancelled = false;
-        loadWordSet().then(words => {
-            if (cancelled || words.size === 0) return;
-            if (!anyPathWord(grid, words)) {
-                setPhase('over');
-                setEndReason(grid.every(c => !c.letter) ? 'swept' : 'finished');
-                if (grid.some(c => c.letter)) toastService.success('No words left — run complete');
-            }
-        });
-        return () => { cancelled = true; };
-    }, [phase, grid]);
 
     // ---------- undo ----------
 
@@ -874,12 +817,6 @@ const OrbitGame = () => {
         afterAction(grid.map(c => ({ ...c })));
     }, [phase, grid, afterAction, pushUndo]);
 
-    const finish = useCallback(() => {
-        if (phase !== 'cleanup') return;
-        setPhase('over');
-        setEndReason('finished');
-    }, [phase]);
-
     useEffect(() => () => { fxTimersRef.current.forEach(t => window.clearTimeout(t)); }, []);
 
     // ---------- cluster selection ----------
@@ -969,15 +906,16 @@ const OrbitGame = () => {
         () => words.reduce((a, b) => (b.length > a.length ? b : a), ''),
         [words]
     );
-    const tilesLeft = useMemo(() => grid.filter(c => c.letter).length, [grid]);
+    const bestDaily = useMemo(
+        () => Object.values(stats.results).reduce((m, r) => Math.max(m, r.score), 0),
+        [stats]
+    );
     const dailyNo = dayNumber(dateStr);
 
     const share = useCallback(() => {
-        const headline = endReason === 'swept' ? '🧹 Clean Sweep' : endReason === 'drowned' ? '🌊 Drowned' : '🏁';
         const title = mode === 'daily' ? `WAXLE ORBIT #${dailyNo}` : 'WAXLE ORBIT (practice)';
-        const stranded = endReason !== 'swept' && tilesLeft > 0 ? ` · ${tilesLeft} stranded` : '';
         const strip = actionLog.map(a => ACTION_EMOJI[a]).join('');
-        const text = `${title} — ${score}/${TOTAL_LETTERS} ${headline}${stranded}\n${strip}${bestWord ? `\nBest: ${bestWord.toUpperCase()}` : ''}\nhttps://waxle.netlify.app/orbit`;
+        const text = `${title} — ${score} pts · ${wavesDropped} waves 🌊\n${strip}${bestWord ? `\nBest: ${bestWord.toUpperCase()}` : ''}\nhttps://waxle.netlify.app/orbit`;
         const copy = () => navigator.clipboard.writeText(text).then(
             () => toastService.success('Result copied!'),
             () => toastService.error('Could not copy')
@@ -989,7 +927,7 @@ const OrbitGame = () => {
         } else {
             copy();
         }
-    }, [mode, dailyNo, endReason, tilesLeft, actionLog, score, bestWord]);
+    }, [mode, dailyNo, actionLog, score, wavesDropped, bestWord]);
 
     const dismissOnboarding = useCallback(() => {
         setShowOnboarding(false);
@@ -1044,43 +982,30 @@ const OrbitGame = () => {
         </div>
     );
 
-    const waveDots = (
-        <div className="flex items-center gap-1" aria-label={`Wave ${wavesDropped} of ${WAVES}`}>
-            {Array.from({ length: WAVES }, (_, i) => (
-                <span
-                    key={i}
-                    className={cn('w-2 h-2 rounded-full', i < wavesDropped ? 'bg-amber' : 'bg-secondary/30')}
-                />
-            ))}
-        </div>
-    );
-
     return (
         <div className="flex-1 flex flex-col md:flex-row bg-bg-primary select-none">
             {/* Mobile top bar (classic flush header, tap to expand stats) */}
             <div className="md:hidden sticky top-0 z-30 w-full">
                 <div className={cn(
-                    'bg-bg-primary border-b border-secondary/20',
+                    'relative bg-bg-primary border-b border-secondary/20',
                     'px-4 shadow-lg shadow-secondary/10 cursor-pointer',
                     'active:bg-bg-secondary/50',
                     'h-[60px] flex items-center justify-between'
                 )} onClick={() => setStatsOpen(o => !o)}>
                     <div className="flex items-baseline gap-1">
                         <span className="text-xl font-bold text-text-primary tabular-nums">{score}</span>
-                        <span className="text-xs text-text-secondary">/ {TOTAL_LETTERS}</span>
+                        <span className="text-xs text-text-secondary">pts</span>
                     </div>
                     {phase === 'storm' && nextWave.length > 0 && (
-                        <div className="bg-amber/10 border border-amber/20 rounded-xl px-2 py-1.5">
-                            {nextChips('w-5 h-5 text-[11px]')}
+                        <div className="absolute left-1/2 -translate-x-1/2 bg-amber/10 border border-amber/20 rounded-xl px-2.5 py-1.5">
+                            {nextChips(nextWave.length >= 6 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
                         </div>
                     )}
                     <div className="flex items-center gap-2">
-                        {stats.streak > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs font-semibold text-amber">
-                                <Flame size={12} /> {stats.streak}
-                            </span>
-                        )}
-                        {waveDots}
+                        <span className="flex items-center gap-1 text-text-secondary" aria-label={`Wave ${wavesDropped}`}>
+                            <Hourglass size={14} className="text-amber" />
+                            <span className="text-sm font-semibold tabular-nums">{wavesDropped}</span>
+                        </span>
                         <div className={cn(
                             'p-1 rounded-lg bg-secondary/10 transition-transform duration-200',
                             statsOpen && 'rotate-180'
@@ -1144,14 +1069,15 @@ const OrbitGame = () => {
                             />
                         </div>
                         <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">
-                            Score / {TOTAL_LETTERS}
+                            Score
                         </div>
                     </div>
 
-                    {/* Wave progress */}
+                    {/* Wave counter */}
                     <div className="bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
-                        <div className="text-xl font-semibold text-text-primary tabular-nums">
-                            {wavesDropped}<span className="text-text-secondary text-sm">/{WAVES}</span>
+                        <div className="text-xl font-semibold text-text-primary flex items-center justify-center gap-1.5">
+                            <Hourglass size={16} className="text-amber" />
+                            <span className="tabular-nums">{wavesDropped}</span>
                         </div>
                         <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
                     </div>
@@ -1352,12 +1278,6 @@ const OrbitGame = () => {
                         <span className="hidden sm:inline">Submit</span>
                         <span className="sm:hidden text-lg">✓</span>
                     </Button>
-                    {phase === 'cleanup' && (
-                        <Button onClick={finish} variant="secondary" size="gameControl" className="gap-1 sm:gap-2">
-                            <span className="hidden sm:inline">Finish</span>
-                            <span className="sm:hidden text-lg">🏁</span>
-                        </Button>
-                    )}
                 </div>
                 </div>
 
@@ -1365,14 +1285,10 @@ const OrbitGame = () => {
                 {phase === 'over' && !showOnboarding && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
                         <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full text-center anim-modal-in">
-                            <div className="text-4xl mb-2">
-                                {endReason === 'swept' ? '🧹' : endReason === 'drowned' ? '🌊' : '🏁'}
-                            </div>
-                            <h2 className="text-xl font-bold text-text-primary mb-1">
-                                {endReason === 'swept' ? 'Clean Sweep!' : endReason === 'drowned' ? 'The board flooded' : 'Run complete'}
-                            </h2>
+                            <div className="text-4xl mb-2">🌊</div>
+                            <h2 className="text-xl font-bold text-text-primary mb-1">The board is full</h2>
                             <p className="text-2xl font-bold text-amber mb-1 tabular-nums">
-                                {score} <span className="text-sm text-text-secondary font-medium">/ {TOTAL_LETTERS}</span>
+                                {score} <span className="text-sm text-text-secondary font-medium">pts</span>
                             </p>
                             {actionLog.length > 0 && (
                                 <p className="text-base tracking-wide mb-2" aria-label="run history">
@@ -1381,12 +1297,12 @@ const OrbitGame = () => {
                             )}
                             <p className="text-text-secondary text-sm mb-2">
                                 {mode === 'daily' && dailyResult
-                                    ? <>{dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best.toUpperCase()}</span></>}{dailyResult.stranded > 0 && <> · {dailyResult.stranded} stranded</>}</>
-                                    : <>{words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord.toUpperCase()}</span></>}{endReason !== 'swept' && tilesLeft > 0 && <> · {tilesLeft} stranded</>}</>}
+                                    ? <>{dailyResult.waves ?? wavesDropped} waves · {dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best.toUpperCase()}</span></>}</>
+                                    : <>{wavesDropped} waves · {words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord.toUpperCase()}</span></>}</>}
                             </p>
                             {mode === 'daily' && (
                                 <p className="text-xs text-text-secondary mb-4">
-                                    🔥 {stats.streak} day streak · 🧹 {stats.sweeps}/{stats.games} sweeps
+                                    🔥 {stats.streak} day streak · 🏆 best {bestDaily} pts
                                 </p>
                             )}
                             <div className="flex gap-3 justify-center">
@@ -1406,8 +1322,8 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — Submit clears them.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — free, but each spot pivots only once, then darkens.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every word or pass drops a bigger wave — survive {WAVES}, then empty the board for a Clean Sweep.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — free, but each spot orbits only once, then freezes for good.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
