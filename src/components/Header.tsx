@@ -97,14 +97,32 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                   Daily
                 </Link>
               </div>
-              <div 
+              <div
                 className="nav-link-chain flex items-center h-full"
                 style={{
                   animationDelay: '150ms'
                 }}
               >
-                <Link 
-                  to="/leaderboard" 
+                <Link
+                  to="/orbit"
+                  className={cn(
+                    "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
+                    isActive('/orbit')
+                      ? 'bg-accent-dark text-white shadow-lg shadow-accent/20'
+                      : 'text-white hover:text-white hover:bg-accent-dark/50'
+                  )}
+                >
+                  Orbit
+                </Link>
+              </div>
+              <div
+                className="nav-link-chain flex items-center h-full"
+                style={{
+                  animationDelay: '200ms'
+                }}
+              >
+                <Link
+                  to="/leaderboard"
                   className={cn(
                     "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
                     isActive('/leaderboard')
@@ -115,14 +133,14 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
                   Leaderboard
                 </Link>
               </div>
-              <div 
+              <div
                 className="nav-link-chain flex items-center h-full"
                 style={{
-                  animationDelay: '200ms'
+                  animationDelay: '250ms'
                 }}
               >
-                <Link 
-                  to="/how-to-play" 
+                <Link
+                  to="/how-to-play"
                   className={cn(
                     "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
                     isActive('/how-to-play')

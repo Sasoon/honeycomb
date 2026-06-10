@@ -9,6 +9,7 @@ import {
     generateDropLettersSmart,
     areCellsAdjacent,
 } from '../lib/waxleGameUtils';
+import { buildFallFrames, FALL_STAGGER_MS, FallSpec } from '../lib/fallAnimation';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 
@@ -19,16 +20,17 @@ const WAVE_SIZE = 4;
 const SEED_TILES = 7;
 // ================================================================
 
-// Ring neighbour offsets in clockwise screen order, starting top-left
+// Neighbour offsets in clockwise screen order, starting top-left
 const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
 ];
 
-// Board geometry (px) — scaled down responsively via wrapper transform
+// Board geometry (px). Vertical pitch = horizontal pitch × (√3/2 of the hex
+// lattice) so the gap between tiles is uniform in every direction.
 const TILE_W = 54;
 const TILE_H = 62;
 const PITCH_X = 58;
-const PITCH_Y = 47;
+const PITCH_Y = 50;
 const BOARD_W = 6 * PITCH_X + TILE_W;
 const BOARD_H = 6 * PITCH_Y + TILE_H;
 
@@ -55,20 +57,21 @@ function buildBoard(): HexCell[] {
 
 type Phase = 'storm' | 'cleanup' | 'over';
 type EndReason = 'drowned' | 'finished' | 'swept';
+type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 
 const OrbitGame = () => {
     const [grid, setGrid] = useState<HexCell[]>([]);
     const [phase, setPhase] = useState<Phase>('storm');
     const [endReason, setEndReason] = useState<EndReason | null>(null);
     const [wavesDropped, setWavesDropped] = useState(0);
+    const [nextWave, setNextWave] = useState<string[]>([]);
     const [score, setScore] = useState(0);
     const [words, setWords] = useState<string[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
-    const [pivotOnly, setPivotOnly] = useState<string | null>(null);
     const [isValid, setIsValid] = useState(false);
 
     const boardRef = useRef<HTMLDivElement>(null);
-    const pendingAnimsRef = useRef<Map<string, { dx: number; dy: number; fade?: boolean; delay?: number }>>(new Map());
+    const pendingAnimsRef = useRef<Map<string, PendingAnim>>(new Map());
     const validateSeqRef = useRef(0);
     const reducedMotion = useMemo(
         () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -81,15 +84,25 @@ const OrbitGame = () => {
         return m;
     }, [grid]);
 
-    const ringOf = useCallback((pivot: HexCell): HexCell[] | null => {
+    // Existing neighbours in clockwise order. Edge cells get partial rings so
+    // every tile on the board can be a pivot — the arc rotates cyclically.
+    const ringOf = useCallback((pivot: HexCell): HexCell[] => {
         const ring: HexCell[] = [];
         for (const [dr, dc] of RING_OFFSETS) {
             const n = byPos.get(`${pivot.position.row + dr},${pivot.position.col + dc}`);
-            if (!n) return null; // edge cell — not a valid pivot
-            ring.push(n);
+            if (n) ring.push(n);
         }
         return ring;
     }, [byPos]);
+
+    const queueMove = useCallback((id: string, dx: number, dy: number) => {
+        pendingAnimsRef.current.set(id, {
+            keyframes: [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+            duration: 180,
+            delay: 0,
+            easing: 'cubic-bezier(0.25, 0.8, 0.4, 1)',
+        });
+    }, []);
 
     // ---------- game flow ----------
 
@@ -100,30 +113,58 @@ const OrbitGame = () => {
         newGrid.forEach(c => { c.placedThisTurn = false; });
         pendingAnimsRef.current.clear();
         setGrid(newGrid);
+        setNextWave(generateDropLettersSmart(WAVE_SIZE, newGrid));
         setPhase('storm');
         setEndReason(null);
         setWavesDropped(0);
         setScore(0);
         setWords([]);
         setSelected([]);
-        setPivotOnly(null);
         setIsValid(false);
     }, []);
 
     useEffect(() => { init(); }, [init]);
 
-    // Every storm action is followed by the next wave; after the last wave the
-    // flood stops and the cleanup phase begins
+    // Every storm action is followed by the forecast wave entering from the
+    // top of the grid; after the last wave the cleanup phase begins
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm' && wavesDropped < WAVES) {
-            const letters = generateDropLettersSmart(WAVE_SIZE, g);
-            const { newGrid, unplacedLetters } = applyFallingTiles(g, letters, ROW_COUNTS.length);
-            newGrid.filter(c => c.placedThisTurn).forEach((c, i) => {
-                pendingAnimsRef.current.set(c.id, { dx: 0, dy: -TILE_H * 0.8, fade: true, delay: i * 45 });
+            const letters = nextWave.length ? nextWave : generateDropLettersSmart(WAVE_SIZE, g);
+            const { newGrid, finalPaths, unplacedLetters } = applyFallingTiles(g, letters, ROW_COUNTS.length);
+
+            // Animate each tile along its full fall path from above the board
+            const placed = newGrid.filter(c => c.placedThisTurn);
+            const specs: Array<FallSpec & { batch: number }> = placed.map(c => {
+                const entry = finalPaths[c.id];
+                const ids = entry?.path?.length ? entry.path : [c.id];
+                const pts = ids
+                    .map(id => newGrid.find(x => x.id === id))
+                    .filter((x): x is HexCell => !!x)
+                    .map(x => ({ x: cellX(x), y: cellY(x) }));
+                pts.unshift({ x: pts[0].x, y: pts[0].y - TILE_H * 0.9 });
+                return { key: c.id, cellId: c.id, letter: c.letter, points: pts, spawn: true, batch: entry?.batch ?? 0 };
             });
+            specs.sort((a, b) => (a.batch - b.batch) || (a.points[0].x - b.points[0].x));
+            const { frames } = buildFallFrames(specs, TILE_H, FALL_STAGGER_MS);
+            frames.forEach(f => {
+                const lx = f.xs[f.xs.length - 1];
+                const ly = f.ys[f.ys.length - 1];
+                pendingAnimsRef.current.set(f.cellId, {
+                    keyframes: f.xs.map((x, i) => ({
+                        transform: `translate(${x - lx}px, ${f.ys[i] - ly}px)`,
+                        opacity: f.spawn && i === 0 ? 0 : 1,
+                        offset: f.times[i],
+                        easing: 'linear',
+                    })),
+                    duration: f.duration,
+                    delay: f.delay,
+                });
+            });
+
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
             setGrid(newGrid);
+            setNextWave(generateDropLettersSmart(WAVE_SIZE, newGrid));
             if (unplacedLetters.length > 0) {
                 setPhase('over');
                 setEndReason('drowned');
@@ -137,34 +178,31 @@ const OrbitGame = () => {
                 setEndReason('swept');
             }
         }
-    }, [phase, wavesDropped]);
+    }, [phase, wavesDropped, nextWave]);
 
     const orbit = useCallback((pivotId: string, dir: 1 | -1) => {
         if (phase === 'over') return;
         const pivot = grid.find(c => c.id === pivotId);
         if (!pivot) return;
         const ring = ringOf(pivot);
-        if (!ring) return;
+        if (ring.length < 3) return;
 
+        const n = ring.length;
         const newGrid = grid.map(c => ({ ...c }));
         const find = (id: string) => newGrid.find(c => c.id === id)!;
         ring.forEach((src, i) => {
-            const dst = ring[(i + (dir === 1 ? 1 : 5)) % 6];
+            const dst = ring[(i + (dir === 1 ? 1 : n - 1)) % n];
             const target = find(dst.id);
             target.letter = src.letter;
             target.isPlaced = src.isPlaced;
             if (src.letter) {
-                pendingAnimsRef.current.set(dst.id, {
-                    dx: cellX(src) - cellX(dst),
-                    dy: cellY(src) - cellY(dst),
-                });
+                queueMove(dst.id, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
             }
         });
         setSelected([]);
-        setPivotOnly(null);
         setIsValid(false);
         afterAction(newGrid);
-    }, [phase, grid, ringOf, afterAction]);
+    }, [phase, grid, ringOf, queueMove, afterAction]);
 
     const currentWord = useMemo(
         () => selected.map(id => grid.find(c => c.id === id)?.letter || '').join(''),
@@ -178,20 +216,22 @@ const OrbitGame = () => {
         moveSources.forEach((srcId, dstId) => {
             const src = grid.find(c => c.id === srcId);
             const dst = newGrid.find(c => c.id === dstId);
-            if (src && dst) {
-                pendingAnimsRef.current.set(dstId, {
-                    dx: cellX(src) - cellX(dst),
-                    dy: cellY(src) - cellY(dst),
-                });
-            }
+            if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
         setScore(s => s + word.length);
         setWords(w => [...w, word]);
         setSelected([]);
-        setPivotOnly(null);
         setIsValid(false);
         afterAction(newGrid);
-    }, [phase, isValid, selected, currentWord, grid, afterAction]);
+    }, [phase, isValid, selected, currentWord, grid, queueMove, afterAction]);
+
+    // Pass: let the next wave fall without touching the board
+    const endTurn = useCallback(() => {
+        if (phase !== 'storm') return;
+        setSelected([]);
+        setIsValid(false);
+        afterAction(grid.map(c => ({ ...c })));
+    }, [phase, grid, afterAction]);
 
     const finish = useCallback(() => {
         if (phase !== 'cleanup') return;
@@ -199,19 +239,17 @@ const OrbitGame = () => {
         setEndReason('finished');
     }, [phase]);
 
-    // ---------- selection / pivot ----------
+    // ---------- selection ----------
 
     const handleCellTap = useCallback((cell: HexCell) => {
         if (phase === 'over') return;
 
         if (!cell.letter) {
-            // Empty cell: clear any trace; arm as pivot if it's interior
+            // Empty cells just clear the trace — they can't be pivots
             setSelected([]);
             setIsValid(false);
-            setPivotOnly(ringOf(cell) ? cell.id : null);
             return;
         }
-        setPivotOnly(null);
 
         const idx = selected.indexOf(cell.id);
         if (idx !== -1) {
@@ -230,7 +268,7 @@ const OrbitGame = () => {
             // Not adjacent: restart the trace from the tapped tile
             setSelected([cell.id]);
         }
-    }, [phase, selected, grid, ringOf]);
+    }, [phase, selected, grid]);
 
     // Async word validation
     useEffect(() => {
@@ -247,15 +285,14 @@ const OrbitGame = () => {
         const m = pendingAnimsRef.current;
         if (m.size === 0) return;
         if (!reducedMotion && boardRef.current) {
-            m.forEach((d, id) => {
+            m.forEach((a, id) => {
                 const el = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"]`);
-                el?.animate(
-                    [
-                        { transform: `translate(${d.dx}px, ${d.dy}px)`, opacity: d.fade ? 0 : 1 },
-                        { transform: 'translate(0, 0)', opacity: 1 },
-                    ],
-                    { duration: 180, easing: 'cubic-bezier(0.25, 0.8, 0.4, 1)', delay: d.delay || 0, fill: 'backwards' }
-                );
+                el?.animate(a.keyframes, {
+                    duration: a.duration,
+                    delay: a.delay,
+                    easing: a.easing ?? 'linear',
+                    fill: 'backwards',
+                });
             });
         }
         m.clear();
@@ -274,18 +311,14 @@ const OrbitGame = () => {
     // ---------- derived ----------
 
     const pivotCell = useMemo(() => {
-        if (pivotOnly) return grid.find(c => c.id === pivotOnly) || null;
-        if (selected.length === 1) {
-            const c = grid.find(x => x.id === selected[0]) || null;
-            return c && ringOf(c) ? c : null;
-        }
-        return null;
-    }, [pivotOnly, selected, grid, ringOf]);
+        if (selected.length !== 1) return null;
+        const c = grid.find(x => x.id === selected[0]) || null;
+        return c && ringOf(c).length >= 3 ? c : null;
+    }, [selected, grid, ringOf]);
 
     const ringIds = useMemo(() => {
         if (!pivotCell) return new Set<string>();
-        const ring = ringOf(pivotCell);
-        return new Set(ring ? ring.map(c => c.id) : []);
+        return new Set(ringOf(pivotCell).map(c => c.id));
     }, [pivotCell, ringOf]);
 
     const bestWord = useMemo(
@@ -313,6 +346,23 @@ const OrbitGame = () => {
                     <span className="text-2xl font-bold text-text-primary tabular-nums">{score}</span>
                     <span className="text-xs uppercase tracking-wide text-text-secondary">pts</span>
                 </div>
+                {/* Next flood forecast */}
+                {phase === 'storm' && nextWave.length > 0 && (
+                    <div className="flex items-center gap-1.5 bg-amber/10 border border-amber/20 rounded-xl px-2.5 py-1.5">
+                        <span className="text-[10px] font-medium text-amber uppercase tracking-wide">Next</span>
+                        <div className="flex gap-1">
+                            {nextWave.map((letter, idx) => (
+                                <div
+                                    key={`${wavesDropped}-${idx}`}
+                                    className="w-5 h-5 bg-bg-secondary border border-secondary/30 rounded flex items-center justify-center text-[11px] font-semibold text-text-primary anim-chip-in"
+                                    style={{ animationDelay: `${idx * 50}ms` }}
+                                >
+                                    {letter}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 <div className="flex items-center gap-1" aria-label={`Wave ${wavesDropped} of ${WAVES}`}>
                     {Array.from({ length: WAVES }, (_, i) => (
                         <span
@@ -404,6 +454,11 @@ const OrbitGame = () => {
                 )}
             </div>
             <div className="flex gap-2 items-center">
+                {phase === 'storm' && (
+                    <Button onClick={endTurn} variant="destructive" size="gameControl">
+                        End Turn
+                    </Button>
+                )}
                 <Button onClick={submit} disabled={!isValid || phase === 'over'} size="gameControl">
                     Submit
                 </Button>
