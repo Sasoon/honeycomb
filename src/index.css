@@ -171,6 +171,10 @@ button {
   max-width: 800px;
   margin: 0 auto;
   padding: 1rem;
+  /* Isolate the board's paints from the rest of the page and keep it on
+     its own compositor layer (board repaints are frequent during play) */
+  contain: paint;
+  transform: translateZ(0);
 }
 
 .hex-grid__item {
