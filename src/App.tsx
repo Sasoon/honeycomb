@@ -5,8 +5,6 @@ import { Toaster } from 'react-hot-toast';
 import Header from './components/Header.tsx';
 import MobileSidebar from './components/MobileSidebar.tsx';
 
-const WaxleGame = lazy(() => import('./pages/WaxleGame.tsx'));
-const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
 const HowToPlay = lazy(() => import('./pages/HowToPlay.tsx'));
 const OrbitGame = lazy(() => import('./pages/OrbitGame.tsx'));
@@ -44,18 +42,16 @@ function AppContent() {
             fontWeight: 500,
             fontSize: '0.875rem',
           },
-          success: { iconTheme: { primary: '#d97706', secondary: '#fff' } },
+          success: { iconTheme: { primary: 'var(--amber)', secondary: '#fff' } },
         }}
       />
       <main className="flex-1 w-full mx-auto flex flex-col">
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            <Route path="/" element={<WaxleGame />} />
-            <Route path="/classic" element={<WaxleGame />} />
-            <Route path="/daily" element={<DailyChallenge />} />
+            <Route path="/" element={<OrbitGame />} />
+            <Route path="/orbit" element={<OrbitGame />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/how-to-play" element={<HowToPlay />} />
-            <Route path="/orbit" element={<OrbitGame />} />
           </Routes>
         </Suspense>
       </main>

@@ -110,9 +110,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
           {/* Navigation with staggered CSS animations */}
           <nav className="flex flex-col space-y-3">
             {[
-              { to: '/classic', label: 'Classic', isActive: isActive('/classic') || isActive('/') },
-              { to: '/daily', label: 'Daily', isActive: isActive('/daily') },
-              { to: '/orbit', label: 'Orbit', isActive: isActive('/orbit') },
+              { to: '/', label: 'Play', isActive: isActive('/') || isActive('/orbit') },
               { to: '/leaderboard', label: 'Leaderboard', isActive: isActive('/leaderboard') },
               { to: '/how-to-play', label: 'Tutorial', isActive: isActive('/how-to-play') }
             ].map((item) => (

@@ -61,58 +61,22 @@ const Header = ({ toggleSidebar, isSidebarOpen }: HeaderProps) => {
             
             {/* Desktop navigation with modern nav pills and chained slide animation */}
             <nav className="hidden md:flex items-center space-x-1 h-full">
-              <div 
+              <div
                 className="nav-link-chain flex items-center h-full"
                 style={{
                   animationDelay: '50ms'
                 }}
               >
-                <Link 
-                  to="/classic" 
-                  className={cn(
-                    "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
-                    isActive('/classic') || isActive('/') 
-                      ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
-                      : 'text-white hover:text-white hover:bg-accent-dark/50'
-                  )}
-                >
-                  Classic
-                </Link>
-              </div>
-              <div 
-                className="nav-link-chain flex items-center h-full"
-                style={{
-                  animationDelay: '100ms'
-                }}
-              >
-                <Link 
-                  to="/daily" 
-                  className={cn(
-                    "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
-                    isActive('/daily')
-                      ? 'bg-accent-dark text-white shadow-lg shadow-accent/20' 
-                      : 'text-white hover:text-white hover:bg-accent-dark/50'
-                  )}
-                >
-                  Daily
-                </Link>
-              </div>
-              <div
-                className="nav-link-chain flex items-center h-full"
-                style={{
-                  animationDelay: '150ms'
-                }}
-              >
                 <Link
-                  to="/orbit"
+                  to="/"
                   className={cn(
                     "px-4 py-2 rounded-xl font-medium transition-[background-color,color,transform] duration-200 text-sm",
-                    isActive('/orbit')
+                    isActive('/') || isActive('/orbit')
                       ? 'bg-accent-dark text-white shadow-lg shadow-accent/20'
                       : 'text-white hover:text-white hover:bg-accent-dark/50'
                   )}
                 >
-                  Orbit
+                  Play
                 </Link>
               </div>
               <div
