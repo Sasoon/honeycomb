@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Zap, ZapOff } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 
 interface DynamicZapIconProps {
@@ -145,15 +144,10 @@ export const DynamicZapIcon = ({
         </svg>
         
         {/* Animated icon transitions */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={IconComponent === ZapOff ? 'zap-off' : 'zap'}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="relative"
-          >
+        <div
+          key={IconComponent === ZapOff ? 'zap-off' : 'zap'}
+          className="relative anim-icon-in"
+        >
             {/* Background icon (empty state) */}
             <IconComponent 
               size={size}
@@ -179,8 +173,7 @@ export const DynamicZapIcon = ({
                 }}
               />
             )}
-          </motion.div>
-        </AnimatePresence>
+        </div>
       </div>
       
       {/* Power-up glow effect during recharge */}

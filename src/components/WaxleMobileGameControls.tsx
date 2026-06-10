@@ -63,11 +63,8 @@ const WaxleMobileGameControls = ({
                 nextRows[0]?.length >= 6 ? "gap-1 px-2" : "gap-2 px-3"
               )}>
                 {/* Show abbreviated label with many tiles, full label otherwise */}
-                <motion.div
+                <div
                   key={nextRows[0]?.join('')}
-                  initial="hidden"
-                  animate="show"
-                  variants={{ show: { transition: { staggerChildren: 0.05 } } }}
                   className={cn(
                     "flex",
                     // Dynamic gap based on tile count
@@ -75,26 +72,23 @@ const WaxleMobileGameControls = ({
                   )}
                 >
                   {nextRows[0]?.map((letter, idx) => (
-                    <motion.div
+                    <div
                       key={idx}
-                      variants={{
-                        hidden: { opacity: 0, y: -5, scale: 0.8 },
-                        show: { opacity: 1, y: 0, scale: 1 }
-                      }}
                       className={cn(
                         "bg-bg-secondary border border-secondary/30",
                         "rounded-lg flex items-center justify-center",
-                        "font-semibold text-text-primary",
+                        "font-semibold text-text-primary anim-chip-in",
                         // Responsive tile sizing
                         nextRows[0]?.length >= 6 ? "w-4 h-4 text-[10px]" :
                         nextRows[0]?.length >= 5 ? "w-5 h-5 text-xs" :
                         "w-6 h-6 text-xs"
                       )}
+                      style={{ animationDelay: `${idx * 50}ms` }}
                     >
                       {letter}
-                    </motion.div>
+                    </div>
                   ))}
-                </motion.div>
+                </div>
               </div>
             )}
           </div>

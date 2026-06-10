@@ -818,30 +818,24 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                   <div className={cn(
                     "bg-amber/10 border border-amber/20 rounded-xl p-3"
                   )}>
-                    <motion.div
+                    <div
                       key={nextRows[0]?.join('')}
-                      initial={prefersReducedMotion ? false : 'hidden'}
-                      animate="show"
-                      variants={{ show: { transition: { staggerChildren: 0.05 } } }}
                       className="flex items-center justify-center gap-1"
                     >
                       {nextRows[0]?.map((letter, idx) => (
-                        <motion.div
+                        <div
                           key={idx}
-                          variants={{
-                            hidden: { opacity: 0, y: -6, scale: 0.8 },
-                            show: { opacity: 1, y: 0, scale: 1 }
-                          }}
                           className={cn(
                             "w-7 h-7 bg-bg-secondary border border-secondary/30",
                             "rounded-lg flex items-center justify-center",
-                            "text-xs font-semibold text-text-primary"
+                            "text-xs font-semibold text-text-primary anim-chip-in"
                           )}
+                          style={{ animationDelay: `${idx * 50}ms` }}
                         >
                           {letter}
-                        </motion.div>
+                        </div>
                       ))}
-                    </motion.div>
+                    </div>
                   </div>
                   <div className="absolute -top-3 left-4">
                     <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
@@ -996,16 +990,11 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
               if (!firstCenter) return null;
 
               return (
-                <motion.svg
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: prefersReducedMotion ? 1 : [1, 1.06, 1] }}
-                  transition={{ scale: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } }}
-                  className="absolute pointer-events-none z-[60]"
+                <svg
+                  className="absolute pointer-events-none z-[60] swap-ring"
                   style={{
                     left: firstCenter.x,
                     top: firstCenter.y,
-                    translateX: '-50%',
-                    translateY: '-50%',
                     width: `${cellSize.w + 10}px`,
                     height: `${cellSize.h + 10}px`,
                     filter: 'drop-shadow(0 0 8px rgba(34, 197, 94, 0.7))',
@@ -1022,7 +1011,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     vectorEffect="non-scaling-stroke"
                     strokeLinejoin="round"
                   />
-                </motion.svg>
+                </svg>
               );
             })()}
 
