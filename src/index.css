@@ -1397,26 +1397,6 @@ button {
   background-color: rgba(245, 158, 11, 0.18);
 }
 
-/* Spent pivot spots: each spot can be orbited OFF only once. The tile on
-   it still rides other rings; the dark bg + dot mark the SPOT as spent */
-.orbit-cell--spent .orbit-hexbg {
-  background-color: rgba(68, 64, 60, 0.32);
-}
-
-.orbit-cell--spent::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 16%;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
-  border-radius: 50%;
-  background-color: rgba(68, 64, 60, 0.55);
-  pointer-events: none;
-  z-index: 5;
-}
-
 @keyframes orbitJiggle {
   0%, 100% { transform: rotate(-3.5deg) translateY(-1px); }
   50% { transform: rotate(3.5deg) translateY(1px); }

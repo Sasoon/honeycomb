@@ -15,12 +15,11 @@ import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
-// path words + orbits (free, but each pivot spot is single-use) are the power
+// path words + free orbits are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
-// The flood mirrors the board: every wave half-fills the empty space, so
-// big clears invite big waves and a crowded board gets gentle ones. The
-// run ends when the board fills. Score = letters cleared
-const waveSizeFor = (grid: HexCell[]) => Math.ceil(grid.filter(c => !c.letter).length / 2);
+// The flood is endless and grows every few waves; the run ends when a tile
+// can't fit. Score = letters cleared before the board fills
+const waveSize = (wave: number) => 3 + Math.floor(wave / 3);
 const SEED_TILES = 8;
 const WORD_MIN = 3; // smallest playable word
 const WORD_MAX = 8; // largest word indexed
@@ -33,9 +32,9 @@ const DAILY_UNDOS = 3;
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v5';
+const LS_RUN = 'waxle-orbit-run-v6';
 const LS_STATS = 'waxle-orbit-stats-v1';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v4';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v5';
 
 const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
@@ -90,7 +89,6 @@ type Snapshot = {
     score: number;
     words: string[];
     actionLog: Action[];
-    usedPivots: string[];
     rngState: number;
 };
 
@@ -222,7 +220,6 @@ const OrbitGame = () => {
     const [actionLog, setActionLog] = useState<Action[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
     const [match, setMatch] = useState<string | null>(null);
-    const [usedPivots, setUsedPivots] = useState<string[]>([]);
     const [armed, setArmed] = useState(false);
     const [statsOpen, setStatsOpen] = useState(false);
     const [previewSteps, setPreviewSteps] = useState(0);
@@ -269,7 +266,6 @@ const OrbitGame = () => {
         return m;
     }, [grid]);
 
-    // Spent spots only lose their PIVOT right; they still ride other rings
     const ringOf = useCallback((pivot: HexCell): HexCell[] => {
         const ring: HexCell[] = [];
         for (const [dr, dc] of RING_OFFSETS) {
@@ -303,7 +299,7 @@ const OrbitGame = () => {
         pendingAnimsRef.current.clear();
         recordedRef.current = false;
         setGrid(newGrid);
-        setNextWave(generateDropLettersSmart(waveSizeFor(newGrid), newGrid, rng));
+        setNextWave(generateDropLettersSmart(waveSize(0), newGrid, rng));
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -311,7 +307,6 @@ const OrbitGame = () => {
         setActionLog([]);
         setSelected([]);
         setMatch(null);
-        setUsedPivots([]);
         setUndoStack([]);
         setUndosUsed(0);
     }, [dateStr]);
@@ -359,7 +354,6 @@ const OrbitGame = () => {
                     setScore(run.score);
                     setWords(run.words);
                     setActionLog(run.actionLog);
-                    setUsedPivots(run.usedPivots || []);
                     setUndoStack(run.undoStack || []);
                     setUndosUsed(run.undosUsed || 0);
                     return;
@@ -382,14 +376,13 @@ const OrbitGame = () => {
                 score,
                 words,
                 actionLog,
-                usedPivots,
                 rngState: rngRef.current?.state ?? 0,
                 letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
                 undoStack,
                 undosUsed,
             }));
         } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, usedPivots, undoStack, undosUsed]);
+    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
@@ -420,13 +413,7 @@ const OrbitGame = () => {
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm') {
             const rng = rngRef.current;
-            // Wave size is set by the board being flooded; the pre-generated
-            // preview is trimmed or topped up if the player's clears changed it
-            const needed = waveSizeFor(g);
-            let letters = nextWave.slice(0, needed);
-            if (letters.length < needed) {
-                letters = [...letters, ...generateDropLettersSmart(needed - letters.length, g, rng)];
-            }
+            const letters = nextWave.length ? nextWave : generateDropLettersSmart(waveSize(wavesDropped), g, rng);
             const { newGrid, paths, unplaced } = orbitFlood(g, letters, rng);
 
             const placed = newGrid.filter(c => c.placedThisTurn);
@@ -461,12 +448,11 @@ const OrbitGame = () => {
                 });
             });
 
-            setWavesDropped(wavesDropped + 1);
+            const nextWaves = wavesDropped + 1;
+            setWavesDropped(nextWaves);
             setGrid(newGrid);
-            setNextWave(generateDropLettersSmart(waveSizeFor(newGrid), newGrid, rng));
-            // Half-the-empties waves always fit, so the run ends when the
-            // last cell fills (drown kept as a belt-and-braces check)
-            if (unplaced.length > 0 || newGrid.every(c => c.letter)) {
+            setNextWave(generateDropLettersSmart(waveSize(nextWaves), newGrid, rng));
+            if (unplaced.length > 0) {
                 setPhase('over');
                 haptics.error();
             }
@@ -486,9 +472,8 @@ const OrbitGame = () => {
         score,
         words: [...words],
         actionLog: [...actionLog],
-        usedPivots: [...usedPivots],
         rngState: rngRef.current?.state ?? 0,
-    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog, usedPivots]);
+    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog]);
 
     const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
@@ -521,7 +506,6 @@ const OrbitGame = () => {
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
-        setUsedPivots(snap.usedPivots);
         setUndoStack(s => s.slice(0, -1));
         if (snap.kind === 'turn') setUndosUsed(u => u + 1);
         setSelected([]);
@@ -538,13 +522,11 @@ const OrbitGame = () => {
         [selected, grid]
     );
 
-    // A spot can pivot once per run: orbiting off it darkens it for good
     const pivotCell = useMemo(() => {
         if (phase === 'over' || selected.length !== 1) return null;
         const c = grid.find(x => x.id === selected[0]) || null;
-        if (!c || usedPivots.includes(c.id)) return null;
-        return ringOf(c).length >= 3 ? c : null;
-    }, [phase, selected, grid, usedPivots, ringOf]);
+        return c && ringOf(c).length >= 3 ? c : null;
+    }, [phase, selected, grid, ringOf]);
 
     useEffect(() => {
         setArmed(false);
@@ -664,7 +646,6 @@ const OrbitGame = () => {
         setPreviewSteps(0);
         setSelected([]);
         setMatch(null);
-        setUsedPivots(u => [...u, ring.pivotId]);
         haptics.success();
         setGrid(newGrid);
     }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
@@ -809,8 +790,6 @@ const OrbitGame = () => {
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
         setScore(s => s + wordPoints(selected.length));
-        // Clearing a word over spent spots wins back their pivot rights
-        setUsedPivots(u => u.filter(id => !selected.includes(id)));
         setWords(w => [...w, match]);
         setSelected([]);
         setMatch(null);
@@ -898,29 +877,6 @@ const OrbitGame = () => {
         m.clear();
     }, [grid, reducedMotion]);
 
-    // Lock stamp when a pivot spot is spent; amber release flash when a
-    // word clear wins it back
-    const prevPivotsRef = useRef<string[]>([]);
-    useLayoutEffect(() => {
-        const prev = prevPivotsRef.current;
-        prevPivotsRef.current = usedPivots;
-        if (reducedMotion || !boardRef.current) return;
-        usedPivots.filter(id => !prev.includes(id)).forEach(id => {
-            const bg = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-hexbg`);
-            bg?.animate([
-                { transform: 'scale(1.35)', opacity: 0.15 },
-                { transform: 'scale(1)', opacity: 1 },
-            ], { duration: 380, easing: 'cubic-bezier(0.3, 1.2, 0.5, 1)' });
-        });
-        prev.filter(id => !usedPivots.includes(id)).forEach((id, i) => {
-            const wrap = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"]`);
-            wrap?.animate([
-                { filter: 'drop-shadow(0 0 0 rgba(245, 158, 11, 0))' },
-                { filter: 'drop-shadow(0 0 12px rgba(245, 158, 11, 0.85))', offset: 0.4 },
-                { filter: 'drop-shadow(0 0 0 rgba(245, 158, 11, 0))' },
-            ], { duration: 650, delay: 150 + i * 60 });
-        });
-    }, [usedPivots, reducedMotion]);
 
     // ---------- responsive scale ----------
 
@@ -1226,8 +1182,7 @@ const OrbitGame = () => {
                                     className={cn(
                                         'orbit-cell',
                                         inRing && 'orbit-cell--ring',
-                                        inRing && quietRing && 'orbit-cell--quiet',
-                                        usedPivots.includes(cell.id) && 'orbit-cell--spent'
+                                        inRing && quietRing && 'orbit-cell--quiet'
                                     )}
                                     style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
                                 >
@@ -1357,8 +1312,8 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — each spot pivots only once, but clearing a word over it wins it back.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass floods half of the empty space — keep clearing or get buried. The run ends when the board fills.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin freely.</span> Drag around a tile to spin its ring of neighbours — spins never end your turn.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
