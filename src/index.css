@@ -8,40 +8,40 @@
 
 /* CSS Variables for Dynamic Color Palettes */
 :root {
-  /* Primary Palette Variables - "Nothing" monochrome + signal red */
-  --color-1: #1a1a1a;  /* near-black (text, headers) */
-  --color-2: #4d4d4d;  /* dark grey (secondary text) */
-  --color-3: #8c8c8c;  /* mid grey (muted text) */
-  --color-4: #c4c4c4;  /* light grey (quiet accents) */
-  --color-5: #e4e4e2;  /* pale grey (surfaces, borders) */
+  /* Primary Palette Variables - "Abyss": deep-sea dark mode, aqua signal */
+  --color-1: #F2EFE8;  /* bone (primary text, tiles) */
+  --color-2: #B9C4D0;  /* mist (secondary text) */
+  --color-3: #7C8B9C;  /* slate (muted text) */
+  --color-4: #5B8FB9;  /* shallows (quiet accents) */
+  --color-5: #4A6076;  /* deep slate (surfaces, borders) */
 
   /* Semantic Color Assignments */
   --primary: var(--color-1);
   --secondary: var(--color-5);
-  --accent: #2b2b2b;
+  --accent: #14222F;
   --highlight: var(--color-3);
-  --success: #6f6f6f;
+  --success: #5B8FB9;
 
   /* UI Color Variations */
-  --primary-light: #2c2c2c;
-  --primary-dark: #0d0d0d;
-  --secondary-light: #efefed;
-  --secondary-dark: #b0b0ae;
-  --accent-light: #1a1a1a;
-  --accent-dark: #000000;
-  --highlight-light: #c4c4c4;
-  --highlight-dark: #6f6f6f;
-  --success-light: #9c9c9c;
-  --success-dark: #4d4d4d;
+  --primary-light: #FFFFFF;
+  --primary-dark: #D8D4C8;
+  --secondary-light: #5E7891;
+  --secondary-dark: #36485C;
+  --accent-light: #0A141F;
+  --accent-dark: #04090F;
+  --highlight-light: #9CAAB9;
+  --highlight-dark: #5E7081;
+  --success-light: #7FA9CB;
+  --success-dark: #41718F;
 
-  /* Signal red accent (still named amber so utility classes keep working) */
-  --amber: #d71921;
-  --amber-light: #ef3b41;
-  --amber-dark: #b0121a;
+  /* Aqua signal accent (still named amber so utility classes keep working) */
+  --amber: #3FD8C7;
+  --amber-light: #6FE8DA;
+  --amber-dark: #2BB3A5;
 
   /* Background and Text */
-  --bg-primary: #f3f3f1;
-  --bg-secondary: #e9e9e7;
+  --bg-primary: #0E1B2C;
+  --bg-secondary: #16283E;
   --text-primary: var(--color-1);
   --text-secondary: var(--color-2);
   --text-muted: var(--color-3);
@@ -1395,7 +1395,7 @@ button {
 /* Pivot accent: a drop-shadow on the UNCLIPPED wrapper (shadows on the
    clipped tile itself would be cut to the border-box) */
 .orbit-cell--pivot {
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 4px 12px rgba(63, 216, 199, 0.35));
   z-index: 2;
 }
 
@@ -1412,7 +1412,7 @@ button {
 }
 
 .orbit-hexbg {
-  background-color: rgba(120, 113, 108, 0.12);
+  background-color: rgba(190, 210, 235, 0.1);
 }
 
 .orbit-tile {
@@ -1421,20 +1421,20 @@ button {
   justify-content: center;
   font-weight: 700;
   font-size: 1.15rem;
-  background-color: #ffffff;
-  color: var(--text-primary, #1a1a1a);
+  background-color: #F2EFE8;
+  color: #15202E;
   transition: background-color 120ms ease, color 120ms ease;
   will-change: transform;
 }
 
 .orbit-tile--selected {
-  background-color: var(--amber, #d71921);
-  color: #fff;
+  background-color: var(--amber, #3FD8C7);
+  color: #0E1B2C;
 }
 
 .orbit-tile--invalid {
-  background-color: #3a3a3a;
-  color: #fff;
+  background-color: #44546A;
+  color: #F2EFE8;
 }
 
 .orbit-cell--ring .orbit-tile {
@@ -1461,8 +1461,8 @@ button {
   justify-content: center;
   font-weight: 700;
   font-size: 1.15rem;
-  background-color: var(--amber, #d71921);
-  color: #fff;
+  background-color: var(--amber, #3FD8C7);
+  color: #0E1B2C;
   pointer-events: none;
   z-index: 20;
   animation: orbitClearPop 360ms cubic-bezier(0.3, 1.1, 0.6, 1) forwards;
@@ -1479,8 +1479,7 @@ button {
   pointer-events: none;
   font-weight: 800;
   font-size: 1.25rem;
-  color: var(--amber, #d71921);
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  color: var(--amber, #3FD8C7);
   animation: orbitScoreRise 700ms ease-out forwards;
 }
 
