@@ -18,7 +18,7 @@ const debounce = <T extends (...args: never[]) => void>(func: T, wait: number): 
   }) as T;
 };
 import HexGrid, { HexCell } from '../components/HexGrid';
-import { buildFallFrames, FallFrames, FallSpec, FALL_STAGGER_MS } from '../lib/fallAnimation';
+import { buildFallFrames, gravityEasings, FallFrames, FallSpec, FALL_STAGGER_MS } from '../lib/fallAnimation';
 import { countAdjacentEdges } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
@@ -28,7 +28,7 @@ import GameControls from '../components/GameControls';
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
 // Tile-fall timing (flood and resolve share the same fall system)
 const GRAVITY_SHORT_DELAY_MS = 100;
-const PHASE_GAP_MS = 160;
+const PHASE_GAP_MS = 120;
 const RESOLVE_STAGGER_MS = 30; // tighter stagger for settling tiles
 
 // Round thresholds (for future difficulty scaling)
@@ -68,7 +68,9 @@ function measureCellSize(container: HTMLElement): { w: number; h: number } {
   return { w: r.width, h: r.height };
 }
 
-type FxOverlay = { key: string; letter: string; x: number; y: number; kind: 'fall'; fall: FallFrames };
+type FxOverlay =
+  | { key: string; letter: string; x: number; y: number; kind: 'fall'; fall: FallFrames }
+  | { key: string; letter: string; x: number; y: number; kind: 'pop' };
 
 // (no-op placeholder removed)
 
@@ -78,6 +80,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [previousGrid, setPreviousGrid] = useState<typeof grid>([]);
   const lastPlayerGridRef = useRef<typeof previousGrid>([]);
+  const lastPopGridRef = useRef<typeof previousGrid | null>(null);
   const [fxOverlays, setFxOverlays] = useState<FxOverlay[]>([]);
   const timersRef = useRef<number[]>([]);
   const uiTimersRef = useRef<number[]>([]);
@@ -258,25 +261,30 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     // Land a finished fall: drop its overlay, reveal the real tile, squash it
     const scheduleFalls = (frames: FallFrames[]) => {
         if (frames.length === 0) return;
-        setFxOverlays(frames.map(f => ({
+        setFxOverlays(prev => [...prev, ...frames.map(f => ({
             key: f.key,
             letter: f.letter,
             x: f.xs[0],
             y: f.ys[0],
             kind: 'fall' as const,
             fall: f,
-        })));
+        }))]);
         frames.forEach(f => {
+            // Seamless handoff: reveal the real letter under the overlay first,
+            // then drop the overlay and squash the cell a beat later, so a JS
+            // timer landing a frame early/late can never flash an empty cell
             const landT = window.setTimeout(() => {
-                setFxOverlays(prev => prev.filter(o => o.key !== f.key));
                 setHiddenCellIds(prev => prev.filter(id => id !== f.cellId));
+            }, f.delay + f.duration);
+            const removeT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.filter(o => o.key !== f.key));
                 setLandedCellIds(prev => (prev.includes(f.cellId) ? prev : [...prev, f.cellId]));
                 const offT = window.setTimeout(() => {
                     setLandedCellIds(prev => prev.filter(id => id !== f.cellId));
                 }, 450);
                 uiTimersRef.current.push(offT);
-            }, f.delay + f.duration);
-            timersRef.current.push(landT);
+            }, f.delay + f.duration + 70);
+            timersRef.current.push(landT, removeT);
         });
     };
 
@@ -286,6 +294,32 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         const p = centers.get(`${c.position.row},${c.position.col}`);
         return p ? { x: p.x, y: p.y } : null;
     };
+
+    // Pop out the just-scored word's tiles so they don't vanish in a hard cut.
+    // Auto-clear words already animate their own highlight-then-clear.
+    if ((phase === 'gravitySettle' || phase === 'flood')
+        && !prefersReducedMotion
+        && gravitySource !== 'autoClear'
+        && previousGrid.length > 0
+        && lastPopGridRef.current !== previousGrid) {
+        const cleared = previousGrid.filter(prev => {
+            if (!prev.letter || !prev.isPlaced) return false;
+            const now = grid.find(c => c.id === prev.id);
+            return !!now && !now.letter;
+        });
+        if (cleared.length > 0) {
+            lastPopGridRef.current = previousGrid;
+            const pops = cleared.flatMap(cell => {
+                const p = centers.get(`${cell.position.row},${cell.position.col}`);
+                return p ? [{ key: `pop-${cell.id}-${Date.now()}`, letter: cell.letter, x: p.x, y: p.y, kind: 'pop' as const }] : [];
+            });
+            setFxOverlays(prev => [...prev, ...pops]);
+            const popT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.filter(o => o.kind !== 'pop'));
+            }, 320);
+            timersRef.current.push(popT);
+        }
+    }
 
     if (phase === 'gravitySettle' && gravityMoves && gravityMoves.size > 0) {
         const newlySettled = grid.filter(cell => cell.placedThisTurn);
@@ -710,7 +744,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 <div className="text-4xl font-bold text-amber mb-2">
                   <OptimizedCounter 
                     value={score} 
-                    duration={1.0}
+                    duration={0.65}
                     animationType="ticker"
                     className="tabular-nums"
                     delay={0}
@@ -898,7 +932,31 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             {/* FX overlays: unified tile-fall animation (flood + resolve) */}
             <div className="pointer-events-none absolute inset-0 z-50">
               {fxOverlays.map(fx => {
+                if (fx.kind === 'pop') {
+                  return (
+                    <motion.div
+                      key={fx.key}
+                      initial={{ x: fx.x - cellSize.w / 2, y: fx.y - cellSize.h / 2, scale: 1, opacity: 1 }}
+                      animate={{ scale: 1.22, opacity: 0, y: fx.y - cellSize.h / 2 - 10 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                      className="absolute flex items-center justify-center"
+                      style={{
+                        left: 0,
+                        top: 0,
+                        width: `${cellSize.w}px`,
+                        height: `${cellSize.h}px`,
+                        clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                        background: 'rgba(245, 158, 11, 0.9)',
+                        borderRadius: 8,
+                        willChange: 'transform, opacity',
+                      }}
+                    >
+                      <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#fff' }}>{fx.letter}</span>
+                    </motion.div>
+                  );
+                }
                 const f = fx.fall;
+                const fallEase = gravityEasings(f.times);
                 return (
                   <motion.div
                     key={fx.key}
@@ -915,8 +973,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                       scale: 1,
                     }}
                     transition={{
-                      x: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
-                      y: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
+                      x: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: fallEase },
+                      y: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: fallEase },
                       opacity: { delay: f.delay / 1000, duration: 0.1, ease: 'linear' },
                       scale: { delay: f.delay / 1000, duration: 0.16, ease: 'easeOut' },
                     }}
@@ -1027,7 +1085,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 placedTilesThisTurn={[]}
                 gridSize={gridSize}
                 isTetrisVariant={true}
-                enableLayout={!isTransitioning}
+                enableLayout={false}
                 isSettling={isSettling}
                 hiddenLetterCellIds={hiddenCellIds}
                 swappingCellIds={swappingCells}
