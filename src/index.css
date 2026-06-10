@@ -1440,19 +1440,6 @@ button {
   color: #92400e;
 }
 
-/* Spin guide: slow-rotating dashed circle behind the armed ring */
-.orbit-guide {
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
-  animation: orbitGuideSpin 9s linear infinite;
-}
-
-@keyframes orbitGuideSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .orbit-cell--ring .orbit-tile {
   cursor: grab;
 }
@@ -1507,7 +1494,6 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orbit-guide { animation: none; }
   .orbit-cell--ring .orbit-tile { animation: none; }
   .orbit-clearfx { animation: none; opacity: 0; }
   .orbit-scorefx { animation: none; opacity: 0; }
