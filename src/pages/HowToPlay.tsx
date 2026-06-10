@@ -21,7 +21,7 @@ const HowToPlay = () => {
             <span className="font-medium text-text-primary">Trace a word.</span> Tap tiles one by one — each tile must touch the previous one. Valid words (3+ letters) light up <span className="text-amber font-semibold">gold</span>; invalid ones turn dark.
           </li>
           <li>
-            <span className="font-medium text-text-primary">Submit it.</span> Submitting scores the word, clears its tiles, lets the rest settle, and drops the next wave of tiles. Submitting is your turn — make it count!
+            <span className="font-medium text-text-primary">Submit it.</span> Submitting scores the word, clears its tiles, lets the rest settle, and drops the next wave of tiles. Submitting is your turn — make it count! Each word can only be scored <span className="font-semibold text-text-primary">once per game</span>.
           </li>
           <li>
             <span className="font-medium text-text-primary">Or pass.</span> No good word? Hit <span className="font-semibold">End Turn</span> to skip straight to the next drop.
@@ -59,13 +59,13 @@ const HowToPlay = () => {
         </h2>
         <div className="space-y-4 text-text-secondary">
           <p className="text-lg">
-            After new tiles flood the board, WAXLE automatically scans for bonus words along <span className="font-semibold text-amber-500">straight lines</span> of the hex grid.
+            When the wave after a submitted word lands, WAXLE scans for bonus words along the <span className="font-semibold text-amber-500">straight lines</span> of the hex grid. (Passing with End Turn skips the scan — auto-clears reward playing a word.)
           </p>
           <div className="bg-bg-primary/50 rounded p-4 space-y-2">
-            <p><span className="font-semibold text-amber-500">✓</span> Valid 3+ letter words found on any line are automatically cleared!</p>
-            <p><span className="font-semibold text-amber-500">✓</span> Each auto-cleared word grants <span className="font-semibold text-text-primary">+1 swap</span></p>
+            <p><span className="font-semibold text-amber-500">✓</span> Valid <span className="font-semibold text-text-primary">4+ letter</span> words found on any line are automatically cleared!</p>
+            <p><span className="font-semibold text-amber-500">✓</span> Each auto-cleared word grants <span className="font-semibold text-text-primary">+1 swap</span> (no points)</p>
             <p><span className="font-semibold text-amber-500">✓</span> Words clear sequentially with gravity between each</p>
-            <p><span className="font-semibold text-amber-500">✓</span> Highlighted in <span className="text-amber-500 font-semibold">orange</span> as they clear</p>
+            <p><span className="font-semibold text-amber-500">✓</span> Marked with <span className="text-amber-500 font-semibold">⚡</span> in your word list — they never block you from playing the same word yourself</p>
           </div>
           <p className="text-sm italic">Set up lines deliberately — auto-clears buy you board space and stockpile swaps for tough situations!</p>
         </div>
@@ -114,7 +114,7 @@ const HowToPlay = () => {
               <li>• Plan ahead — the NEXT preview shows exactly what drops next</li>
               <li>• Swapping doesn't end your turn — fix a near-word, then submit it</li>
               <li>• 5+ letter words earn a swap as well as big points</li>
-              <li>• Auto-clears grant bonus swaps — line up words deliberately!</li>
+              <li>• Line up 4+ letter words for the post-drop scan to earn bonus swaps</li>
               <li>• Keep the top of the board clear at all costs</li>
             </ul>
           </div>

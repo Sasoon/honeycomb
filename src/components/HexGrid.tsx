@@ -15,7 +15,6 @@ export type HexCell = {
   isPrePlaced: boolean;
   isSelected: boolean;
   isPlaced: boolean;
-  isDoubleScore: boolean;
   placedThisTurn?: boolean;
   isAutoClear?: boolean;
 };
@@ -77,23 +76,6 @@ const CellView = memo(function CellView({
         <span className="letter-tile" style={{ fontWeight: 700, fontSize: '1.1rem', opacity: showLetter ? 1 : 0 }}>
           {showLetter ? (cell.letter || '') : ''}
         </span>
-        {cell.isDoubleScore && (
-          <div className="double-score-badge" style={{ position: 'absolute', top: '-6px', right: '-6px' }}>
-            <span
-              style={{
-                display: 'inline-block',
-                background: '#fde68a',
-                color: '#92400e',
-                fontWeight: 700,
-                fontSize: '0.7rem',
-                padding: '2px 4px',
-                borderRadius: '6px',
-              }}
-            >
-              2×
-            </span>
-          </div>
-        )}
         {/* HexagonBorder disabled for selected tiles - kept available for future use */}
         {/* {showBorder && (
           <HexagonBorder

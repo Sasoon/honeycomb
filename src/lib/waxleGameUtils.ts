@@ -25,19 +25,6 @@ export function generateRandomLetter(): string {
     return 'E'; // Fallback
 }
 
-// Generate letters for the next drop
-export function generateDropLetters(count: number): string[] {
-    const letters: string[] = [];
-
-    // For now, just generate regular letters
-    // Special tiles can be added later as a power-up or special round
-    for (let i = 0; i < count; i++) {
-        letters.push(generateRandomLetter());
-    }
-
-    return letters;
-}
-
 // === Dynamic letter generation =====================================================
 // Utility sets
 const VOWELS = new Set(['A', 'E', 'I', 'O', 'U']);
@@ -120,7 +107,7 @@ function weightedSample(weights: Record<string, number>, count: number, seededRN
 }
 
 // Public smart generator
-export function generateDropLettersSmart(count: number, grid: HexCell[], rewardCreative = false, seededRNG?: SeededRNG): string[] {
+export function generateDropLettersSmart(count: number, grid: HexCell[], seededRNG?: SeededRNG): string[] {
     // 1. Copy baseline
     const weights: Record<string, number> = { ...LETTER_WEIGHTS };
 
@@ -146,56 +133,9 @@ export function generateDropLettersSmart(count: number, grid: HexCell[], rewardC
     // 4. Dead-combo guard (Q without U)
     if (!boardContainsLetter(grid, 'U')) dampLetters(weights, ['Q'], 0.15);
 
-    // 5. Optional creative reward – tilt toward higher-value consonants
-    if (rewardCreative) {
-        boostLetters(weights, ['Y', 'K', 'H', 'B', 'M', 'P'], 1.8);
-    }
-
     return weightedSample(weights, count, seededRNG);
 }
 // === End dynamic letter generation ===============================================
-
-// Check if the game is over (top row has tiles)
-export function checkWaxleGameOver(grid: HexCell[]): boolean {
-    // Find cells in the top row (row 0)
-    const topRowCells = grid.filter(cell => cell.position.row === 0);
-
-    // Game is over if ALL cells in the top row have tiles
-    // This means there's no room for new tiles to drop
-    const filledTopCells = topRowCells.filter(cell => cell.letter && cell.isPlaced);
-
-    return filledTopCells.length === topRowCells.length;
-}
-
-// Compute the set of empty cells connected to the top via empty adjacency ("air")
-export function computeReachableAir(grid: HexCell[]): Set<string> {
-    const air = new Set<string>();
-    const queue: HexCell[] = [];
-
-    // Seed with all empty cells in the top row
-    for (const cell of grid) {
-        if (cell.position.row === 0 && (!cell.letter || !cell.isPlaced)) {
-            air.add(cell.id);
-            queue.push(cell);
-        }
-    }
-
-    // BFS through empty neighbors using unified adjacency function
-    while (queue.length > 0) {
-        const current = queue.shift()!;
-        for (const neighbor of grid) {
-            if (neighbor.id === current.id) continue;
-            if (air.has(neighbor.id)) continue;
-            if (neighbor.letter && neighbor.isPlaced) continue;
-            if (isHexAdjacent(current, neighbor)) {
-                air.add(neighbor.id);
-                queue.push(neighbor);
-            }
-        }
-    }
-
-    return air;
-}
 
 // Place starting tiles with simple gravity (for game initialization)
 export function placeStartingTiles(
@@ -498,7 +438,6 @@ export function countAdjacentEdges(selectedTiles: string[], grid: HexCell[]): nu
 // Calculate score using simple additive rules: 2×letters + min(adjEdges, 4)
 export function calculateWaxleScore(
     wordLength: number,
-    _round: number,
     adjacentEdges: number
 ): number {
     if (wordLength < 3) return 0;
@@ -545,135 +484,51 @@ export function areCellsAdjacent(cell1: HexCell, cell2: HexCell): boolean {
 // === Auto-clear mechanic functions =====================================================
 
 /**
- * Get all axis lines in the hex grid.
- * Returns 15 lines total for a 5x5 diamond grid:
- * - 5 horizontal lines (same row)
- * - 5 diagonal / lines (row + col constant)
- * - 5 diagonal \ lines (row - col constant)
+ * Get all axis lines in the hex grid — the three straight axes:
+ * - horizontal rows (same row, stepping by column)
+ * - down-right diagonals (2*col - row constant; each step is +1 row, +0.5 col)
+ * - down-left diagonals (row + 2*col constant; each step is +1 row, -0.5 col)
  *
- * Each line contains cells that form a straight line through the hex grid.
+ * Columns use half-offsets between rows, so these keys identify exactly the
+ * cells whose consecutive members are true hex neighbours.
  * Only cells with placed letters are included.
  */
 export function getAllAxisLines(grid: HexCell[]): HexCell[][] {
-    const lines: HexCell[][] = [];
-
-    // Filter to only placed tiles with letters
     const placedCells = grid.filter(cell => cell.letter && cell.isPlaced);
 
-    // 1. Horizontal lines (same row)
-    const rowGroups = new Map<number, HexCell[]>();
-    placedCells.forEach(cell => {
-        const row = cell.position.row;
-        if (!rowGroups.has(row)) {
-            rowGroups.set(row, []);
-        }
-        rowGroups.get(row)!.push(cell);
-    });
+    const axes: Array<{
+        key: (cell: HexCell) => number;
+        sort: (a: HexCell, b: HexCell) => number;
+    }> = [
+        { key: c => c.position.row, sort: (a, b) => a.position.col - b.position.col },
+        { key: c => 2 * c.position.col - c.position.row, sort: (a, b) => a.position.row - b.position.row },
+        { key: c => c.position.row + 2 * c.position.col, sort: (a, b) => a.position.row - b.position.row },
+    ];
 
-    // Sort cells in each row by column
-    rowGroups.forEach(cells => {
-        cells.sort((a, b) => a.position.col - b.position.col);
-        if (cells.length >= 1) { // Include lines with at least 1 cell
-            lines.push(cells);
-        }
-    });
-
-    // 2. Diagonal / lines (row + col constant)
-    const diagForwardGroups = new Map<number, HexCell[]>();
-    placedCells.forEach(cell => {
-        const key = cell.position.row + cell.position.col;
-        if (!diagForwardGroups.has(key)) {
-            diagForwardGroups.set(key, []);
-        }
-        diagForwardGroups.get(key)!.push(cell);
-    });
-
-    // Sort cells in each diagonal by row (ascending)
-    diagForwardGroups.forEach(cells => {
-        cells.sort((a, b) => a.position.row - b.position.row);
-        if (cells.length >= 1) { // Include lines with at least 1 cell
-            lines.push(cells);
-        }
-    });
-
-    // 3. Diagonal \ lines (row - col constant)
-    const diagBackwardGroups = new Map<number, HexCell[]>();
-    placedCells.forEach(cell => {
-        const key = cell.position.row - cell.position.col;
-        if (!diagBackwardGroups.has(key)) {
-            diagBackwardGroups.set(key, []);
-        }
-        diagBackwardGroups.get(key)!.push(cell);
-    });
-
-    // Sort cells in each diagonal by row (ascending)
-    diagBackwardGroups.forEach(cells => {
-        cells.sort((a, b) => a.position.row - b.position.row);
-        if (cells.length >= 1) { // Include lines with at least 1 cell
-            lines.push(cells);
-        }
-    });
-
-    // 4. Vertical lines in offset hex grid (2*col - row constant)
-    const verticalGroups = new Map<number, HexCell[]>();
-    placedCells.forEach(cell => {
-        const key = 2 * cell.position.col - cell.position.row;
-        if (!verticalGroups.has(key)) {
-            verticalGroups.set(key, []);
-        }
-        verticalGroups.get(key)!.push(cell);
-    });
-
-    // Sort cells in each vertical line by row (ascending)
-    verticalGroups.forEach(cells => {
-        cells.sort((a, b) => a.position.row - b.position.row);
-        if (cells.length >= 1) { // Include lines with at least 1 cell
-            lines.push(cells);
-        }
-    });
-
-    // 5. Shallow diagonal 1 in offset hex grid (row + 2*col constant)
-    const shallowDiag1Groups = new Map<number, HexCell[]>();
-    placedCells.forEach(cell => {
-        const key = cell.position.row + 2 * cell.position.col;
-        if (!shallowDiag1Groups.has(key)) {
-            shallowDiag1Groups.set(key, []);
-        }
-        shallowDiag1Groups.get(key)!.push(cell);
-    });
-
-    // Sort cells in each shallow diagonal by row (ascending)
-    shallowDiag1Groups.forEach(cells => {
-        cells.sort((a, b) => a.position.row - b.position.row);
-        if (cells.length >= 1) { // Include lines with at least 1 cell
-            lines.push(cells);
-        }
-    });
-
-    // 6. Shallow diagonal 2 in offset hex grid (row - 2*col constant)
-    const shallowDiag2Groups = new Map<number, HexCell[]>();
-    placedCells.forEach(cell => {
-        const key = cell.position.row - 2 * cell.position.col;
-        if (!shallowDiag2Groups.has(key)) {
-            shallowDiag2Groups.set(key, []);
-        }
-        shallowDiag2Groups.get(key)!.push(cell);
-    });
-
-    // Sort cells in each shallow diagonal by row (ascending)
-    shallowDiag2Groups.forEach(cells => {
-        cells.sort((a, b) => a.position.row - b.position.row);
-        if (cells.length >= 1) { // Include lines with at least 1 cell
-            lines.push(cells);
-        }
-    });
+    const lines: HexCell[][] = [];
+    for (const axis of axes) {
+        const groups = new Map<number, HexCell[]>();
+        placedCells.forEach(cell => {
+            const key = axis.key(cell);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(cell);
+        });
+        groups.forEach(cells => {
+            lines.push(cells.sort(axis.sort));
+        });
+    }
 
     return lines;
 }
 
+// Auto-clears require longer words than player submissions (3): with 3-letter
+// words allowed, ~80-90% of mid-game boards contain an accidental clear and the
+// mechanic becomes ambient noise rather than a reward for deliberate setup.
+export const AUTO_CLEAR_MIN_WORD_LENGTH = 4;
+
 /**
  * Find all valid words in the given axis lines.
- * Checks all contiguous subsequences of length ≥3 within each line.
+ * Checks all contiguous subsequences of length ≥AUTO_CLEAR_MIN_WORD_LENGTH.
  * Returns an array of found words with their cell IDs.
  */
 export async function findValidWordsInLines(
@@ -683,16 +538,14 @@ export async function findValidWordsInLines(
     const seenWordCombinations = new Set<string>(); // Avoid duplicate word+position combinations
 
     for (const line of lines) {
-        // Skip lines with fewer than 3 cells
-        if (line.length < 3) continue;
+        if (line.length < AUTO_CLEAR_MIN_WORD_LENGTH) continue;
 
         // Check both forward and backward directions
         const directions = [line, [...line].reverse()];
 
         for (const directedLine of directions) {
-            // Check all contiguous subsequences of length 3 or more
             for (let start = 0; start < directedLine.length; start++) {
-                for (let length = 3; length <= directedLine.length - start; length++) {
+                for (let length = AUTO_CLEAR_MIN_WORD_LENGTH; length <= directedLine.length - start; length++) {
                     const subsequence = directedLine.slice(start, start + length);
 
                     // Verify cells are actually adjacent (no gaps)

@@ -44,22 +44,19 @@ interface GameModeState {
     gravitySource?: 'swap' | 'wordSubmit' | 'autoClear'; // Track what triggered gravity
     floodPaths?: Record<string, { path: string[]; batch: number }>;
     tilesHiddenForAnimation?: string[];
-    freeMoveAvailable?: boolean;
     freeSwapsAvailable?: number;
     nextRows: string[][];
     tilesPerDrop: number;
-    dropSpeed: number;
     selectedTiles: SelectedTile[];
     currentWord: string;
     isWordValid: boolean;
+    // Player-submitted words this game; doubles as the no-repeat blocklist
     wordsThisRound: string[];
+    // Chronological display log of every cleared word (player + auto-clear)
+    wordLog?: Array<{ word: string; auto: boolean }>;
     totalWords: number;
     tilesCleared: number;
     longestWord: string;
-    biggestCombo: number;
-    wordsPerTurnLimit: number;
-    slowModeRounds: number;
-    previewLevel: number;
     // Auto-clear mechanic fields
     currentAutoClearWord?: { word: string; cellIds: string[] };
     autoClearPhase?: 'highlight' | 'clear';
@@ -70,9 +67,10 @@ interface GameModeState {
     dailyDate?: string;
     challengeStartTime?: number;
     seededRNG?: SeededRNG;
-    // Action history for undo functionality
+    // Action history for undo functionality (only swaps are undoable: word
+    // submissions immediately end the round, which clears the history)
     actionHistory: Array<{
-        type: 'swap' | 'word_submit';
+        type: 'swap';
         previousState: {
             grid: HexCell[];
             freeSwapsAvailable?: number;
@@ -126,9 +124,6 @@ interface WaxleGameState {
     deselectTile: (cellId: string) => void;
     clearSelection: () => void;
     submitWord: () => Promise<void>;
-
-    // New minimal actions for one-action-per-turn
-    moveTileOneStep: (sourceCellId: string, targetCellId: string) => void;
     swapTiles: (tile1Id: string, tile2Id: string) => void;
 
     // Auto-clear functionality
@@ -136,7 +131,7 @@ interface WaxleGameState {
     findAndStartNextAutoClear: () => Promise<void>;
 
     // Undo functionality
-    pushToHistory: (actionType: 'swap' | 'word_submit') => void;
+    pushToHistory: (actionType: 'swap') => void;
     undoLastAction: () => void;
     canUndo: () => boolean;
     clearActionHistory: () => void;
@@ -155,18 +150,14 @@ const initialGameModeState: GameModeState = {
     round: 1,
     nextRows: [],
     tilesPerDrop: 3,
-    dropSpeed: 1000,
     selectedTiles: [],
     currentWord: '',
     isWordValid: false,
     wordsThisRound: [],
+    wordLog: [],
     totalWords: 0,
     tilesCleared: 0,
     longestWord: '',
-    biggestCombo: 0,
-    wordsPerTurnLimit: 0,
-    slowModeRounds: 0,
-    previewLevel: 1,
     tilesHiddenForAnimation: [],
     actionHistory: [],
 };
@@ -176,7 +167,7 @@ const initialState: Omit<WaxleGameState,
     'getCurrentGameState' | 'updateCurrentGameState' | 'addTimeout' | 'clearAllTimeouts' |
     'setGameState' | 'initializeGame' | 'initializeDailyChallenge' | 'resetGame' |
     'startPlayerPhase' | 'endRound' | 'endPlayerPhase' |
-    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'moveTileOneStep' | 'swapTiles' |
+    'selectTile' | 'deselectTile' | 'clearSelection' | 'submitWord' | 'swapTiles' |
     'processNextAutoClearWord' | 'findAndStartNextAutoClear' | 'pushToHistory' | 'undoLastAction' | 'canUndo' | 'clearActionHistory' | 'checkGameOver'
 > = {
     classicGameState: { ...initialGameModeState },
@@ -251,8 +242,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
 
                 // Generate first drop preview (starts at 3 tiles for round 1)
                 const initialTilesPerDrop = 3;
-                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, undefined);
-                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters, false, undefined);
+                const firstDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters);
+                const secondDrop = generateDropLettersSmart(initialTilesPerDrop, tilesWithLetters);
 
                 // Initialize classic game state (never daily challenge here)
                 set((prev) => ({
@@ -271,12 +262,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         selectedTiles: [],
                         currentWord: '',
                         wordsThisRound: [],
-                        freeMoveAvailable: false,
+                        wordLog: [],
                         freeSwapsAvailable: 1,
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
-                        biggestCombo: 0,
                         isWordValid: false,
                     }
                 }));
@@ -319,12 +309,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                         selectedTiles: [],
                         currentWord: '',
                         wordsThisRound: [],
-                        freeMoveAvailable: false,
+                        wordLog: [],
                         freeSwapsAvailable: 1,
                         totalWords: 0,
                         tilesCleared: 0,
                         longestWord: '',
-                        biggestCombo: 0,
                         isWordValid: false,
                         // Daily challenge specific fields
                         dailySeed: seed,
@@ -358,7 +347,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     phase: 'player',
                     selectedTiles: [],
                     currentWord: '',
-                    freeMoveAvailable: false,
                     // Don't reset freeSwapsAvailable - swaps accumulate across rounds
                     tilesHiddenForAnimation: [],
                     justScoredWord: false, // Reset flag at start of each new turn
@@ -393,14 +381,13 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Round 2-4: 3 tiles (default, Round 1 has no flood)
 
                 // Generate flood tiles for this round
-                const rewardCreative = (!state.freeMoveAvailable) || ((state.freeSwapsAvailable || 0) <= 0);
                 const rng = state.seededRNG && typeof (state.seededRNG as Partial<SeededRNG>).next === 'function' ? state.seededRNG : undefined;
-                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rewardCreative, rng);
+                const fallingLetters = state.nextRows[0] || generateDropLettersSmart(currentTilesPerDrop, state.grid, rng);
 
                 // Ensure we have exactly 3 tiles
                 let actualFallingLetters = fallingLetters;
                 if (fallingLetters.length < currentTilesPerDrop) {
-                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rewardCreative, rng);
+                    const additionalTiles = generateDropLettersSmart(currentTilesPerDrop - fallingLetters.length, state.grid, rng);
                     actualFallingLetters = [...fallingLetters, ...additionalTiles];
                 } else if (fallingLetters.length > currentTilesPerDrop) {
                     actualFallingLetters = fallingLetters.slice(0, currentTilesPerDrop);
@@ -450,18 +437,18 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 }
 
                 // Shift the queue: nextRows[1] becomes nextRows[0] (making forecast accurate)
-                let nextDrop1 = state.nextRows[1] || generateDropLettersSmart(tilesForNextRound1, newGrid, false, rng);
+                let nextDrop1 = state.nextRows[1] || generateDropLettersSmart(tilesForNextRound1, newGrid, rng);
 
                 // Ensure nextDrop1 has correct tile count for the next round
                 if (nextDrop1.length < tilesForNextRound1) {
-                    const additionalTiles = generateDropLettersSmart(tilesForNextRound1 - nextDrop1.length, newGrid, false, rng);
+                    const additionalTiles = generateDropLettersSmart(tilesForNextRound1 - nextDrop1.length, newGrid, rng);
                     nextDrop1 = [...nextDrop1, ...additionalTiles];
                 } else if (nextDrop1.length > tilesForNextRound1) {
                     nextDrop1 = nextDrop1.slice(0, tilesForNextRound1);
                 }
 
                 // Only generate the new second forecast
-                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, false, rng);
+                const nextDrop2 = generateDropLettersSmart(tilesForNextRound2, newGrid, rng);
 
                 // Set the new state all at once, including hidden tiles for animation
                 const newlyPlacedTileIds = newGrid
@@ -618,16 +605,11 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     return;
                 }
 
-                // Check if already scored this round
+                // Each word can only be scored once per game
                 if (state.wordsThisRound.includes(state.currentWord)) {
                     toastService.error('Already used this word!');
                     return;
                 }
-
-                // No word limit in Tetris mode - players can submit multiple words per turn
-
-                // Push current state to history before making changes
-                get().pushToHistory('word_submit');
 
                 // Clear the tiles and apply gravity
                 const tilesToClear = state.selectedTiles.map(t => t.cellId);
@@ -636,8 +618,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Calculate score using new golden rules
                 const wordLength = state.currentWord.length;
                 const adjacentEdges = countAdjacentEdges(tilesToClear, state.grid);
-                const wordScore = calculateWaxleScore(wordLength, state.round, adjacentEdges);
-
+                const wordScore = calculateWaxleScore(wordLength, adjacentEdges);
 
                 // Long words earn a swap (capped)
                 const earnedSwap = wordLength >= SWAP_EARN_WORD_LENGTH
@@ -647,6 +628,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const updates: Partial<GameModeState> = {
                     grid: newGrid,
                     wordsThisRound: [...state.wordsThisRound, state.currentWord],
+                    wordLog: [...(state.wordLog || []), { word: state.currentWord, auto: false }],
                     totalWords: state.totalWords + 1,
                     score: state.score + wordScore,
                     tilesCleared: state.tilesCleared + tilesCleared,
@@ -688,21 +670,16 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // If there are gravity moves, endRound will be called after gravity settles
             },
 
-            // New: move one tile to an adjacent empty cell, then end round
-            moveTileOneStep: (_sourceCellId: string, _targetCellId: string) => {
-                const { getCurrentGameState } = get();
-                const state = getCurrentGameState();
-                if (state.phase !== 'player') return;
-                toastService.error('Move power is disabled');
-                return;
-            },
-
-            // Swap two tiles and apply gravity
+            // Spend one swap to exchange two tiles' letters, then apply gravity
             swapTiles: (tile1Id: string, tile2Id: string) => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 
                 if (state.phase !== 'player') {
+                    return;
+                }
+
+                if ((state.freeSwapsAvailable || 0) <= 0) {
                     return;
                 }
 
@@ -713,6 +690,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 if (!tile1 || !tile2) {
                     return;
                 }
+
+                // Snapshot for undo before any changes
+                get().pushToHistory('swap');
 
                 // Create new grid with swapped letters
                 const newGrid = state.grid.map(cell => {
@@ -727,26 +707,20 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 // Apply gravity to the new grid
                 const { newGrid: settledGrid, moveSources } = clearTilesAndApplyGravity(newGrid, []);
 
-                // Convert moveSources Map to plain object for serialization
                 const gravityMoves = new Map(moveSources);
 
-                // Check if any tiles actually moved
-                const tilesMovedByGravity = gravityMoves.size > 0;
-
-                if (tilesMovedByGravity) {
-                    // Update grid and enter gravity settle phase
-                    updateCurrentGameState({
-                        grid: settledGrid,
+                updateCurrentGameState({
+                    grid: settledGrid,
+                    freeSwapsAvailable: (state.freeSwapsAvailable || 0) - 1,
+                    selectedTiles: [],
+                    currentWord: '',
+                    // Only enter gravity settle phase if tiles actually moved
+                    ...(gravityMoves.size > 0 ? {
                         gravityMoves: gravityMoves,
-                        gravitySource: 'swap', // Mark this as swap-triggered gravity
-                        phase: 'gravitySettle'
-                    });
-                } else {
-                    // No gravity movement, just update grid and stay in player phase
-                    updateCurrentGameState({
-                        grid: settledGrid
-                    });
-                }
+                        gravitySource: 'swap' as const,
+                        phase: 'gravitySettle' as const,
+                    } : {}),
+                });
             },
 
             // Process next auto-clear word (called from UI for letter highlighting or clearing)
@@ -780,10 +754,9 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const newSwapsAvailable = Math.min(SWAP_CAP, (state.freeSwapsAvailable || 0) + 1);
                 const swapGranted = newSwapsAvailable > (state.freeSwapsAvailable || 0);
 
-                // Add word to wordsThisRound
-                const updatedWordsThisRound = [...state.wordsThisRound, currentWord.word];
-
-                // Clear current auto-clear state - will find next word after gravity settles
+                // Clear current auto-clear state - will find next word after gravity settles.
+                // Auto-cleared words go to the display log only; they don't join
+                // wordsThisRound, so they never block the player's own submissions.
                 updateCurrentGameState({
                     grid: newGrid,
                     gravityMoves: moveSources,
@@ -793,7 +766,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     autoClearPhase: undefined,
                     autoClearLetterIndex: undefined,
                     freeSwapsAvailable: newSwapsAvailable,
-                    wordsThisRound: updatedWordsThisRound,
+                    wordLog: [...(state.wordLog || []), { word: currentWord.word, auto: true }],
                 });
 
                 toastService.success(swapGranted
@@ -841,7 +814,7 @@ export const useWaxleGameStore = create<WaxleGameState>()(
             },
 
             // Undo functionality
-            pushToHistory: (actionType: 'swap' | 'word_submit') => {
+            pushToHistory: (actionType: 'swap') => {
                 const { getCurrentGameState, updateCurrentGameState } = get();
                 const state = getCurrentGameState();
 

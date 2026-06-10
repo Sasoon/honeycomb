@@ -6,7 +6,6 @@ import { Hash } from 'lucide-react';
 import { OptimizedCounter } from '../components/OptimizedCounter';
 import { DynamicZapIcon } from '../components/DynamicZapIcon';
 import { cn } from '../lib/utils';
-import { calculateDisplayWordScore } from '../lib/gameUtils';
 import { useWaxleGameStore } from '../store/waxleGameStore';
 
 // Performance optimization: Debounce utility for resize handler
@@ -19,7 +18,7 @@ const debounce = <T extends (...args: never[]) => void>(func: T, wait: number): 
 };
 import HexGrid, { HexCell } from '../components/HexGrid';
 import { buildFallFrames, FallFrames, FallSpec, FALL_STAGGER_MS } from '../lib/fallAnimation';
-import { countAdjacentEdges } from '../lib/waxleGameUtils';
+import { countAdjacentEdges, calculateWaxleScore } from '../lib/waxleGameUtils';
 import { haptics } from '../lib/haptics';
 import WaxleGameOverModal from '../components/WaxleGameOverModal';
 import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
@@ -113,10 +112,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     currentWord,
     isWordValid,
     wordsThisRound,
+    wordLog,
     totalWords,
     longestWord,
     nextRows,
-    previewLevel,
     freeSwapsAvailable,
     gridSize,
     gravityMoves,
@@ -549,10 +548,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     if (currentWord.length >= 3 && validationState === true) {
       const selectedTileIds = selectedTiles.map(t => t.cellId);
       const adjacentEdges = countAdjacentEdges(selectedTileIds, grid);
-      return calculateDisplayWordScore(currentWord, round, adjacentEdges);
+      return calculateWaxleScore(currentWord.length, adjacentEdges);
     }
     return 0;
-  }, [currentWord, round, validationState, selectedTiles, grid]);
+  }, [currentWord, validationState, selectedTiles, grid]);
 
   // Memoised display cells: stable object identity between renders keeps
   // CellView's memo() effective while animation timers update other state
@@ -611,18 +610,8 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
       const commitDelay = prefersReducedMotion ? 0 : 175;
       const commitT = window.setTimeout(() => {
-        const { pushToHistory, updateCurrentGameState } = useWaxleGameStore.getState();
-        pushToHistory('swap');
-
+        // Store handles the undo snapshot, swap deduction and selection reset
         swapTiles(firstId, secondId);
-
-        // Deduct one swap
-        const newSwapsAvailable = Math.max(0, (freeSwapsAvailable || 0) - 1);
-        updateCurrentGameState({
-          freeSwapsAvailable: newSwapsAvailable,
-          selectedTiles: [],
-          currentWord: ''
-        });
         haptics.success();
       }, commitDelay);
       const clearT = window.setTimeout(() => setSwappingCells([]), 400);
@@ -633,7 +622,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     // Normal word selection mode
     haptics.select();
     selectTile(cell.id);
-  }, [phase, swapModeActive, swapFirstTile, freeSwapsAvailable, grid, swapTiles, selectTile, prefersReducedMotion]);
+  }, [phase, swapModeActive, swapFirstTile, grid, swapTiles, selectTile, prefersReducedMotion]);
 
   // Arm/disarm swap mode from the Swap button
   const toggleSwapMode = useCallback(() => {
@@ -703,11 +692,10 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 score={score}
                 round={round}
                 wordsThisRound={wordsThisRound.length}
-                wordsThisRoundList={wordsThisRound}
+                wordLog={wordLog || []}
                 currentWord={currentWord}
                 freeSwapsAvailable={freeSwapsAvailable || 0}
                 nextRows={nextRows}
-                previewLevel={previewLevel}
                 isWordValid={validationState === true}
                 selectedTiles={selectedTiles}
                 grid={grid}
@@ -812,7 +800,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             </div>
 
             {/* Next Drop with Border-Intersecting Labels */}
-            {previewLevel > 0 && nextRows.length > 0 && (
+            {nextRows.length > 0 && (
               <div className="space-y-4">
                 <div className="relative">
                   <div className={cn(
@@ -843,30 +831,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                     </span>
                   </div>
                 </div>
-                {previewLevel > 1 && nextRows[1] && (
-                  <div className="relative">
-                    <div className={cn(
-                      "bg-secondary/5 border border-secondary/10 rounded-xl p-3 pt-5 opacity-60"
-                    )}>
-                      <div className="flex items-center justify-center gap-1">
-                        {nextRows[1]?.map((letter, idx) => (
-                          <div key={idx} className={cn(
-                            "w-5 h-5 bg-secondary/10 border border-secondary/20",
-                            "rounded flex items-center justify-center",
-                            "text-xs font-medium text-text-secondary"
-                          )}>
-                            {letter}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="absolute -top-3 left-4">
-                      <span className="bg-bg-primary px-2 text-xs font-medium text-text-muted uppercase tracking-wide">
-                        Then
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -905,19 +869,21 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 "bg-success/10 border border-success/20",
                 "rounded-xl p-4 pt-6"
               )}>
-                {wordsThisRound.length > 0 ? (
+                {(wordLog || []).length > 0 ? (
                   <div className="space-y-1 max-h-28 overflow-y-auto">
-                    {wordsThisRound.slice(-8).reverse().map((word, idx) => (
+                    {(wordLog || []).slice(-8).reverse().map((entry, idx) => (
                       <div key={idx} className={cn(
-                        "text-sm font-mono text-text-secondary",
-                        "bg-success/5 px-2 py-1 rounded-lg"
+                        "text-sm font-mono px-2 py-1 rounded-lg",
+                        entry.auto
+                          ? "text-amber bg-amber/5"
+                          : "text-text-secondary bg-success/5"
                       )}>
-                        {word}
+                        {entry.auto ? '⚡ ' : ''}{entry.word}
                       </div>
                     ))}
-                    {wordsThisRound.length > 8 && (
+                    {(wordLog || []).length > 8 && (
                       <div className="text-xs text-text-muted italic text-center py-1">
-                        +{wordsThisRound.length - 8} more
+                        +{(wordLog || []).length - 8} more
                       </div>
                     )}
                   </div>
