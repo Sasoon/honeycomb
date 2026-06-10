@@ -18,9 +18,9 @@ import { haptics } from '../lib/haptics';
 // path words + free orbits are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
 // Ratchet economy: the flood meter IS the next wave's size. Spins and
-// passes each grow it by one — for good. The only relief: a word LONGER
-// than the wave pushes it back one (out-spell the flood). The floor
-// (sea level) creeps up every 4 waves so pure-word play can't run forever
+// passes each grow it by one — for good. The only relief: a word at
+// least as long as the wave pushes it back one (out-spell the flood).
+// The floor (sea level) creeps up every 4 waves
 const METER_START = 3;
 const meterFloor = (waves: number) => 1 + Math.floor(waves / 4);
 const SEED_TILES = 8;
@@ -55,6 +55,11 @@ const BOARD_H = (ROW_COUNTS.length - 1) * PITCH_Y + TILE_H;
 const cellX = (c: HexCell) => c.position.col * PITCH_X;
 const cellY = (c: HexCell) => c.position.row * PITCH_Y;
 const mod = (a: number, n: number) => ((a % n) + n) % n;
+// Magnetic detents for the dial: remap the fractional step so tiles dwell
+// in slots and snap quickly across the gaps between them
+const SNAP_K = 5;
+const SNAP_NORM = 2 * Math.tanh(SNAP_K / 2);
+const snapF = (f: number) => 0.5 + Math.tanh((f - 0.5) * SNAP_K) / SNAP_NORM;
 // Long words carry the run: +2 per letter beyond 4 (3=3, 4=4, 5=7, 6=10…)
 const wordPoints = (len: number) => len + 2 * Math.max(0, len - 4);
 
@@ -605,7 +610,7 @@ const OrbitGame = () => {
         const ring = ringRef.current;
         if (!ring) return;
         const k = Math.floor(p);
-        const f = p - k;
+        const f = snapF(p - k);
         ring.cells.forEach((c, i) => {
             if (!c.letter) return;
             const el = tileEl(c.id);
@@ -656,7 +661,8 @@ const OrbitGame = () => {
         pushUndo('spin');
 
         const kf = Math.floor(fromP);
-        const ff = fromP - kf;
+        // Settle from the same snapped position the preview rendered
+        const ff = snapF(fromP - kf);
         ring.cells.forEach((c, i) => {
             if (!c.letter) return;
             const a = ring.slots[mod(i + kf, ring.n)];
@@ -808,9 +814,9 @@ const OrbitGame = () => {
     const submit = useCallback(() => {
         if (phase === 'over' || !match || selected.length < WORD_MIN) return;
         pushUndo('turn');
-        // Out-spell the flood: a word longer than the wave cools it by one,
-        // shrinking the very wave about to drop
-        const cooled = selected.length > meter
+        // Out-spell the flood: a word at least as long as the wave cools it
+        // by one, shrinking the very wave about to drop
+        const cooled = selected.length >= meter
             ? Math.max(meterFloor(wavesDropped), meter - 1)
             : meter;
         const clearedCells = selected
@@ -879,8 +885,13 @@ const OrbitGame = () => {
         }
         const idx = selected.indexOf(cell.id);
         if (idx !== -1) {
-            // Tap the last tile to remove it; tap an earlier tile to trim back to it
-            setSelected(idx === selected.length - 1 ? selected.slice(0, -1) : selected.slice(0, idx + 1));
+            // Tap the first tile to clear the whole selection, the last to
+            // pop it, an earlier tile to trim back to it
+            setSelected(
+                idx === 0 ? []
+                    : idx === selected.length - 1 ? selected.slice(0, -1)
+                    : selected.slice(0, idx + 1)
+            );
             return;
         }
         if (selected.length === 0) {
@@ -1157,7 +1168,7 @@ const OrbitGame = () => {
                                 : 'text-amber bg-amber/10 border border-amber/30'
                         )}>
                             {selectedLetters
-                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length > meter ? ' 🌊↓' : ''}</span>}</>
+                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter ? ' 🌊↓' : ''}</span>}</>
                                 : <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>}
                         </div>
                         <div className="absolute -top-3 left-4">
@@ -1219,7 +1230,8 @@ const OrbitGame = () => {
                                     className={cn(
                                         'orbit-cell',
                                         inRing && 'orbit-cell--ring',
-                                        inRing && quietRing && 'orbit-cell--quiet'
+                                        inRing && quietRing && 'orbit-cell--quiet',
+                                        isPivot && 'orbit-cell--pivot'
                                     )}
                                     style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
                                 >
@@ -1228,8 +1240,7 @@ const OrbitGame = () => {
                                         <div
                                             className={cn(
                                                 'orbit-tile',
-                                                isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
-                                                isPivot && 'orbit-tile--pivot'
+                                                isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
                                             )}
                                             style={{ animationDelay: jigglePhase }}
                                         >
@@ -1271,7 +1282,7 @@ const OrbitGame = () => {
                             wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
                         )}>
                             {selectedLetters}
-                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length > meter ? ' 🌊↓' : ''}</span>}
+                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter ? ' 🌊↓' : ''}</span>}
                         </span>
                     ) : (
                         <span className="text-xs text-text-muted italic">
@@ -1350,7 +1361,7 @@ const OrbitGame = () => {
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
                                 <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spins feed the flood.</span> Drag around a tile to spin its ring — free, anytime, but every spin (and every pass) makes the flood one tile bigger. For good.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Out-spell the flood.</span> The NEXT row is exactly what falls after your turn — and it's the bar: spell a word LONGER than it to push the flood back one.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Out-spell the flood.</span> The NEXT row is exactly what falls after your turn — and it's the bar: spell a word at least as LONG as it to push the flood back one.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
