@@ -1382,7 +1382,7 @@ button {
 /* Armed ring: letter tiles jiggle gently; empty slots get a faint tint so
    the full rotation membership stays visible */
 .orbit-cell--ring .orbit-tile {
-  animation: orbitJiggle 280ms ease-in-out infinite;
+  animation: orbitJiggle 230ms ease-in-out infinite;
 }
 
 .orbit-cell--ring .orbit-hexbg {
@@ -1390,8 +1390,8 @@ button {
 }
 
 @keyframes orbitJiggle {
-  0%, 100% { transform: rotate(-1.5deg); }
-  50% { transform: rotate(1.5deg); }
+  0%, 100% { transform: rotate(-3.5deg) translateY(-1px); }
+  50% { transform: rotate(3.5deg) translateY(1px); }
 }
 
 .orbit-hexbg,
@@ -1453,7 +1453,47 @@ button {
   transform: scale(0.92);
 }
 
+/* Clear burst: ghost tiles pop and fade where a word was cleared */
+.orbit-clearfx {
+  position: absolute;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.15rem;
+  background-color: #f59e0b;
+  color: #fff;
+  pointer-events: none;
+  z-index: 20;
+  animation: orbitClearPop 360ms cubic-bezier(0.3, 1.1, 0.6, 1) forwards;
+}
+
+@keyframes orbitClearPop {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+.orbit-scorefx {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: #d97706;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  animation: orbitScoreRise 700ms ease-out forwards;
+}
+
+@keyframes orbitScoreRise {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(-50%, -36px); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .orbit-handle { animation: none; }
   .orbit-cell--ring .orbit-tile { animation: none; }
+  .orbit-clearfx { animation: none; opacity: 0; }
+  .orbit-scorefx { animation: none; opacity: 0; }
 }
