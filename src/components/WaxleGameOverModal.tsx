@@ -205,13 +205,23 @@ const WaxleGameOverModal = ({
               </div>
               
               {/* Compact Score Display */}
-              <div className="bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20 rounded-xl p-4 shadow-sm">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, type: 'spring', stiffness: 300, damping: 24 }}
+                className="bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20 rounded-xl p-4 shadow-sm"
+              >
                 <div className="text-2xl font-bold text-amber mb-1">{score}</div>
                 <div className="text-text-secondary text-xs font-medium uppercase tracking-wide">Final Score</div>
-              </div>
+              </motion.div>
 
               {/* Compact Stats Row */}
-              <div className="flex justify-center gap-4">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.28, type: 'spring', stiffness: 300, damping: 24 }}
+                className="flex justify-center gap-4"
+              >
                 <div className="text-center space-y-1">
                   <div className="text-lg font-semibold text-text-primary">{totalWords}</div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Words</div>
@@ -228,7 +238,7 @@ const WaxleGameOverModal = ({
                   </div>
                   <div className="text-xs text-text-secondary font-medium uppercase tracking-wide">Best Word</div>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Daily Challenge Submission (needs a positive score) */}
               {isDailyChallenge && !hasAlreadySubmitted && score < 1 && (

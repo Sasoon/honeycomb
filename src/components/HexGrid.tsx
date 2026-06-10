@@ -31,6 +31,7 @@ export interface HexGridProps {
   isGameActive?: boolean;
   playerHandRef?: React.RefObject<HTMLDivElement | null>; // Update type to accept null
   hiddenLetterCellIds?: string[]; // cells whose resident letters are hidden temporarily
+  swappingCellIds?: string[]; // cells currently playing the swap-exchange animation
   isTetrisVariant?: boolean; // Flag to disable base game features in tetris mode
   enableLayout?: boolean; // Whether to enable framer-motion layout animations (default true)
   isSettling?: boolean; // When true, tiles ease-out settle on new game
@@ -113,6 +114,7 @@ const HexGrid = ({
   isWordAlreadyScored,
   placedTilesThisTurn = [],
   hiddenLetterCellIds = [],
+  swappingCellIds = [],
   enableLayout = true,
   isSettling = false,
 }: HexGridProps) => {
@@ -307,13 +309,16 @@ const HexGrid = ({
             {rowCells.map(cell => {
               const showLetter = !hiddenLetterCellIds.includes(cell.id);
               const styles = cellStyles(cell);
+              const containerClass = swappingCellIds.includes(cell.id)
+                ? `${styles.container} swap-exchange`
+                : styles.container;
               return (
                 // Narrower cells below 420px so the widest (5-cell) row fits small phone screens
                 <div key={cell.id} className="w-[58px] mx-[3px] min-[420px]:w-[70px] min-[420px]:mx-[5px]">
                   <CellView
                     cell={cell}
                     onClick={onCellClick}
-                    containerClass={styles.container}
+                    containerClass={containerClass}
                     setRef={(el) => { if (el) cellRefs.current.set(cell.id, el); }}
                     showLetter={showLetter}
                     enableLayout={enableLayout}
