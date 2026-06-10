@@ -112,6 +112,7 @@ const MobileSidebar = ({ isOpen, onClose }: MobileSidebarProps) => {
             {[
               { to: '/classic', label: 'Classic', isActive: isActive('/classic') || isActive('/') },
               { to: '/daily', label: 'Daily', isActive: isActive('/daily') },
+              { to: '/orbit', label: 'Orbit', isActive: isActive('/orbit') },
               { to: '/leaderboard', label: 'Leaderboard', isActive: isActive('/leaderboard') },
               { to: '/how-to-play', label: 'Tutorial', isActive: isActive('/how-to-play') }
             ].map((item) => (
