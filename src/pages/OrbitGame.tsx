@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { RotateCw, RotateCcw, Flame } from 'lucide-react';
+import { Flame } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { HexCell } from '../components/HexGrid';
@@ -11,6 +11,7 @@ import {
 import { createSeededRNG, SeededRNG } from '../lib/seededRNG';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
+import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
 const ROW_COUNTS = [4, 5, 6, 7, 6, 5, 4]; // regular hexagon, side 4 — 37 cells
@@ -20,7 +21,10 @@ const WAVES = WAVE_SIZES.length;
 const SEED_TILES = 12;
 const TOTAL_LETTERS = SEED_TILES + WAVE_SIZES.reduce((a, b) => a + b, 0);
 const FLOOD_STAGGER_MS = 50;
-const HANDLE_DELAY_MS = 250; // settle time before spin handles appear
+const HANDLE_DELAY_MS = 250; // settle time before the ring arms
+const DRAG_THRESHOLD_PX = 8; // movement before a tap becomes a spin
+const DEG_PER_STEP = 60; // finger travel per detent
+const WHEEL_PER_STEP = 40; // wheel delta per detent
 const DAILY_EPOCH = '2026-06-10'; // Daily #1
 // =======================================================
 
@@ -39,9 +43,11 @@ const PITCH_X = 58;
 const PITCH_Y = 50;
 const BOARD_W = 6 * PITCH_X + TILE_W;
 const BOARD_H = 6 * PITCH_Y + TILE_H;
+const GUIDE_R = PITCH_X; // ring guide radius ≈ neighbour centre distance
 
 const cellX = (c: HexCell) => c.position.col * PITCH_X;
 const cellY = (c: HexCell) => c.position.row * PITCH_Y;
+const mod = (a: number, n: number) => ((a % n) + n) % n;
 
 function buildBoard(): HexCell[] {
     const cells: HexCell[] = [];
@@ -67,6 +73,7 @@ type Mode = 'daily' | 'practice';
 type Action = 'word' | 'orbit' | 'pass';
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 type ClearFx = { id: string; letter: string; left: number; top: number };
+type RingInfo = { pivotId: string; cells: HexCell[]; slots: Array<{ x: number; y: number }>; n: number };
 
 interface DailyResult {
     score: number;
@@ -114,8 +121,7 @@ function loadStats(): OrbitStats {
 }
 
 // Flood placement: each tile takes the globally deepest cell reachable from
-// any empty top-row entry via a descending path of empty cells, so waves fill
-// level by level instead of stacking towers
+// any empty top-row entry via a descending path of empty cells
 function orbitFlood(
     grid: HexCell[],
     letters: string[],
@@ -170,7 +176,6 @@ function orbitFlood(
 }
 
 // Cleanup dead-end detection: is any 3-6 letter dictionary word traceable?
-// (a board whose only words are 7+ letters is practically impossible)
 let shortWordsPromise: Promise<Set<string>> | null = null;
 function loadShortWords(): Promise<Set<string>> {
     if (!shortWordsPromise) {
@@ -219,7 +224,9 @@ const OrbitGame = () => {
     const [actionLog, setActionLog] = useState<Action[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
     const [isValid, setIsValid] = useState(false);
-    const [handlesOn, setHandlesOn] = useState(false);
+    const [armed, setArmed] = useState(false);
+    const [previewSteps, setPreviewSteps] = useState(0);
+    const [dragging, setDragging] = useState(false);
     const [clearFx, setClearFx] = useState<ClearFx[]>([]);
     const [scoreFx, setScoreFx] = useState<{ x: number; y: number; text: string; key: number } | null>(null);
     const [stats, setStats] = useState<OrbitStats>(loadStats);
@@ -233,6 +240,22 @@ const OrbitGame = () => {
     const rngRef = useRef<SeededRNG | undefined>(undefined);
     const fxTimersRef = useRef<number[]>([]);
     const recordedRef = useRef(false);
+    const ringRef = useRef<RingInfo | null>(null);
+    const previewRef = useRef(0);
+    const suppressClickRef = useRef(false);
+    const dragRef = useRef<{
+        pointerId: number;
+        startX: number;
+        startY: number;
+        pivotCx: number;
+        pivotCy: number;
+        active: boolean;
+        lastAngle: number;
+        accum: number;
+        lastDetent: number;
+        raf: number;
+        pendingP: number;
+    } | null>(null);
     const reducedMotion = useMemo(
         () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
         []
@@ -252,6 +275,9 @@ const OrbitGame = () => {
         }
         return ring;
     }, [byPos]);
+
+    const tileEl = useCallback((id: string) =>
+        boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`) ?? null, []);
 
     const queueMove = useCallback((id: string, dx: number, dy: number) => {
         pendingAnimsRef.current.set(id, {
@@ -293,7 +319,6 @@ const OrbitGame = () => {
             startFresh('practice');
             return;
         }
-        // Daily: completed → show stored result; in-progress → restore; else fresh
         const result = loadStats().results[dateStr];
         if (result) {
             recordedRef.current = true;
@@ -340,7 +365,6 @@ const OrbitGame = () => {
 
     useEffect(() => { enterMode('daily'); }, [enterMode]);
 
-    // Snapshot the daily run so a refresh resumes instead of re-rolling
     useEffect(() => {
         if (mode !== 'daily' || grid.length === 0 || phase === 'over') return;
         try {
@@ -358,7 +382,6 @@ const OrbitGame = () => {
         } catch { /* storage full/blocked — run just won't resume */ }
     }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog]);
 
-    // Record the finished daily into stats (once)
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || !endReason || recordedRef.current) return;
         recordedRef.current = true;
@@ -392,7 +415,6 @@ const OrbitGame = () => {
             const letters = nextWave.length ? nextWave : generateDropLettersSmart(WAVE_SIZES[wavesDropped], g, rng);
             const { newGrid, paths, unplaced } = orbitFlood(g, letters, rng);
 
-            // Magnet ease-out along the full fall path
             const placed = newGrid.filter(c => c.placedThisTurn);
             const specs = placed.map(c => {
                 const ids = paths[c.id]?.length ? paths[c.id] : [c.id];
@@ -444,7 +466,6 @@ const OrbitGame = () => {
         }
     }, [phase, wavesDropped, nextWave]);
 
-    // Cleanup dead-end watch: auto-finish when no word is traceable
     useEffect(() => {
         if (phase !== 'cleanup') return;
         let cancelled = false;
@@ -459,35 +480,263 @@ const OrbitGame = () => {
         return () => { cancelled = true; };
     }, [phase, grid]);
 
-    const orbit = useCallback((pivotId: string, dir: 1 | -1) => {
-        if (phase === 'over') return;
-        const pivot = grid.find(c => c.id === pivotId);
-        if (!pivot) return;
-        const ring = ringOf(pivot);
-        if (ring.length < 3) return;
-
-        const n = ring.length;
-        const newGrid = grid.map(c => ({ ...c }));
-        const find = (id: string) => newGrid.find(c => c.id === id)!;
-        ring.forEach((src, i) => {
-            const dst = ring[(i + (dir === 1 ? 1 : n - 1)) % n];
-            const target = find(dst.id);
-            target.letter = src.letter;
-            target.isPlaced = src.isPlaced;
-            if (src.letter) {
-                queueMove(dst.id, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
-            }
-        });
-        setSelected([]);
-        setIsValid(false);
-        if (phase === 'storm') setActionLog(log => [...log, 'orbit']);
-        afterAction(newGrid);
-    }, [phase, grid, ringOf, queueMove, afterAction]);
+    // ---------- ring arming ----------
 
     const currentWord = useMemo(
         () => selected.map(id => grid.find(c => c.id === id)?.letter || '').join(''),
         [selected, grid]
     );
+
+    const pivotCell = useMemo(() => {
+        if (selected.length !== 1) return null;
+        const c = grid.find(x => x.id === selected[0]) || null;
+        return c && ringOf(c).length >= 3 ? c : null;
+    }, [selected, grid, ringOf]);
+
+    // Arm after a settle delay so the ring doesn't flicker while tracing
+    useEffect(() => {
+        setArmed(false);
+        if (!pivotCell) return;
+        const t = window.setTimeout(() => setArmed(true), HANDLE_DELAY_MS);
+        return () => window.clearTimeout(t);
+    }, [pivotCell]);
+
+    // Maintain ring info + clear stale preview transforms when the ring changes
+    useEffect(() => {
+        const prev = ringRef.current;
+        if (prev) {
+            prev.cells.forEach(c => {
+                const el = tileEl(c.id);
+                if (el) { el.style.transition = ''; el.style.transform = ''; }
+            });
+        }
+        previewRef.current = 0;
+        setPreviewSteps(0);
+        if (pivotCell && armed && phase !== 'over') {
+            const cells = ringOf(pivotCell);
+            ringRef.current = {
+                pivotId: pivotCell.id,
+                cells,
+                slots: cells.map(c => ({ x: cellX(c), y: cellY(c) })),
+                n: cells.length,
+            };
+        } else {
+            ringRef.current = null;
+        }
+    }, [pivotCell, armed, phase, ringOf, tileEl]);
+
+    const ringIds = useMemo(() => {
+        if (!pivotCell || !armed) return new Set<string>();
+        return new Set(ringOf(pivotCell).map(c => c.id));
+    }, [pivotCell, armed, ringOf]);
+
+    // ---------- rotation preview / commit ----------
+
+    // Position ring letters at a (possibly fractional) rotation p
+    const applyPreviewTransforms = useCallback((p: number, withTransition: boolean) => {
+        const ring = ringRef.current;
+        if (!ring) return;
+        const k = Math.floor(p);
+        const f = p - k;
+        ring.cells.forEach((c, i) => {
+            if (!c.letter) return;
+            const el = tileEl(c.id);
+            if (!el) return;
+            const a = ring.slots[mod(i + k, ring.n)];
+            const b = ring.slots[mod(i + k + 1, ring.n)];
+            const x = a.x + (b.x - a.x) * f;
+            const y = a.y + (b.y - a.y) * f;
+            el.style.transition = withTransition ? 'transform 140ms cubic-bezier(0.3, 0.9, 0.4, 1)' : '';
+            el.style.transform = `translate(${x - ring.slots[i].x}px, ${y - ring.slots[i].y}px)`;
+        });
+    }, [tileEl]);
+
+    const clearPreviewTransforms = useCallback((withTransition: boolean) => {
+        const ring = ringRef.current;
+        if (!ring) return;
+        ring.cells.forEach(c => {
+            const el = tileEl(c.id);
+            if (el) {
+                el.style.transition = withTransition ? 'transform 140ms cubic-bezier(0.3, 0.9, 0.4, 1)' : '';
+                el.style.transform = '';
+            }
+        });
+    }, [tileEl]);
+
+    const bumpPreview = useCallback((d: number) => {
+        if (!ringRef.current) return;
+        previewRef.current += d;
+        setPreviewSteps(previewRef.current);
+        applyPreviewTransforms(previewRef.current, true);
+        haptics.select();
+    }, [applyPreviewTransforms]);
+
+    const resetPreview = useCallback(() => {
+        if (previewRef.current === 0) return;
+        previewRef.current = 0;
+        setPreviewSteps(0);
+        clearPreviewTransforms(true);
+    }, [clearPreviewTransforms]);
+
+    // Commit a rotation of k steps; fromP is where the letters visually are now
+    const commitRotation = useCallback((k: number, fromP: number) => {
+        const ring = ringRef.current;
+        if (!ring || phase === 'over') return;
+        const kk = mod(k, ring.n);
+        if (kk === 0) return;
+
+        // Settle animation: from the current preview position to the final slot
+        const kf = Math.floor(fromP);
+        const ff = fromP - kf;
+        ring.cells.forEach((c, i) => {
+            if (!c.letter) return;
+            const a = ring.slots[mod(i + kf, ring.n)];
+            const b = ring.slots[mod(i + kf + 1, ring.n)];
+            const cur = { x: a.x + (b.x - a.x) * ff, y: a.y + (b.y - a.y) * ff };
+            const dstIdx = mod(i + k, ring.n);
+            const dst = ring.slots[dstIdx];
+            const dx = cur.x - dst.x;
+            const dy = cur.y - dst.y;
+            if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+                queueMove(ring.cells[dstIdx].id, dx, dy);
+            }
+        });
+        clearPreviewTransforms(false);
+
+        const newGrid = grid.map(c => ({ ...c }));
+        const find = (id: string) => newGrid.find(c => c.id === id)!;
+        ring.cells.forEach((src, i) => {
+            const dst = find(ring.cells[mod(i + k, ring.n)].id);
+            dst.letter = src.letter;
+            dst.isPlaced = src.isPlaced;
+        });
+        previewRef.current = 0;
+        setPreviewSteps(0);
+        setSelected([]);
+        setIsValid(false);
+        haptics.success();
+        if (phase === 'storm') setActionLog(log => [...log, 'orbit']);
+        afterAction(newGrid);
+    }, [phase, grid, queueMove, clearPreviewTransforms, afterAction]);
+
+    // ---------- drag (the dial) ----------
+
+    const pointerAngle = useCallback((clientX: number, clientY: number) => {
+        const d = dragRef.current!;
+        return Math.atan2(clientY - d.pivotCy, clientX - d.pivotCx) * 180 / Math.PI;
+    }, []);
+
+    const onBoardPointerDown = useCallback((e: React.PointerEvent) => {
+        const ring = ringRef.current;
+        if (!ring || phase === 'over') return;
+        const pivotWrapper = boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(ring.pivotId)}"]`);
+        if (!pivotWrapper) return;
+        const r = pivotWrapper.getBoundingClientRect();
+        const cx = r.x + r.width / 2;
+        const cy = r.y + r.height / 2;
+        const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+        const unit = r.width / TILE_W; // current scale
+        // Grab anywhere on the ring annulus (not the pivot itself)
+        if (dist < 0.55 * PITCH_X * unit || dist > 1.7 * PITCH_X * unit) return;
+        dragRef.current = {
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            pivotCx: cx,
+            pivotCy: cy,
+            active: false,
+            lastAngle: 0,
+            accum: previewRef.current * DEG_PER_STEP,
+            lastDetent: previewRef.current,
+            raf: 0,
+            pendingP: previewRef.current,
+        };
+    }, [phase]);
+
+    const onBoardPointerMove = useCallback((e: React.PointerEvent) => {
+        const d = dragRef.current;
+        if (!d || e.pointerId !== d.pointerId) return;
+        if (!d.active) {
+            if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < DRAG_THRESHOLD_PX) return;
+            d.active = true;
+            d.lastAngle = pointerAngle(d.startX, d.startY);
+            suppressClickRef.current = true;
+            setDragging(true);
+            boardRef.current?.setPointerCapture(e.pointerId);
+        }
+        const ang = pointerAngle(e.clientX, e.clientY);
+        let delta = ang - d.lastAngle;
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        d.lastAngle = ang;
+        d.accum += delta;
+        d.pendingP = d.accum / DEG_PER_STEP;
+        const detent = Math.round(d.pendingP);
+        if (detent !== d.lastDetent) {
+            d.lastDetent = detent;
+            haptics.select();
+        }
+        if (!d.raf) {
+            d.raf = requestAnimationFrame(() => {
+                d.raf = 0;
+                applyPreviewTransforms(d.pendingP, false);
+            });
+        }
+    }, [pointerAngle, applyPreviewTransforms]);
+
+    const onBoardPointerUp = useCallback((e: React.PointerEvent) => {
+        const d = dragRef.current;
+        if (!d || e.pointerId !== d.pointerId) return;
+        dragRef.current = null;
+        if (!d.active) return;
+        if (d.raf) cancelAnimationFrame(d.raf);
+        setDragging(false);
+        // The drag's own click (if any) fires synchronously after pointerup;
+        // clear the suppression right after so the next real tap isn't eaten
+        window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+        const p = d.pendingP;
+        const k = Math.round(p);
+        const ring = ringRef.current;
+        if (!ring || mod(k, ring.n) === 0) {
+            // Back to start (or full loop): free cancel, stay armed
+            previewRef.current = 0;
+            setPreviewSteps(0);
+            clearPreviewTransforms(true);
+            return;
+        }
+        commitRotation(k, p);
+    }, [clearPreviewTransforms, commitRotation]);
+
+    // ---------- wheel + keyboard (desktop dial) ----------
+
+    useEffect(() => {
+        const el = boardRef.current;
+        if (!el) return;
+        let acc = 0;
+        const onWheel = (e: WheelEvent) => {
+            if (!ringRef.current || phase === 'over' || dragRef.current?.active) return;
+            e.preventDefault();
+            acc += e.deltaY;
+            while (acc >= WHEEL_PER_STEP) { acc -= WHEEL_PER_STEP; bumpPreview(1); }
+            while (acc <= -WHEEL_PER_STEP) { acc += WHEEL_PER_STEP; bumpPreview(-1); }
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, [phase, bumpPreview]);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!ringRef.current || phase === 'over') return;
+            if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') { e.preventDefault(); bumpPreview(-1); }
+            else if (e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') { e.preventDefault(); bumpPreview(1); }
+            else if (e.key === 'Enter' && previewRef.current !== 0) { e.preventDefault(); commitRotation(previewRef.current, previewRef.current); }
+            else if (e.key === 'Escape') { resetPreview(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [phase, bumpPreview, commitRotation, resetPreview]);
+
+    // ---------- player actions ----------
 
     const submit = useCallback(() => {
         if (phase === 'over' || !isValid || selected.length < 3) return;
@@ -496,8 +745,6 @@ const OrbitGame = () => {
             .map(id => grid.find(c => c.id === id))
             .filter((c): c is HexCell => !!c);
 
-        // Clear-pop juice: ghost tiles burst at the cleared positions and a
-        // score floater rises from their centroid
         const fx = clearedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
         const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
@@ -541,6 +788,18 @@ const OrbitGame = () => {
 
     const handleCellTap = useCallback((cell: HexCell) => {
         if (phase === 'over') return;
+        if (suppressClickRef.current) {
+            suppressClickRef.current = false;
+            return;
+        }
+        // Tap on the pivot with a wheel/key preview pending = settle it
+        if (ringRef.current && cell.id === ringRef.current.pivotId && previewRef.current !== 0) {
+            commitRotation(previewRef.current, previewRef.current);
+            return;
+        }
+        if (previewRef.current !== 0) {
+            resetPreview();
+        }
         if (!cell.letter) {
             setSelected([]);
             setIsValid(false);
@@ -561,7 +820,7 @@ const OrbitGame = () => {
         } else {
             setSelected([cell.id]);
         }
-    }, [phase, selected, grid]);
+    }, [phase, selected, grid, commitRotation, resetPreview]);
 
     useEffect(() => {
         if (currentWord.length < 3) { setIsValid(false); return; }
@@ -602,26 +861,6 @@ const OrbitGame = () => {
 
     // ---------- derived ----------
 
-    const pivotCell = useMemo(() => {
-        if (selected.length !== 1) return null;
-        const c = grid.find(x => x.id === selected[0]) || null;
-        return c && ringOf(c).length >= 3 ? c : null;
-    }, [selected, grid, ringOf]);
-
-    // Handles (and the ring jiggle) appear only once the selection settles, so
-    // they don't flicker while a word is being traced through the cell
-    useEffect(() => {
-        setHandlesOn(false);
-        if (!pivotCell) return;
-        const t = window.setTimeout(() => setHandlesOn(true), HANDLE_DELAY_MS);
-        return () => window.clearTimeout(t);
-    }, [pivotCell]);
-
-    const ringIds = useMemo(() => {
-        if (!pivotCell || !handlesOn) return new Set<string>();
-        return new Set(ringOf(pivotCell).map(c => c.id));
-    }, [pivotCell, handlesOn, ringOf]);
-
     const bestWord = useMemo(
         () => words.reduce((a, b) => (b.length > a.length ? b : a), ''),
         [words]
@@ -648,6 +887,7 @@ const OrbitGame = () => {
 
     const wordState = currentWord.length >= 3 ? (isValid ? 'valid' : 'invalid') : 'neutral';
     const dailyResult = stats.results[dateStr];
+    const quietRing = previewSteps !== 0 || dragging;
 
     return (
         <div className="flex-1 flex flex-col items-center px-3 pt-3 pb-8 select-none">
@@ -725,20 +965,52 @@ const OrbitGame = () => {
             <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
                 <div
                     ref={boardRef}
-                    className="relative"
+                    className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
                     style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+                    onPointerDown={onBoardPointerDown}
+                    onPointerMove={onBoardPointerMove}
+                    onPointerUp={onBoardPointerUp}
+                    onPointerCancel={onBoardPointerUp}
                 >
+                    {/* Spin guide: dashed circle behind the armed ring */}
+                    {pivotCell && armed && phase !== 'over' && (
+                        <svg
+                            className="orbit-guide"
+                            width={GUIDE_R * 2 + 12}
+                            height={GUIDE_R * 2 + 12}
+                            style={{
+                                left: cellX(pivotCell) + TILE_W / 2 - GUIDE_R - 6,
+                                top: cellY(pivotCell) + TILE_H / 2 - GUIDE_R - 6,
+                            }}
+                            aria-hidden="true"
+                        >
+                            <circle
+                                cx={GUIDE_R + 6}
+                                cy={GUIDE_R + 6}
+                                r={GUIDE_R}
+                                fill="none"
+                                stroke="rgba(245, 158, 11, 0.45)"
+                                strokeWidth="2"
+                                strokeDasharray="7 6"
+                            />
+                        </svg>
+                    )}
+
                     {grid.map(cell => {
                         const selIdx = selected.indexOf(cell.id);
                         const inRing = ringIds.has(cell.id);
-                        const isPivot = pivotCell?.id === cell.id && handlesOn;
+                        const isPivot = pivotCell?.id === cell.id && armed;
                         return (
                             <div
                                 key={cell.id}
                                 data-ocell={cell.id}
                                 data-letter={cell.letter}
                                 onClick={() => handleCellTap(cell)}
-                                className={cn('orbit-cell', inRing && 'orbit-cell--ring')}
+                                className={cn(
+                                    'orbit-cell',
+                                    inRing && 'orbit-cell--ring',
+                                    inRing && quietRing && 'orbit-cell--quiet'
+                                )}
                                 style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
                             >
                                 <div className="orbit-hexbg" />
@@ -770,34 +1042,16 @@ const OrbitGame = () => {
                             {scoreFx.text}
                         </div>
                     )}
-
-                    {/* Orbit handles */}
-                    {pivotCell && handlesOn && phase !== 'over' && (
-                        <>
-                            <button
-                                aria-label="Orbit counter-clockwise"
-                                onClick={e => { e.stopPropagation(); orbit(pivotCell.id, -1); }}
-                                className="orbit-handle"
-                                style={{ left: cellX(pivotCell) - 26, top: cellY(pivotCell) - 26 }}
-                            >
-                                <RotateCcw size={16} />
-                            </button>
-                            <button
-                                aria-label="Orbit clockwise"
-                                onClick={e => { e.stopPropagation(); orbit(pivotCell.id, 1); }}
-                                className="orbit-handle"
-                                style={{ left: cellX(pivotCell) + TILE_W - 8, top: cellY(pivotCell) - 26 }}
-                            >
-                                <RotateCw size={16} />
-                            </button>
-                        </>
-                    )}
                 </div>
             </div>
 
             {/* Word + actions */}
             <div className="h-9 mt-3 mb-1 flex items-center">
-                {currentWord ? (
+                {previewSteps !== 0 ? (
+                    <span className="text-xs font-medium text-amber">
+                        Spun {Math.abs(previewSteps)} step{Math.abs(previewSteps) === 1 ? '' : 's'} — tap the centre tile or press Enter to settle, Esc to cancel
+                    </span>
+                ) : currentWord ? (
                     <span className={cn(
                         'px-4 py-1 rounded-xl font-mono font-bold text-lg',
                         wordState === 'valid' && 'text-amber bg-amber/10',
@@ -809,7 +1063,7 @@ const OrbitGame = () => {
                     </span>
                 ) : (
                     <span className="text-xs text-text-muted italic">
-                        Tap tiles to trace a word · tap one tile to spin its ring
+                        Tap tiles to trace a word · drag around a tile to spin its ring
                     </span>
                 )}
             </div>
@@ -874,7 +1128,7 @@ const OrbitGame = () => {
                         <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                         <div className="space-y-3 text-sm text-text-secondary mb-5">
                             <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Trace words.</span> Tap touching tiles to spell a word (3+ letters), then Submit to clear them.</p>
-                            <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin rings.</span> Tap a single tile and use the arrows to rotate the tiles around it into place.</p>
+                            <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin rings.</span> Tap a tile, then drag around it to spin its ring — release to lock it in. Release back at the start to cancel.</p>
                             <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every move drops more letters — survive {WAVES} waves, then empty the board for a Clean Sweep.</p>
                         </div>
                         <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
