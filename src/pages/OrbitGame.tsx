@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { Flame, Undo2 } from 'lucide-react';
+import { Flame, RotateCw, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
@@ -15,7 +15,7 @@ import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
-// cluster words + the free spin are the player's power
+// cluster words + a scarce spin bank are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
 // The flood escalates: late waves nearly fill what early waves trickled
 const WAVE_SIZES = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6];
@@ -30,10 +30,13 @@ const DRAG_THRESHOLD_PX = 8;
 const DEG_PER_STEP = 60;
 const WHEEL_PER_STEP = 40;
 const DAILY_UNDOS = 3;
+const SPIN_START = 3;
+const SPIN_MAX = 5;
+const SPIN_EARN_LEN = 5; // words this long or longer earn a spin back
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v2';
+const LS_RUN = 'waxle-orbit-run-v3';
 const LS_STATS = 'waxle-orbit-stats-v1';
 const LS_ONBOARDED = 'waxle-orbit-onboarded-v2';
 
@@ -89,7 +92,7 @@ type Snapshot = {
     score: number;
     words: string[];
     actionLog: Action[];
-    spinUsed: boolean;
+    spins: number;
     rngState: number;
 };
 
@@ -260,7 +263,7 @@ const OrbitGame = () => {
     const [actionLog, setActionLog] = useState<Action[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
     const [match, setMatch] = useState<string | null>(null);
-    const [spinUsed, setSpinUsed] = useState(false);
+    const [spins, setSpins] = useState(SPIN_START);
     const [armed, setArmed] = useState(false);
     const [previewSteps, setPreviewSteps] = useState(0);
     const [dragging, setDragging] = useState(false);
@@ -348,7 +351,7 @@ const OrbitGame = () => {
         setActionLog([]);
         setSelected([]);
         setMatch(null);
-        setSpinUsed(false);
+        setSpins(SPIN_START);
         setUndoStack([]);
         setUndosUsed(0);
     }, [dateStr]);
@@ -398,7 +401,7 @@ const OrbitGame = () => {
                     setScore(run.score);
                     setWords(run.words);
                     setActionLog(run.actionLog);
-                    setSpinUsed(!!run.spinUsed);
+                    setSpins(typeof run.spins === 'number' ? run.spins : SPIN_START);
                     setUndoStack(run.undoStack || []);
                     setUndosUsed(run.undosUsed || 0);
                     return;
@@ -421,14 +424,14 @@ const OrbitGame = () => {
                 score,
                 words,
                 actionLog,
-                spinUsed,
+                spins,
                 rngState: rngRef.current?.state ?? 0,
                 letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
                 undoStack,
                 undosUsed,
             }));
         } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, spinUsed, undoStack, undosUsed]);
+    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, spins, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || !endReason || recordedRef.current) return;
@@ -457,7 +460,7 @@ const OrbitGame = () => {
 
     // ---------- game flow ----------
 
-    // Word/pass ends the turn: the next wave drops and the free spin resets
+    // Word/pass ends the turn: the next wave drops
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm' && wavesDropped < WAVES) {
             const rng = rngRef.current;
@@ -499,7 +502,6 @@ const OrbitGame = () => {
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
             setGrid(newGrid);
-            setSpinUsed(false);
             setNextWave(nextWaves < WAVES ? generateDropLettersSmart(WAVE_SIZES[nextWaves], newGrid, rng) : []);
             if (unplaced.length > 0) {
                 setPhase('over');
@@ -543,9 +545,9 @@ const OrbitGame = () => {
         score,
         words: [...words],
         actionLog: [...actionLog],
-        spinUsed,
+        spins,
         rngState: rngRef.current?.state ?? 0,
-    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog, spinUsed]);
+    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog, spins]);
 
     const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
@@ -556,7 +558,7 @@ const OrbitGame = () => {
 
     const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
     const topUndo = undoStack[undoStack.length - 1];
-    // Undoing a free spin is free; undoing a turn (and its wave) costs a charge
+    // Undoing a spin is free (it refunds the spin); undoing a turn costs a charge
     const canUndo = phase !== 'over' && !!topUndo && (topUndo.kind === 'spin' || undosLeft > 0);
 
     const undo = useCallback(() => {
@@ -578,7 +580,7 @@ const OrbitGame = () => {
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
-        setSpinUsed(snap.spinUsed);
+        setSpins(snap.spins);
         setUndoStack(s => s.slice(0, -1));
         if (snap.kind === 'turn') setUndosUsed(u => u + 1);
         setSelected([]);
@@ -595,7 +597,7 @@ const OrbitGame = () => {
         [selected, grid]
     );
 
-    const spinAvailable = phase === 'cleanup' || (phase === 'storm' && !spinUsed);
+    const spinAvailable = phase !== 'over' && spins > 0;
 
     const pivotCell = useMemo(() => {
         if (!spinAvailable || selected.length !== 1) return null;
@@ -685,7 +687,7 @@ const OrbitGame = () => {
         clearPreviewTransforms(true);
     }, [clearPreviewTransforms]);
 
-    // The free spin: rotates the ring without ending the turn
+    // Spends a spin: rotates the ring without ending the turn
     const commitRotation = useCallback((k: number, fromP: number) => {
         const ring = ringRef.current;
         if (!ring || phase === 'over') return;
@@ -721,7 +723,7 @@ const OrbitGame = () => {
         setPreviewSteps(0);
         setSelected([]);
         setMatch(null);
-        if (phase === 'storm') setSpinUsed(true);
+        setSpins(s => Math.max(0, s - 1));
         haptics.success();
         setGrid(newGrid);
     }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
@@ -853,8 +855,9 @@ const OrbitGame = () => {
         const fx = clearedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
         const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
+        const earnsSpin = selected.length >= SPIN_EARN_LEN && spins < SPIN_MAX;
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: `+${selected.length}`, key: Date.now() });
+        setScoreFx({ x: cx, y: cy, text: earnsSpin ? `+${selected.length} · +1 spin` : `+${selected.length}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
         const t2 = window.setTimeout(() => setScoreFx(null), 750);
         fxTimersRef.current.push(t1, t2);
@@ -866,13 +869,14 @@ const OrbitGame = () => {
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
         setScore(s => s + selected.length);
+        if (earnsSpin) setSpins(s => Math.min(SPIN_MAX, s + 1));
         setWords(w => [...w, match]);
         setSelected([]);
         setMatch(null);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
         haptics.success();
         afterAction(newGrid);
-    }, [phase, match, selected, grid, queueMove, afterAction, pushUndo]);
+    }, [phase, match, selected, grid, spins, queueMove, afterAction, pushUndo]);
 
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
@@ -1097,6 +1101,12 @@ const OrbitGame = () => {
                     </div>
                 )}
                 <div className="flex items-center gap-2">
+                    <span className={cn(
+                        'flex items-center gap-0.5 text-xs font-semibold',
+                        spins > 0 ? 'text-text-primary' : 'text-text-muted'
+                    )}>
+                        <RotateCw size={12} className="text-amber" /> {spins}
+                    </span>
                     {stats.streak > 0 && (
                         <span className="flex items-center gap-0.5 text-xs font-semibold text-amber">
                             <Flame size={12} /> {stats.streak}
@@ -1133,16 +1143,26 @@ const OrbitGame = () => {
                     </div>
 
                     {/* Stats row */}
-                    <div className="flex justify-between gap-4">
-                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-4 text-center">
+                    <div className="flex justify-between gap-2">
+                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
                             <div className="text-xl font-semibold text-text-primary tabular-nums">
                                 {wavesDropped}<span className="text-text-secondary text-sm">/{WAVES}</span>
                             </div>
                             <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
                         </div>
-                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-4 text-center">
+                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
+                            <div className={cn(
+                                'text-xl font-semibold flex items-center justify-center gap-1',
+                                spins > 0 ? 'text-text-primary' : 'text-text-muted'
+                            )}>
+                                <RotateCw size={16} className="text-amber" />
+                                <span className="tabular-nums">{spins}</span>
+                            </div>
+                            <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Spins</div>
+                        </div>
+                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
                             <div className="text-xl font-semibold text-text-primary flex items-center justify-center gap-1">
-                                <Flame size={18} className="text-amber" />
+                                <Flame size={16} className="text-amber" />
                                 <span className="tabular-nums">{stats.streak}</span>
                             </div>
                             <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Streak</div>
@@ -1207,13 +1227,6 @@ const OrbitGame = () => {
 
             {/* Main play area */}
             <div className="flex-1 flex flex-col items-center px-3 pt-4 pb-8">
-                <p className="w-full max-w-md text-xs text-text-secondary mb-3 min-h-4 text-center">
-                    {phase === 'storm' && (spinUsed
-                        ? 'Spin used — play a word or pass to ride the next wave.'
-                        : 'One free spin per turn, then play a word or pass. The flood grows.')}
-                    {phase === 'cleanup' && 'The flood has passed — spins are free. Clear everything for a Clean Sweep.'}
-                </p>
-
                 {/* Board */}
                 <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
                     <div
@@ -1416,7 +1429,7 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap touching tiles in any order — if the letters spell a word, Submit clears them.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin free.</span> Once per turn, drag around a tile to spin its ring and herd letters together.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin wisely.</span> Drag around a tile to spin its ring. You have {SPIN_START} spins — words of {SPIN_EARN_LEN}+ letters earn one back.</p>
                                 <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every word or pass drops a bigger wave — survive {WAVES}, then empty the board for a Clean Sweep.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
