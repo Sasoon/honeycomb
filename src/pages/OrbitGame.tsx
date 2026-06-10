@@ -4,7 +4,6 @@ import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { HexCell } from '../components/HexGrid';
 import {
-    applyFallingTiles,
     clearTilesAndApplyGravity,
     generateDropLettersSmart,
     areCellsAdjacent,
@@ -60,6 +59,63 @@ type Phase = 'storm' | 'cleanup' | 'over';
 type EndReason = 'drowned' | 'finished' | 'swept';
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 
+// Flood placement: each tile takes the globally deepest cell reachable from
+// any empty top-row entry via a descending path of empty cells. Unlike the
+// main game's entry-cone flood, tiles never stack into towers while deeper
+// reachable slots exist elsewhere.
+function orbitFlood(
+    grid: HexCell[],
+    letters: string[]
+): { newGrid: HexCell[]; paths: Record<string, string[]>; unplaced: string[] } {
+    const newGrid = grid.map(c => ({ ...c, placedThisTurn: false }));
+    const byPosLocal = new Map(newGrid.map(c => [`${c.position.row},${c.position.col}`, c]));
+    const paths: Record<string, string[]> = {};
+    const unplaced: string[] = [];
+
+    for (const letter of letters) {
+        // BFS downward from every empty top-row cell through empty cells
+        const parent = new Map<string, string | null>();
+        const queue: HexCell[] = [];
+        newGrid.forEach(c => {
+            if (c.position.row === 0 && !c.letter) {
+                parent.set(c.id, null);
+                queue.push(c);
+            }
+        });
+        while (queue.length) {
+            const cur = queue.shift()!;
+            for (const dc of [-0.5, 0.5]) {
+                const n = byPosLocal.get(`${cur.position.row + 1},${cur.position.col + dc}`);
+                if (n && !n.letter && !parent.has(n.id)) {
+                    parent.set(n.id, cur.id);
+                    queue.push(n);
+                }
+            }
+        }
+        if (parent.size === 0) {
+            unplaced.push(letter);
+            continue;
+        }
+        // Deepest reachable cell; random among ties for organic spread
+        let best: HexCell[] = [];
+        for (const id of parent.keys()) {
+            const c = newGrid.find(x => x.id === id)!;
+            if (!best.length || c.position.row > best[0].position.row) best = [c];
+            else if (c.position.row === best[0].position.row) best.push(c);
+        }
+        const target = best[Math.floor(Math.random() * best.length)];
+        const path: string[] = [];
+        for (let id: string | null = target.id; id !== null; id = parent.get(id) ?? null) {
+            path.unshift(id);
+        }
+        target.letter = letter;
+        target.isPlaced = true;
+        target.placedThisTurn = true;
+        paths[target.id] = path;
+    }
+    return { newGrid, paths, unplaced };
+}
+
 const OrbitGame = () => {
     const [grid, setGrid] = useState<HexCell[]>([]);
     const [phase, setPhase] = useState<Phase>('storm');
@@ -110,7 +166,7 @@ const OrbitGame = () => {
     const init = useCallback(() => {
         const fresh = buildBoard();
         const seedLetters = generateDropLettersSmart(SEED_TILES, fresh);
-        const { newGrid } = applyFallingTiles(fresh, seedLetters, ROW_COUNTS.length);
+        const { newGrid } = orbitFlood(fresh, seedLetters);
         newGrid.forEach(c => { c.placedThisTurn = false; });
         pendingAnimsRef.current.clear();
         setGrid(newGrid);
@@ -131,23 +187,22 @@ const OrbitGame = () => {
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm' && wavesDropped < WAVES) {
             const letters = nextWave.length ? nextWave : generateDropLettersSmart(WAVE_SIZE, g);
-            const { newGrid, finalPaths, unplacedLetters } = applyFallingTiles(g, letters, ROW_COUNTS.length);
+            const { newGrid, paths, unplaced } = orbitFlood(g, letters);
 
             // Animate each tile along its full fall path from above the board.
             // Ease-out timing: fast through the path, decelerating into the
             // final cell — tiles glide in like magnets finding their spots.
             const placed = newGrid.filter(c => c.placedThisTurn);
             const specs = placed.map(c => {
-                const entry = finalPaths[c.id];
-                const ids = entry?.path?.length ? entry.path : [c.id];
+                const ids = paths[c.id]?.length ? paths[c.id] : [c.id];
                 const pts = ids
                     .map(id => newGrid.find(x => x.id === id))
                     .filter((x): x is HexCell => !!x)
                     .map(x => ({ x: cellX(x), y: cellY(x) }));
                 pts.unshift({ x: pts[0].x, y: pts[0].y - TILE_H * 0.9 });
-                return { cellId: c.id, points: pts, batch: entry?.batch ?? 0 };
+                return { cellId: c.id, points: pts };
             });
-            specs.sort((a, b) => (a.batch - b.batch) || (a.points[0].x - b.points[0].x));
+            specs.sort((a, b) => a.points[0].x - b.points[0].x);
             specs.forEach((spec, idx) => {
                 const pts = spec.points;
                 const cum = [0];
@@ -174,7 +229,7 @@ const OrbitGame = () => {
             setWavesDropped(nextWaves);
             setGrid(newGrid);
             setNextWave(generateDropLettersSmart(WAVE_SIZE, newGrid));
-            if (unplacedLetters.length > 0) {
+            if (unplaced.length > 0) {
                 setPhase('over');
                 setEndReason('drowned');
             } else if (nextWaves >= WAVES) {

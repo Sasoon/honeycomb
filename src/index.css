@@ -1379,10 +1379,19 @@ button {
   user-select: none;
 }
 
-/* Ring glow: a filter on the unclipped wrapper hugs the children's hex
-   shape uniformly (clip-path on the same element would cut the glow off) */
-.orbit-cell--ring {
-  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.8));
+/* Armed ring: letter tiles jiggle gently; empty slots get a faint tint so
+   the full rotation membership stays visible */
+.orbit-cell--ring .orbit-tile {
+  animation: orbitJiggle 280ms ease-in-out infinite;
+}
+
+.orbit-cell--ring .orbit-hexbg {
+  background-color: rgba(245, 158, 11, 0.18);
+}
+
+@keyframes orbitJiggle {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
 }
 
 .orbit-hexbg,
@@ -1446,4 +1455,5 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .orbit-handle { animation: none; }
+  .orbit-cell--ring .orbit-tile { animation: none; }
 }
