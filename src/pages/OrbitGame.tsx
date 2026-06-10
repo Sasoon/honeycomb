@@ -17,10 +17,10 @@ import { haptics } from '../lib/haptics';
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
 // path words + free orbits are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
-// Ratchet economy: the flood meter IS the next wave's size and it only
-// ever grows — every spin or pass adds one tile to all future waves,
-// words leave it untouched. The floor (sea level) creeps up every 4
-// waves so pure-word play can't run forever
+// Ratchet economy: the flood meter IS the next wave's size. Spins and
+// passes each grow it by one — for good. The only relief: a word LONGER
+// than the wave pushes it back one (out-spell the flood). The floor
+// (sea level) creeps up every 4 waves so pure-word play can't run forever
 const METER_START = 3;
 const meterFloor = (waves: number) => 1 + Math.floor(waves / 4);
 const SEED_TILES = 8;
@@ -809,6 +809,11 @@ const OrbitGame = () => {
     const submit = useCallback(() => {
         if (phase === 'over' || !match || selected.length < WORD_MIN) return;
         pushUndo('turn');
+        // Out-spell the flood: a word longer than the wave cools it by one,
+        // shrinking the very wave about to drop
+        const cooled = selected.length > meter
+            ? Math.max(meterFloor(wavesDropped), meter - 1)
+            : meter;
         const clearedCells = selected
             .map(id => grid.find(c => c.id === id))
             .filter((c): c is HexCell => !!c);
@@ -817,7 +822,12 @@ const OrbitGame = () => {
         const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: `+${wordPoints(selected.length)}`, key: Date.now() });
+        setScoreFx({
+            x: cx,
+            y: cy,
+            text: `+${wordPoints(selected.length)}${cooled < meter ? ' · 🌊↓' : ''}`,
+            key: Date.now(),
+        });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
         const t2 = window.setTimeout(() => setScoreFx(null), 750);
         fxTimersRef.current.push(t1, t2);
@@ -834,8 +844,8 @@ const OrbitGame = () => {
         setMatch(null);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
         haptics.success();
-        afterAction(newGrid, meter, meter);
-    }, [phase, match, selected, grid, meter, queueMove, afterAction, pushUndo]);
+        afterAction(newGrid, cooled, cooled);
+    }, [phase, match, selected, grid, meter, wavesDropped, queueMove, afterAction, pushUndo]);
 
     // Passing drops the current wave AND permanently grows the flood by one
     const endTurn = useCallback(() => {
@@ -1148,7 +1158,7 @@ const OrbitGame = () => {
                                 : 'text-amber bg-amber/10 border border-amber/30'
                         )}>
                             {selectedLetters
-                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}</span>}</>
+                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length > meter ? ' 🌊↓' : ''}</span>}</>
                                 : <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>}
                         </div>
                         <div className="absolute -top-3 left-4">
@@ -1285,7 +1295,7 @@ const OrbitGame = () => {
                             wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
                         )}>
                             {selectedLetters}
-                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}</span>}
+                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length > meter ? ' 🌊↓' : ''}</span>}
                         </span>
                     ) : (
                         <span className="text-xs text-text-muted italic">
@@ -1364,7 +1374,7 @@ const OrbitGame = () => {
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
                                 <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spins feed the flood.</span> Drag around a tile to spin its ring — free, anytime, but every spin (and every pass) makes the flood one tile bigger. For good.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Watch the NEXT row.</span> That's exactly what falls after your word or pass — it only ever grows. Score as much as you can before the board fills.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Out-spell the flood.</span> The NEXT row is exactly what falls after your turn — and it's the bar: spell a word LONGER than it to push the flood back one.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
