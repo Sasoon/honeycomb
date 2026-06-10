@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } fr
 import { Flame, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
+import { OptimizedCounter } from '../components/OptimizedCounter';
 import { HexCell } from '../components/HexGrid';
 import {
     clearTilesAndApplyGravity,
@@ -214,8 +215,7 @@ function orbitFlood(
 }
 
 // Cleanup dead-end detection: does any connected cluster of 3-5 tiles
-// anagram to a word? (clusters whose only words are 6+ letters are
-// practically nonexistent)
+// anagram to a word?
 function anyClusterWord(grid: HexCell[], index: Map<string, string>): boolean {
     const lettered = grid.filter(c => c.letter);
     if (lettered.length < CLUSTER_MIN) return false;
@@ -797,6 +797,8 @@ const OrbitGame = () => {
         if (!d.active) return;
         if (d.raf) cancelAnimationFrame(d.raf);
         setDragging(false);
+        // The drag's own click (if any) fires synchronously after pointerup;
+        // clear the suppression right after so the next real tap isn't eaten
         window.setTimeout(() => { suppressClickRef.current = false; }, 0);
         const p = d.pendingP;
         const k = Math.round(p);
@@ -975,7 +977,10 @@ const OrbitGame = () => {
 
     const [scale, setScale] = useState(1);
     useEffect(() => {
-        const update = () => setScale(Math.min(1, (window.innerWidth - 28) / BOARD_W));
+        const update = () => {
+            const reserved = window.innerWidth >= 768 ? 320 : 28;
+            setScale(Math.min(1, (window.innerWidth - reserved) / BOARD_W));
+        };
         update();
         window.addEventListener('resize', update);
         return () => window.removeEventListener('resize', update);
@@ -1018,292 +1023,407 @@ const OrbitGame = () => {
     const dailyResult = stats.results[dateStr];
     const quietRing = previewSteps !== 0 || dragging;
 
-    return (
-        <div className="flex-1 flex flex-col items-center px-3 pt-3 pb-8 select-none">
-            {/* Mode pills */}
-            <div className="flex gap-1.5 mb-2" role="tablist">
-                <button
-                    role="tab"
-                    aria-selected={mode === 'daily'}
-                    onClick={() => enterMode('daily')}
-                    className={cn(
-                        'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
-                        mode === 'daily' ? 'bg-amber text-white' : 'bg-secondary/15 text-text-secondary'
-                    )}
-                >
-                    Daily #{dailyNo}
-                </button>
-                <button
-                    role="tab"
-                    aria-selected={mode === 'practice'}
-                    onClick={() => enterMode('practice')}
-                    className={cn(
-                        'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
-                        mode === 'practice' ? 'bg-amber text-white' : 'bg-secondary/15 text-text-secondary'
-                    )}
-                >
-                    Practice
-                </button>
-                {stats.streak > 0 && (
-                    <span className="flex items-center gap-0.5 px-2 py-1 text-xs font-semibold text-amber">
-                        <Flame size={12} /> {stats.streak}
-                    </span>
+    const modePills = (
+        <div className="flex gap-1.5" role="tablist">
+            <button
+                role="tab"
+                aria-selected={mode === 'daily'}
+                onClick={() => enterMode('daily')}
+                className={cn(
+                    'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
+                    mode === 'daily' ? 'bg-amber text-white' : 'bg-secondary/15 text-text-secondary'
                 )}
-            </div>
+            >
+                Daily #{dailyNo}
+            </button>
+            <button
+                role="tab"
+                aria-selected={mode === 'practice'}
+                onClick={() => enterMode('practice')}
+                className={cn(
+                    'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
+                    mode === 'practice' ? 'bg-amber text-white' : 'bg-secondary/15 text-text-secondary'
+                )}
+            >
+                Practice
+            </button>
+        </div>
+    );
 
-            {/* HUD: classic card language */}
-            <div className="w-full max-w-md flex items-center justify-between mb-1">
+    const nextChips = (size: string) => (
+        <div className="flex gap-1">
+            {nextWave.map((letter, idx) => (
+                <div
+                    key={`${wavesDropped}-${idx}`}
+                    className={cn(
+                        size,
+                        'bg-bg-secondary border border-secondary/30 rounded-lg flex items-center justify-center font-semibold text-text-primary anim-chip-in'
+                    )}
+                    style={{ animationDelay: `${idx * 50}ms` }}
+                >
+                    {letter}
+                </div>
+            ))}
+        </div>
+    );
+
+    const waveDots = (
+        <div className="flex items-center gap-1" aria-label={`Wave ${wavesDropped} of ${WAVES}`}>
+            {Array.from({ length: WAVES }, (_, i) => (
+                <span
+                    key={i}
+                    className={cn('w-2 h-2 rounded-full', i < wavesDropped ? 'bg-amber' : 'bg-secondary/30')}
+                />
+            ))}
+        </div>
+    );
+
+    return (
+        <div className="flex-1 flex flex-col md:flex-row bg-bg-primary select-none">
+            {/* Mobile top bar (classic flush header) */}
+            <div className={cn(
+                'md:hidden sticky top-0 z-10',
+                'bg-bg-primary border-b border-secondary/20',
+                'px-4 shadow-lg shadow-secondary/10',
+                'h-[60px] flex items-center justify-between'
+            )}>
                 <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-text-primary tabular-nums">{score}</span>
+                    <span className="text-xl font-bold text-text-primary tabular-nums">{score}</span>
                     <span className="text-xs text-text-secondary">/ {TOTAL_LETTERS}</span>
                 </div>
                 {phase === 'storm' && nextWave.length > 0 && (
+                    <div className="bg-amber/10 border border-amber/20 rounded-xl px-2 py-1.5">
+                        {nextChips('w-5 h-5 text-[11px]')}
+                    </div>
+                )}
+                <div className="flex items-center gap-2">
+                    {stats.streak > 0 && (
+                        <span className="flex items-center gap-0.5 text-xs font-semibold text-amber">
+                            <Flame size={12} /> {stats.streak}
+                        </span>
+                    )}
+                    {waveDots}
+                </div>
+            </div>
+
+            {/* Desktop sidebar (classic game sidebar) */}
+            <div className={cn(
+                'hidden md:flex w-72 shrink-0 flex-col',
+                'bg-bg-primary border-r border-secondary/20',
+                'shadow-2xl shadow-secondary/20'
+            )}>
+                <div className="flex flex-col p-6 overflow-y-auto space-y-5">
+                    {/* Primary score display */}
+                    <div className={cn(
+                        'bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20',
+                        'rounded-2xl p-6 text-center shadow-lg shadow-amber/10'
+                    )}>
+                        <div className="text-4xl font-bold text-amber mb-1">
+                            <OptimizedCounter
+                                value={score}
+                                duration={0.6}
+                                animationType="ticker"
+                                className="tabular-nums"
+                                delay={0}
+                            />
+                        </div>
+                        <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">
+                            Score / {TOTAL_LETTERS}
+                        </div>
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="flex justify-between gap-4">
+                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-4 text-center">
+                            <div className="text-xl font-semibold text-text-primary tabular-nums">
+                                {wavesDropped}<span className="text-text-secondary text-sm">/{WAVES}</span>
+                            </div>
+                            <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
+                        </div>
+                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-4 text-center">
+                            <div className="text-xl font-semibold text-text-primary flex items-center justify-center gap-1">
+                                <Flame size={18} className="text-amber" />
+                                <span className="tabular-nums">{stats.streak}</span>
+                            </div>
+                            <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Streak</div>
+                        </div>
+                    </div>
+
+                    {/* Mode */}
+                    <div className="flex justify-center">{modePills}</div>
+
+                    {/* Next drop */}
+                    {phase === 'storm' && nextWave.length > 0 && (
+                        <div className="relative">
+                            <div className="bg-amber/10 border border-amber/20 rounded-xl p-3">
+                                <div className="flex items-center justify-center">{nextChips('w-7 h-7 text-xs')}</div>
+                            </div>
+                            <div className="absolute -top-3 left-4">
+                                <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">Next</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Current cluster */}
                     <div className="relative">
-                        <div className="bg-amber/10 border border-amber/20 rounded-xl px-3 py-1.5">
-                            <div className="flex gap-1">
-                                {nextWave.map((letter, idx) => (
-                                    <div
-                                        key={`${wavesDropped}-${idx}`}
-                                        className="w-6 h-6 bg-bg-secondary border border-secondary/30 rounded-lg flex items-center justify-center text-xs font-semibold text-text-primary anim-chip-in"
-                                        style={{ animationDelay: `${idx * 50}ms` }}
-                                    >
-                                        {letter}
-                                    </div>
+                        <div className={cn(
+                            'text-lg font-mono font-bold text-center rounded-xl p-3 transition-colors duration-200',
+                            wordState === 'invalid'
+                                ? 'text-red-500 bg-red-500/10 border border-red-500/30'
+                                : 'text-amber bg-amber/10 border border-amber/30'
+                        )}>
+                            {match
+                                ? <>{match.toUpperCase()}<span className="ml-2 text-sm">+{selected.length}</span></>
+                                : (selectedLetters || <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>)}
+                        </div>
+                        <div className="absolute -top-3 left-4">
+                            <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">Current</span>
+                        </div>
+                    </div>
+
+                    {/* Found words */}
+                    <div className="relative">
+                        <div className="bg-success/10 border border-success/20 rounded-xl p-4 pt-5">
+                            {words.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                                    {words.slice(-12).map((w, i) => (
+                                        <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
+                                            {w.toUpperCase()}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
+                            )}
+                        </div>
+                        <div className="absolute -top-3 left-4">
+                            <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
+                                Found ({words.length})
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Main play area */}
+            <div className="flex-1 flex flex-col items-center px-3 pt-4 pb-8">
+                <p className="w-full max-w-md text-xs text-text-secondary mb-3 min-h-4 text-center">
+                    {phase === 'storm' && (spinUsed
+                        ? 'Spin used — play a word or pass to ride the next wave.'
+                        : 'One free spin per turn, then play a word or pass. The flood grows.')}
+                    {phase === 'cleanup' && 'The flood has passed — spins are free. Clear everything for a Clean Sweep.'}
+                </p>
+
+                {/* Board */}
+                <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
+                    <div
+                        ref={boardRef}
+                        className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
+                        style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+                        onPointerDown={onBoardPointerDown}
+                        onPointerMove={onBoardPointerMove}
+                        onPointerUp={onBoardPointerUp}
+                        onPointerCancel={onBoardPointerUp}
+                    >
+                        {pivotCell && armed && phase !== 'over' && (
+                            <svg
+                                className="orbit-guide"
+                                width={GUIDE_R * 2 + 12}
+                                height={GUIDE_R * 2 + 12}
+                                style={{
+                                    left: cellX(pivotCell) + TILE_W / 2 - GUIDE_R - 6,
+                                    top: cellY(pivotCell) + TILE_H / 2 - GUIDE_R - 6,
+                                }}
+                                aria-hidden="true"
+                            >
+                                <circle
+                                    cx={GUIDE_R + 6}
+                                    cy={GUIDE_R + 6}
+                                    r={GUIDE_R}
+                                    fill="none"
+                                    stroke="rgba(245, 158, 11, 0.45)"
+                                    strokeWidth="2"
+                                    strokeDasharray="7 6"
+                                />
+                            </svg>
+                        )}
+
+                        {grid.map(cell => {
+                            const isSelected = selected.includes(cell.id);
+                            const inRing = ringIds.has(cell.id);
+                            const isPivot = pivotCell?.id === cell.id && armed;
+                            return (
+                                <div
+                                    key={cell.id}
+                                    data-ocell={cell.id}
+                                    data-letter={cell.letter}
+                                    onClick={() => handleCellTap(cell)}
+                                    className={cn(
+                                        'orbit-cell',
+                                        inRing && 'orbit-cell--ring',
+                                        inRing && quietRing && 'orbit-cell--quiet'
+                                    )}
+                                    style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
+                                >
+                                    <div className="orbit-hexbg" />
+                                    {cell.letter && (
+                                        <div className={cn(
+                                            'orbit-tile',
+                                            isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
+                                            isPivot && 'orbit-tile--pivot'
+                                        )}>
+                                            {cell.letter}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {clearFx.map(fx => (
+                            <div
+                                key={fx.id}
+                                className="orbit-clearfx"
+                                style={{ left: fx.left, top: fx.top, width: TILE_W, height: TILE_H }}
+                            >
+                                {fx.letter}
+                            </div>
+                        ))}
+                        {scoreFx && (
+                            <div key={scoreFx.key} className="orbit-scorefx" style={{ left: scoreFx.x, top: scoreFx.y - 10 }}>
+                                {scoreFx.text}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Spin status / current word (word mirrors the sidebar on mobile) */}
+                <div className="h-9 mt-3 mb-1 flex items-center">
+                    {previewSteps !== 0 ? (
+                        <span className="text-xs font-medium text-amber">
+                            Spun {Math.abs(previewSteps)} step{Math.abs(previewSteps) === 1 ? '' : 's'} — tap the centre tile or press Enter to settle, Esc to cancel
+                        </span>
+                    ) : selectedLetters ? (
+                        <span className={cn(
+                            'md:hidden px-4 py-1 rounded-xl font-mono font-bold text-lg',
+                            wordState === 'valid' && 'text-amber bg-amber/10',
+                            wordState === 'invalid' && 'text-red-500 bg-red-500/10',
+                            wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
+                        )}>
+                            {match
+                                ? <>{match.toUpperCase()}<span className="ml-2 text-sm">+{selected.length}</span></>
+                                : selectedLetters}
+                        </span>
+                    ) : (
+                        <span className="text-xs text-text-muted italic">
+                            Tap touching tiles in any order · drag around a tile to spin
+                        </span>
+                    )}
+                </div>
+                <div className="flex gap-2 items-center">
+                    <Button
+                        onClick={undo}
+                        disabled={!canUndo}
+                        variant="secondary"
+                        size="gameControl"
+                        className="gap-1 relative"
+                        aria-label={mode === 'daily' ? `Undo (${Math.max(0, undosLeft)} left)` : 'Undo'}
+                    >
+                        <Undo2 className="w-4 h-4" />
+                        {mode === 'daily' && (
+                            <span className="text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center bg-secondary/30">
+                                {Math.max(0, undosLeft)}
+                            </span>
+                        )}
+                    </Button>
+                    {phase === 'storm' && (
+                        <Button onClick={endTurn} variant="destructive" size="gameControl">
+                            End Turn
+                        </Button>
+                    )}
+                    <Button onClick={submit} disabled={!match || phase === 'over'} size="gameControl">
+                        Submit
+                    </Button>
+                    {phase === 'cleanup' && (
+                        <Button onClick={finish} variant="secondary" size="gameControl">
+                            Finish
+                        </Button>
+                    )}
+                </div>
+
+                {/* Mobile-only: mode pills + found words */}
+                <div className="md:hidden mt-4 flex flex-col items-center gap-3">
+                    {modePills}
+                    {words.length > 0 && phase !== 'over' && (
+                        <div className="relative max-w-md">
+                            <div className="bg-success/10 border border-success/20 rounded-xl px-3 py-2 flex flex-wrap gap-1.5 justify-center">
+                                {words.slice(-10).map((w, i) => (
+                                    <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
+                                        {w.toUpperCase()}
+                                    </span>
                                 ))}
                             </div>
-                        </div>
-                        <div className="absolute -top-2 left-3">
-                            <span className="bg-bg-primary px-1.5 text-[10px] font-medium text-amber uppercase tracking-wide">
-                                Next
-                            </span>
-                        </div>
-                    </div>
-                )}
-                <div className="flex items-center gap-1" aria-label={`Wave ${wavesDropped} of ${WAVES}`}>
-                    {Array.from({ length: WAVES }, (_, i) => (
-                        <span
-                            key={i}
-                            className={cn(
-                                'w-2 h-2 rounded-full',
-                                i < wavesDropped ? 'bg-amber' : 'bg-secondary/30'
-                            )}
-                        />
-                    ))}
-                </div>
-            </div>
-            <p className="w-full max-w-md text-xs text-text-secondary mb-3 min-h-4">
-                {phase === 'storm' && (spinUsed
-                    ? 'Spin used — play a word or pass to ride the next wave.'
-                    : 'One free spin per turn, then play a word or pass. The flood grows.')}
-                {phase === 'cleanup' && 'The flood has passed — spins are free. Clear everything for a Clean Sweep.'}
-            </p>
-
-            {/* Board */}
-            <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
-                <div
-                    ref={boardRef}
-                    className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
-                    style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-                    onPointerDown={onBoardPointerDown}
-                    onPointerMove={onBoardPointerMove}
-                    onPointerUp={onBoardPointerUp}
-                    onPointerCancel={onBoardPointerUp}
-                >
-                    {pivotCell && armed && phase !== 'over' && (
-                        <svg
-                            className="orbit-guide"
-                            width={GUIDE_R * 2 + 12}
-                            height={GUIDE_R * 2 + 12}
-                            style={{
-                                left: cellX(pivotCell) + TILE_W / 2 - GUIDE_R - 6,
-                                top: cellY(pivotCell) + TILE_H / 2 - GUIDE_R - 6,
-                            }}
-                            aria-hidden="true"
-                        >
-                            <circle
-                                cx={GUIDE_R + 6}
-                                cy={GUIDE_R + 6}
-                                r={GUIDE_R}
-                                fill="none"
-                                stroke="rgba(245, 158, 11, 0.45)"
-                                strokeWidth="2"
-                                strokeDasharray="7 6"
-                            />
-                        </svg>
-                    )}
-
-                    {grid.map(cell => {
-                        const isSelected = selected.includes(cell.id);
-                        const inRing = ringIds.has(cell.id);
-                        const isPivot = pivotCell?.id === cell.id && armed;
-                        return (
-                            <div
-                                key={cell.id}
-                                data-ocell={cell.id}
-                                data-letter={cell.letter}
-                                onClick={() => handleCellTap(cell)}
-                                className={cn(
-                                    'orbit-cell',
-                                    inRing && 'orbit-cell--ring',
-                                    inRing && quietRing && 'orbit-cell--quiet'
-                                )}
-                                style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
-                            >
-                                <div className="orbit-hexbg" />
-                                {cell.letter && (
-                                    <div className={cn(
-                                        'orbit-tile',
-                                        isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
-                                        isPivot && 'orbit-tile--pivot'
-                                    )}>
-                                        {cell.letter}
-                                    </div>
-                                )}
+                            <div className="absolute -top-2 left-3">
+                                <span className="bg-bg-primary px-1.5 text-[10px] font-medium text-amber uppercase tracking-wide">
+                                    Found ({words.length})
+                                </span>
                             </div>
-                        );
-                    })}
-
-                    {clearFx.map(fx => (
-                        <div
-                            key={fx.id}
-                            className="orbit-clearfx"
-                            style={{ left: fx.left, top: fx.top, width: TILE_W, height: TILE_H }}
-                        >
-                            {fx.letter}
-                        </div>
-                    ))}
-                    {scoreFx && (
-                        <div key={scoreFx.key} className="orbit-scorefx" style={{ left: scoreFx.x, top: scoreFx.y - 10 }}>
-                            {scoreFx.text}
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* Word + actions */}
-            <div className="h-9 mt-3 mb-1 flex items-center">
-                {previewSteps !== 0 ? (
-                    <span className="text-xs font-medium text-amber">
-                        Spun {Math.abs(previewSteps)} step{Math.abs(previewSteps) === 1 ? '' : 's'} — tap the centre tile or press Enter to settle, Esc to cancel
-                    </span>
-                ) : selectedLetters ? (
-                    <span className={cn(
-                        'px-4 py-1 rounded-xl font-mono font-bold text-lg',
-                        wordState === 'valid' && 'text-amber bg-amber/10',
-                        wordState === 'invalid' && 'text-red-500 bg-red-500/10',
-                        wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
-                    )}>
-                        {match
-                            ? <>{match.toUpperCase()}<span className="ml-2 text-sm">+{selected.length}</span></>
-                            : selectedLetters}
-                    </span>
-                ) : (
-                    <span className="text-xs text-text-muted italic">
-                        Tap touching tiles in any order · drag around a tile to spin
-                    </span>
-                )}
-            </div>
-            <div className="flex gap-2 items-center">
-                <Button
-                    onClick={undo}
-                    disabled={!canUndo}
-                    variant="secondary"
-                    size="gameControl"
-                    className="gap-1 relative"
-                    aria-label={mode === 'daily' ? `Undo (${Math.max(0, undosLeft)} left)` : 'Undo'}
-                >
-                    <Undo2 className="w-4 h-4" />
-                    {mode === 'daily' && (
-                        <span className="text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center bg-secondary/30">
-                            {Math.max(0, undosLeft)}
-                        </span>
-                    )}
-                </Button>
-                {phase === 'storm' && (
-                    <Button onClick={endTurn} variant="destructive" size="gameControl">
-                        End Turn
-                    </Button>
-                )}
-                <Button onClick={submit} disabled={!match || phase === 'over'} size="gameControl">
-                    Submit
-                </Button>
-                {phase === 'cleanup' && (
-                    <Button onClick={finish} variant="secondary" size="gameControl">
-                        Finish
-                    </Button>
-                )}
-            </div>
-
-            {/* Found words */}
-            {words.length > 0 && phase !== 'over' && (
-                <div className="relative mt-4 max-w-md">
-                    <div className="bg-success/10 border border-success/20 rounded-xl px-3 py-2 flex flex-wrap gap-1.5 justify-center">
-                        {words.slice(-10).map((w, i) => (
-                            <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
-                                {w.toUpperCase()}
-                            </span>
-                        ))}
-                    </div>
-                    <div className="absolute -top-2 left-3">
-                        <span className="bg-bg-primary px-1.5 text-[10px] font-medium text-amber uppercase tracking-wide">
-                            Found ({words.length})
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {/* Game over */}
-            {phase === 'over' && !showOnboarding && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
-                    <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full text-center anim-modal-in">
-                        <div className="text-4xl mb-2">
-                            {endReason === 'swept' ? '🧹' : endReason === 'drowned' ? '🌊' : '🏁'}
-                        </div>
-                        <h2 className="text-xl font-bold text-text-primary mb-1">
-                            {endReason === 'swept' ? 'Clean Sweep!' : endReason === 'drowned' ? 'The board flooded' : 'Run complete'}
-                        </h2>
-                        <p className="text-2xl font-bold text-amber mb-1 tabular-nums">
-                            {score} <span className="text-sm text-text-secondary font-medium">/ {TOTAL_LETTERS}</span>
-                        </p>
-                        {actionLog.length > 0 && (
-                            <p className="text-base tracking-wide mb-2" aria-label="run history">
-                                {actionLog.map(a => ACTION_EMOJI[a]).join('')}
+                {/* Game over */}
+                {phase === 'over' && !showOnboarding && (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
+                        <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full text-center anim-modal-in">
+                            <div className="text-4xl mb-2">
+                                {endReason === 'swept' ? '🧹' : endReason === 'drowned' ? '🌊' : '🏁'}
+                            </div>
+                            <h2 className="text-xl font-bold text-text-primary mb-1">
+                                {endReason === 'swept' ? 'Clean Sweep!' : endReason === 'drowned' ? 'The board flooded' : 'Run complete'}
+                            </h2>
+                            <p className="text-2xl font-bold text-amber mb-1 tabular-nums">
+                                {score} <span className="text-sm text-text-secondary font-medium">/ {TOTAL_LETTERS}</span>
                             </p>
-                        )}
-                        <p className="text-text-secondary text-sm mb-2">
-                            {mode === 'daily' && dailyResult
-                                ? <>{dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best.toUpperCase()}</span></>}{dailyResult.stranded > 0 && <> · {dailyResult.stranded} stranded</>}</>
-                                : <>{words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord.toUpperCase()}</span></>}{endReason !== 'swept' && tilesLeft > 0 && <> · {tilesLeft} stranded</>}</>}
-                        </p>
-                        {mode === 'daily' && (
-                            <p className="text-xs text-text-secondary mb-4">
-                                🔥 {stats.streak} day streak · 🧹 {stats.sweeps}/{stats.games} sweeps
+                            {actionLog.length > 0 && (
+                                <p className="text-base tracking-wide mb-2" aria-label="run history">
+                                    {actionLog.map(a => ACTION_EMOJI[a]).join('')}
+                                </p>
+                            )}
+                            <p className="text-text-secondary text-sm mb-2">
+                                {mode === 'daily' && dailyResult
+                                    ? <>{dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best.toUpperCase()}</span></>}{dailyResult.stranded > 0 && <> · {dailyResult.stranded} stranded</>}</>
+                                    : <>{words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord.toUpperCase()}</span></>}{endReason !== 'swept' && tilesLeft > 0 && <> · {tilesLeft} stranded</>}</>}
                             </p>
-                        )}
-                        <div className="flex gap-3 justify-center">
-                            <Button onClick={share} variant="secondary">Share</Button>
-                            {mode === 'daily'
-                                ? <Button onClick={() => enterMode('practice')}>Practice</Button>
-                                : <Button onClick={() => startFresh('practice')}>Play again</Button>}
+                            {mode === 'daily' && (
+                                <p className="text-xs text-text-secondary mb-4">
+                                    🔥 {stats.streak} day streak · 🧹 {stats.sweeps}/{stats.games} sweeps
+                                </p>
+                            )}
+                            <div className="flex gap-3 justify-center">
+                                <Button onClick={share} variant="secondary">Share</Button>
+                                {mode === 'daily'
+                                    ? <Button onClick={() => enterMode('practice')}>Practice</Button>
+                                    : <Button onClick={() => startFresh('practice')}>Play again</Button>}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* First-run onboarding */}
-            {showOnboarding && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
-                    <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in">
-                        <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
-                        <div className="space-y-3 text-sm text-text-secondary mb-5">
-                            <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap touching tiles in any order — if the letters spell a word, Submit clears them.</p>
-                            <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin free.</span> Once per turn, drag around a tile to spin its ring and herd letters together.</p>
-                            <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every word or pass drops a bigger wave — survive {WAVES}, then empty the board for a Clean Sweep.</p>
+                {/* First-run onboarding */}
+                {showOnboarding && (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
+                        <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in">
+                            <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
+                            <div className="space-y-3 text-sm text-text-secondary mb-5">
+                                <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap touching tiles in any order — if the letters spell a word, Submit clears them.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin free.</span> Once per turn, drag around a tile to spin its ring and herd letters together.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every word or pass drops a bigger wave — survive {WAVES}, then empty the board for a Clean Sweep.</p>
+                            </div>
+                            <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
-                        <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
