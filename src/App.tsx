@@ -9,6 +9,7 @@ const WaxleGame = lazy(() => import('./pages/WaxleGame.tsx'));
 const DailyChallenge = lazy(() => import('./pages/DailyChallenge.tsx'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
 const HowToPlay = lazy(() => import('./pages/HowToPlay.tsx'));
+const OrbitGame = lazy(() => import('./pages/OrbitGame.tsx'));
 
 const PageLoader = () => (
   <div className="flex-1 flex items-center justify-center py-16">
@@ -54,6 +55,7 @@ function AppContent() {
             <Route path="/daily" element={<DailyChallenge />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/how-to-play" element={<HowToPlay />} />
+            <Route path="/orbit" element={<OrbitGame />} />
           </Routes>
         </Suspense>
       </main>
