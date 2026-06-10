@@ -9,7 +9,6 @@ import {
     generateDropLettersSmart,
     areCellsAdjacent,
 } from '../lib/waxleGameUtils';
-import { buildFallFrames, FALL_STAGGER_MS, FallSpec } from '../lib/fallAnimation';
 import wordValidator from '../lib/wordValidator';
 import toastService from '../lib/toastService';
 
@@ -17,7 +16,9 @@ import toastService from '../lib/toastService';
 const ROW_COUNTS = [4, 5, 6, 7, 6, 5, 4]; // regular hexagon, side 4 — 37 cells
 const WAVES = 10;
 const WAVE_SIZE = 4;
-const SEED_TILES = 7;
+// Roughly fills the bottom three rows so words are traceable from turn one
+const SEED_TILES = 12;
+const FLOOD_STAGGER_MS = 50;
 // ================================================================
 
 // Neighbour offsets in clockwise screen order, starting top-left
@@ -132,9 +133,11 @@ const OrbitGame = () => {
             const letters = nextWave.length ? nextWave : generateDropLettersSmart(WAVE_SIZE, g);
             const { newGrid, finalPaths, unplacedLetters } = applyFallingTiles(g, letters, ROW_COUNTS.length);
 
-            // Animate each tile along its full fall path from above the board
+            // Animate each tile along its full fall path from above the board.
+            // Ease-out timing: fast through the path, decelerating into the
+            // final cell — tiles glide in like magnets finding their spots.
             const placed = newGrid.filter(c => c.placedThisTurn);
-            const specs: Array<FallSpec & { batch: number }> = placed.map(c => {
+            const specs = placed.map(c => {
                 const entry = finalPaths[c.id];
                 const ids = entry?.path?.length ? entry.path : [c.id];
                 const pts = ids
@@ -142,22 +145,28 @@ const OrbitGame = () => {
                     .filter((x): x is HexCell => !!x)
                     .map(x => ({ x: cellX(x), y: cellY(x) }));
                 pts.unshift({ x: pts[0].x, y: pts[0].y - TILE_H * 0.9 });
-                return { key: c.id, cellId: c.id, letter: c.letter, points: pts, spawn: true, batch: entry?.batch ?? 0 };
+                return { cellId: c.id, points: pts, batch: entry?.batch ?? 0 };
             });
             specs.sort((a, b) => (a.batch - b.batch) || (a.points[0].x - b.points[0].x));
-            const { frames } = buildFallFrames(specs, TILE_H, FALL_STAGGER_MS);
-            frames.forEach(f => {
-                const lx = f.xs[f.xs.length - 1];
-                const ly = f.ys[f.ys.length - 1];
-                pendingAnimsRef.current.set(f.cellId, {
-                    keyframes: f.xs.map((x, i) => ({
-                        transform: `translate(${x - lx}px, ${f.ys[i] - ly}px)`,
-                        opacity: f.spawn && i === 0 ? 0 : 1,
-                        offset: f.times[i],
+            specs.forEach((spec, idx) => {
+                const pts = spec.points;
+                const cum = [0];
+                for (let i = 1; i < pts.length; i++) {
+                    cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+                }
+                const total = cum[cum.length - 1];
+                if (total <= 0) return;
+                const last = pts[pts.length - 1];
+                pendingAnimsRef.current.set(spec.cellId, {
+                    keyframes: pts.map((p, i) => ({
+                        transform: `translate(${p.x - last.x}px, ${p.y - last.y}px)`,
+                        opacity: i === 0 ? 0 : 1,
+                        // Decelerating map from distance to time (ease-out quad)
+                        offset: 1 - Math.sqrt(1 - cum[i] / total),
                         easing: 'linear',
                     })),
-                    duration: f.duration,
-                    delay: f.delay,
+                    duration: Math.min(560, Math.max(280, 150 * Math.sqrt(total / TILE_H))),
+                    delay: idx * FLOOD_STAGGER_MS,
                 });
             });
 
@@ -286,7 +295,7 @@ const OrbitGame = () => {
         if (m.size === 0) return;
         if (!reducedMotion && boardRef.current) {
             m.forEach((a, id) => {
-                const el = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"]`);
+                const el = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`);
                 el?.animate(a.keyframes, {
                     duration: a.duration,
                     delay: a.delay,
@@ -392,21 +401,28 @@ const OrbitGame = () => {
                         const inRing = ringIds.has(cell.id);
                         const isPivot = pivotCell?.id === cell.id;
                         return (
+                            // Wrapper is unclipped so the ring glow (a filter,
+                            // which clip-path would cut off) can wrap the hex;
+                            // the static background stays visible while the
+                            // tile layer animates in from above
                             <div
                                 key={cell.id}
                                 data-ocell={cell.id}
                                 data-letter={cell.letter}
                                 onClick={() => handleCellTap(cell)}
-                                className={cn(
-                                    'orbit-cell',
-                                    cell.letter ? 'orbit-cell--tile' : 'orbit-cell--empty',
-                                    selIdx !== -1 && (wordState === 'invalid' ? 'orbit-cell--invalid' : 'orbit-cell--selected'),
-                                    inRing && 'orbit-cell--ring',
-                                    isPivot && 'orbit-cell--pivot'
-                                )}
+                                className={cn('orbit-cell', inRing && 'orbit-cell--ring')}
                                 style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
                             >
-                                {cell.letter}
+                                <div className="orbit-hexbg" />
+                                {cell.letter && (
+                                    <div className={cn(
+                                        'orbit-tile',
+                                        selIdx !== -1 && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
+                                        isPivot && 'orbit-tile--pivot'
+                                    )}>
+                                        {cell.letter}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
