@@ -180,7 +180,8 @@ const WaxleGameOverModal = ({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.7, opacity: 0 }}
             transition={{ type: "spring", damping: 15 }}
-            className="bg-bg-primary rounded-3xl p-8 max-w-md w-full shadow-2xl border border-secondary/20 backdrop-blur-xl"
+            className="bg-bg-primary rounded-3xl p-8 max-w-md w-full shadow-2xl border border-secondary/20"
+            style={{ willChange: 'transform, opacity' }}
             onKeyDown={(e) => {
               if (e.key === 'Escape' && !isDailyChallenge) onRestart();
             }}
