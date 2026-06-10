@@ -32,7 +32,7 @@ const DAILY_UNDOS = 3;
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v6';
+const LS_RUN = 'waxle-orbit-run-v7';
 const LS_STATS = 'waxle-orbit-stats-v1';
 const LS_ONBOARDED = 'waxle-orbit-onboarded-v5';
 
@@ -74,6 +74,16 @@ function buildBoard(): HexCell[] {
     return cells;
 }
 
+// Constant reference board for seed-pure letter generation (never mutated)
+const EMPTY_BOARD = buildBoard();
+
+// Absolute stream position where wave n's letters begin
+const waveStart = (n: number) => {
+    let s = SEED_TILES;
+    for (let i = 0; i < n; i++) s += waveSize(i);
+    return s;
+};
+
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
 type Action = 'word' | 'pass';
@@ -89,7 +99,6 @@ type Snapshot = {
     score: number;
     words: string[];
     actionLog: Action[];
-    rngState: number;
 };
 
 interface DailyResult {
@@ -236,7 +245,6 @@ const OrbitGame = () => {
     const boardRef = useRef<HTMLDivElement>(null);
     const pendingAnimsRef = useRef<Map<string, PendingAnim>>(new Map());
     const validateSeqRef = useRef(0);
-    const rngRef = useRef<SeededRNG | undefined>(undefined);
     const fxTimersRef = useRef<number[]>([]);
     const recordedRef = useRef(false);
     const ringRef = useRef<RingInfo | null>(null);
@@ -287,19 +295,43 @@ const OrbitGame = () => {
         });
     }, []);
 
+    // ---------- deterministic flood stream ----------
+    // Every flood letter and placement tie-break derives from the run seed
+    // and absolute stream position alone, so undoing a turn and replaying
+    // (even differently) can never reroll a wave
+    const seedStrRef = useRef('');
+    const streamRef = useRef<string[]>([]);
+    const streamRngRef = useRef<SeededRNG>(createSeededRNG(0));
+
+    const initStream = useCallback((seed: string) => {
+        seedStrRef.current = seed;
+        streamRef.current = [];
+        streamRngRef.current = createSeededRNG(hashSeed(`${seed}|letters`));
+    }, []);
+
+    const takeLetters = useCallback((start: number, count: number) => {
+        const stream = streamRef.current;
+        while (stream.length < start + count) {
+            stream.push(generateDropLettersSmart(1, EMPTY_BOARD, streamRngRef.current)[0]);
+        }
+        return stream.slice(start, start + count);
+    }, []);
+
+    const placementRng = useCallback((tag: string) =>
+        createSeededRNG(hashSeed(`${seedStrRef.current}|p|${tag}`)), []);
+
     // ---------- init / restore / persistence ----------
 
     const startFresh = useCallback((m: Mode) => {
-        const rng = m === 'daily' ? createSeededRNG(hashSeed(dateStr)) : undefined;
-        rngRef.current = rng;
+        initStream(m === 'daily' ? dateStr : `practice-${Math.floor(Math.random() * 1e9)}`);
         const fresh = buildBoard();
-        const seedLetters = generateDropLettersSmart(SEED_TILES, fresh, rng);
-        const { newGrid } = orbitFlood(fresh, seedLetters, rng);
+        const seedLetters = takeLetters(0, SEED_TILES);
+        const { newGrid } = orbitFlood(fresh, seedLetters, placementRng('seed'));
         newGrid.forEach(c => { c.placedThisTurn = false; });
         pendingAnimsRef.current.clear();
         recordedRef.current = false;
         setGrid(newGrid);
-        setNextWave(generateDropLettersSmart(waveSize(0), newGrid, rng));
+        setNextWave(takeLetters(waveStart(0), waveSize(0)));
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -309,7 +341,7 @@ const OrbitGame = () => {
         setMatch(null);
         setUndoStack([]);
         setUndosUsed(0);
-    }, [dateStr]);
+    }, [dateStr, initStream, takeLetters, placementRng]);
 
     const enterMode = useCallback((m: Mode) => {
         setMode(m);
@@ -343,8 +375,7 @@ const OrbitGame = () => {
                         const l = letterById.get(c.id);
                         if (l) { c.letter = l; c.isPlaced = true; }
                     });
-                    rngRef.current = createSeededRNG(hashSeed(dateStr));
-                    rngRef.current.setState(run.rngState);
+                    initStream(run.seedStr || dateStr);
                     recordedRef.current = false;
                     pendingAnimsRef.current.clear();
                     setGrid(board);
@@ -361,7 +392,7 @@ const OrbitGame = () => {
             }
         } catch { /* corrupted snapshot — start over */ }
         startFresh('daily');
-    }, [dateStr, startFresh]);
+    }, [dateStr, startFresh, initStream]);
 
     useEffect(() => { enterMode('daily'); }, [enterMode]);
 
@@ -376,7 +407,7 @@ const OrbitGame = () => {
                 score,
                 words,
                 actionLog,
-                rngState: rngRef.current?.state ?? 0,
+                seedStr: seedStrRef.current,
                 letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
                 undoStack,
                 undosUsed,
@@ -412,9 +443,8 @@ const OrbitGame = () => {
     // Word/pass ends the turn: the next wave drops — endlessly, and growing
     const afterAction = useCallback((g: HexCell[]) => {
         if (phase === 'storm') {
-            const rng = rngRef.current;
-            const letters = nextWave.length ? nextWave : generateDropLettersSmart(waveSize(wavesDropped), g, rng);
-            const { newGrid, paths, unplaced } = orbitFlood(g, letters, rng);
+            const letters = takeLetters(waveStart(wavesDropped), waveSize(wavesDropped));
+            const { newGrid, paths, unplaced } = orbitFlood(g, letters, placementRng(`w${wavesDropped}`));
 
             const placed = newGrid.filter(c => c.placedThisTurn);
             const specs = placed.map(c => {
@@ -451,7 +481,7 @@ const OrbitGame = () => {
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
             setGrid(newGrid);
-            setNextWave(generateDropLettersSmart(waveSize(nextWaves), newGrid, rng));
+            setNextWave(takeLetters(waveStart(nextWaves), waveSize(nextWaves)));
             if (unplaced.length > 0) {
                 setPhase('over');
                 haptics.error();
@@ -459,7 +489,7 @@ const OrbitGame = () => {
         } else {
             setGrid(g);
         }
-    }, [phase, wavesDropped, nextWave]);
+    }, [phase, wavesDropped, takeLetters, placementRng]);
 
     // ---------- undo ----------
 
@@ -472,12 +502,11 @@ const OrbitGame = () => {
         score,
         words: [...words],
         actionLog: [...actionLog],
-        rngState: rngRef.current?.state ?? 0,
     }), [grid, phase, wavesDropped, nextWave, score, words, actionLog]);
 
     const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
-        // after the action has already advanced the RNG
+        // after the action has already changed the state being captured
         const snap = takeSnapshot(kind);
         setUndoStack(s => [...s.slice(-9), snap]);
     }, [takeSnapshot]);
@@ -497,7 +526,6 @@ const OrbitGame = () => {
             const l = letterById.get(c.id);
             if (l) { c.letter = l; c.isPlaced = true; }
         });
-        rngRef.current?.setState(snap.rngState);
         pendingAnimsRef.current.clear();
         setGrid(board);
         setPhase(snap.phase);
