@@ -367,4 +367,4 @@ const HexGrid = ({
   );
 };
 
-export default memo(HexGrid);
+export default HexGrid; 

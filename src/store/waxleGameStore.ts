@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { HexCell } from '../components/HexGrid';
 import { generateInitialGrid } from '../lib/gameUtils';
 import { generateDropLettersSmart, areCellsAdjacent, applyFallingTiles, clearTilesAndApplyGravity, calculateWaxleScore, generateRandomLetter, placeStartingTiles, countAdjacentEdges, getAllAxisLines, findValidWordsInLines } from '../lib/waxleGameUtils';
@@ -18,42 +18,6 @@ export interface SelectedTile {
     letter: string;
     position: number; // Order in which it was selected
 }
-
-// Write-behind storage: batch persist writes so synchronous localStorage
-// I/O never lands inside an animation frame (round transitions fire several
-// store updates back-to-back). State is flushed at most every 400ms and
-// always on pagehide.
-const debouncedStorage: StateStorage = (() => {
-    let pending: { name: string; value: string } | null = null;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const flush = () => {
-        if (!pending) return;
-        try {
-            localStorage.setItem(pending.name, pending.value);
-        } catch {
-            // Storage full/unavailable: persisting is best-effort
-        }
-        pending = null;
-    };
-    if (typeof window !== 'undefined') {
-        window.addEventListener('pagehide', flush);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') flush();
-        });
-    }
-    return {
-        getItem: (name) => localStorage.getItem(name),
-        setItem: (name, value) => {
-            pending = { name, value };
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(flush, 400);
-        },
-        removeItem: (name) => {
-            pending = null;
-            localStorage.removeItem(name);
-        },
-    };
-})();
 
 // Swap economy: start with 1, earn +1 per auto-clear and +1 per 5+ letter
 // word submitted, never hold more than the cap
@@ -958,7 +922,6 @@ export const useWaxleGameStore = create<WaxleGameState>()(
         }),
         {
             name: 'waxle-game',
-            storage: createJSONStorage(() => debouncedStorage),
             skipHydration: false,
             partialize: (state) => {
                 // Persist both Classic and Daily states separately (excluding runtime-only data)

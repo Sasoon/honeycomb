@@ -25,8 +25,6 @@ import WaxleGameOverModal from '../components/WaxleGameOverModal';
 import WaxleMobileGameControls from '../components/WaxleMobileGameControls';
 import GameControls from '../components/GameControls';
 
-const EMPTY_CELLS: HexCell[] = [];
-
 const CENTER_NUDGE_Y = 0; // pixels to nudge overlay vertically for visual centering (set to 0 for exact alignment)
 // Tile-fall timing (flood and resolve share the same fall system)
 const GRAVITY_SHORT_DELAY_MS = 100;
@@ -90,6 +88,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
   const [swapFirstTile, setSwapFirstTile] = useState<string | null>(null);
   const [swapModeActive, setSwapModeActive] = useState(false);
   const [swappingCells, setSwappingCells] = useState<string[]>([]);
+  const [landedCellIds, setLandedCellIds] = useState<string[]>([]);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(false);
@@ -225,6 +224,47 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     }
   }, [phase, autoClearPhase, currentAutoClearWord, autoClearLetterIndex, processNextAutoClearWord]);
 
+  // Start compositor-thread animations (WAAPI) for newly-rendered fall
+  // overlays. Transform/opacity keyframes with offsets are handed to the
+  // browser once; playback then happens entirely off the main thread.
+  const startedFallsRef = useRef<Map<string, Animation>>(new Map());
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const live = new Set<string>();
+
+    fxOverlays.forEach(fx => {
+      const f = fx.fall;
+      live.add(fx.key);
+      if (startedFallsRef.current.has(fx.key)) return;
+      const el = container.querySelector<HTMLElement>(`[data-fall-key="${CSS.escape(fx.key)}"]`);
+      if (!el || typeof el.animate !== 'function') return;
+
+      const keyframes = f.xs.map((x, i) => ({
+        transform: `translate(${x - cellSize.w / 2}px, ${f.ys[i] - cellSize.h / 2}px)`,
+        opacity: f.spawn && i === 0 ? 0 : 1,
+        offset: f.times[i],
+        easing: 'linear',
+      }));
+
+      const anim = el.animate(keyframes, {
+        duration: Math.max(f.duration, 1),
+        delay: f.delay,
+        fill: 'both',
+        easing: 'linear',
+      });
+      startedFallsRef.current.set(fx.key, anim);
+    });
+
+    // Drop handles for overlays that have been removed
+    for (const key of [...startedFallsRef.current.keys()]) {
+      if (!live.has(key)) {
+        startedFallsRef.current.get(key)?.cancel();
+        startedFallsRef.current.delete(key);
+      }
+    }
+  }, [fxOverlays, cellSize.w, cellSize.h]);
+
   // Use layout effect to hide tiles synchronously before painting
   useLayoutEffect(() => {
     if (phase === 'flood') {
@@ -256,23 +296,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
 
     let animationDoneSignal = () => {};
 
-    // Land a finished fall by mutating the DOM directly: revealing the letter
-    // and squashing the cell per tile causes zero React renders, which keeps
-    // the main thread clear for the animation (critical on mobile CPUs).
-    // Overlays sit pixel-identical on top of their cells, so they are cleaned
-    // up in one batch when the wave ends / the phase advances.
-    const landTileDirect = (cellId: string) => {
-        const cellEl = container.querySelector<HTMLElement>(`[data-cell-id="${CSS.escape(cellId)}"]`);
-        if (!cellEl) return;
-        const span = cellEl.querySelector<HTMLElement>('.letter-tile');
-        if (span) span.style.opacity = '1';
-        if (!prefersReducedMotion) {
-            cellEl.classList.add('tile-landed-effect');
-            const offT = window.setTimeout(() => cellEl.classList.remove('tile-landed-effect'), 450);
-            uiTimersRef.current.push(offT);
-        }
-    };
-
+    // Land a finished fall: drop its overlay, reveal the real tile, squash it
     const scheduleFalls = (frames: FallFrames[]) => {
         if (frames.length === 0) return;
         setFxOverlays(frames.map(f => ({
@@ -284,7 +308,15 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             fall: f,
         })));
         frames.forEach(f => {
-            const landT = window.setTimeout(() => landTileDirect(f.cellId), f.delay + f.duration);
+            const landT = window.setTimeout(() => {
+                setFxOverlays(prev => prev.filter(o => o.key !== f.key));
+                setHiddenCellIds(prev => prev.filter(id => id !== f.cellId));
+                setLandedCellIds(prev => (prev.includes(f.cellId) ? prev : [...prev, f.cellId]));
+                const offT = window.setTimeout(() => {
+                    setLandedCellIds(prev => prev.filter(id => id !== f.cellId));
+                }, 450);
+                uiTimersRef.current.push(offT);
+            }, f.delay + f.duration);
             timersRef.current.push(landT);
         });
     };
@@ -342,10 +374,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             const { frames, totalMs } = buildFallFrames(specs, cellSize.h, RESOLVE_STAGGER_MS);
             scheduleFalls(frames);
             animationDoneSignal = () => {
-                const advanceT = window.setTimeout(() => {
-                    setHiddenCellIds([]);
-                    advanceAfterGravity();
-                }, totalMs + GRAVITY_SHORT_DELAY_MS);
+                const advanceT = window.setTimeout(advanceAfterGravity, totalMs + GRAVITY_SHORT_DELAY_MS);
                 timersRef.current.push(advanceT);
             };
         }
@@ -403,10 +432,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             const { frames, totalMs } = buildFallFrames(specs, cellSize.h, FALL_STAGGER_MS);
             scheduleFalls(frames);
             animationDoneSignal = () => {
-                const advanceT = window.setTimeout(() => {
-                    setHiddenCellIds([]);
-                    advanceAfterFlood();
-                }, totalMs + PHASE_GAP_MS);
+                const advanceT = window.setTimeout(advanceAfterFlood, totalMs + PHASE_GAP_MS);
                 timersRef.current.push(advanceT);
             };
         }
@@ -527,12 +553,6 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
     }
     return 0;
   }, [currentWord, round, validationState, selectedTiles, grid]);
-
-  // Stable control handlers so the memoised GameControls skips re-renders
-  // during animation state updates
-  const onSubmitWord = useCallback(() => { submitWord(); }, [submitWord]);
-  const onEndTurn = useCallback(() => { endPlayerPhase(); }, [endPlayerPhase]);
-  const onUndo = useCallback(() => { undoLastAction(); }, [undoLastAction]);
 
   // Memoised display cells: stable object identity between renders keeps
   // CellView's memo() effective while animation timers update other state
@@ -929,41 +949,34 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
         <div className="flex-1 h-full overflow-hidden relative">
 
           <div ref={containerRef} className="absolute inset-0 px-2">
-            {/* FX overlays: unified tile-fall animation (flood + resolve) */}
+            {/* FX overlays: unified tile-fall animation (flood + resolve).
+                Driven by the Web Animations API (see the layout effect above):
+                transform/opacity keyframes run on the compositor thread, so
+                falls stay at the display's native frame rate even when the
+                main thread is busy — critical on mobile. */}
             <div className="pointer-events-none absolute inset-0 z-50">
               {fxOverlays.map(fx => {
                 const f = fx.fall;
                 return (
-                  <motion.div
+                  <div
                     key={fx.key}
-                    initial={{
-                      x: f.xs[0] - cellSize.w / 2,
-                      y: f.ys[0] - cellSize.h / 2,
-                      opacity: f.spawn ? 0 : 1,
-                    }}
-                    animate={{
-                      x: f.xs.map(v => v - cellSize.w / 2),
-                      y: f.ys.map(v => v - cellSize.h / 2),
-                      opacity: 1,
-                    }}
-                    transition={{
-                      x: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
-                      y: { delay: f.delay / 1000, duration: f.duration / 1000, times: f.times, ease: 'linear' },
-                      opacity: { delay: f.delay / 1000, duration: 0.12, ease: 'linear' },
-                    }}
+                    data-fall-key={fx.key}
                     className="absolute flex items-center justify-center"
                     style={{
                       left: 0,
                       top: 0,
                       width: `${cellSize.w}px`,
                       height: `${cellSize.h}px`,
+                      transform: `translate(${f.xs[0] - cellSize.w / 2}px, ${f.ys[0] - cellSize.h / 2}px)`,
+                      opacity: f.spawn ? 0 : 1,
                       clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
                       background: 'rgba(229,231,235,0.96)',
-                      willChange: 'transform',
+                      borderRadius: 8,
+                      willChange: 'transform, opacity',
                     }}
                   >
-                    <span className="letter-tile" style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
-                  </motion.div>
+                    <span className="letter-tile" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1f2937' }}>{fx.letter}</span>
+                  </div>
                 );
               })}
             </div>
@@ -1017,6 +1030,7 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
             <div 
               className={cn(
                 "grid-container relative",
+                phase === 'flood' ? 'flood-phase' : '',
                 isGridRepositioning ? 'grid-container-transitioning' : 'transition-[left,top,transform] duration-300 ease-in-out',
                 gridAnimationPhase === 'horizontal' && 'grid-horizontal-phase',
                 gridAnimationPhase === 'vertical' && 'grid-vertical-phase', 
@@ -1042,13 +1056,14 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 isWordValid={validationState}
                 isPlacementPhase={phase === 'player' ? !hasSelection : true}
                 isWordAlreadyScored={false}
-                placedTilesThisTurn={EMPTY_CELLS}
+                placedTilesThisTurn={[]}
                 gridSize={gridSize}
                 isTetrisVariant={true}
                 enableLayout={false}
                 isSettling={isSettling}
                 hiddenLetterCellIds={hiddenCellIds}
                 swappingCellIds={swappingCells}
+                landedCellIds={landedCellIds}
               />
               
               {/* Unified Game Controls */}
@@ -1056,9 +1071,9 @@ const WaxleGame = ({ onBackToDailyChallenge }: { onBackToDailyChallenge?: () => 
                 currentWord={currentWord}
                 phase={phase}
                 validationState={validationState}
-                onSubmitWord={onSubmitWord}
-                onEndTurn={onEndTurn}
-                onUndo={onUndo}
+                onSubmitWord={() => submitWord()}
+                onEndTurn={() => endPlayerPhase()}
+                onUndo={() => undoLastAction()}
                 onRestart={!isDailyChallenge ? handleRestart : undefined}
                 canUndo={canUndo()}
                 isDailyChallenge={isDailyChallenge}
