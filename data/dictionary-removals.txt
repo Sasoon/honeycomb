@@ -1,0 +1,4 @@
+# Words to exclude from the Waxle dictionary even though the base list
+# contains them — use this to kill anything that feels like junk in play.
+# One lowercase word per line; '#' starts a comment.
+# (Slurs/obscenities live in data/offensive-words.json instead.)
