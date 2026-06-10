@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { Flame } from 'lucide-react';
+import { Flame, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { HexCell } from '../components/HexGrid';
@@ -25,6 +25,7 @@ const HANDLE_DELAY_MS = 250; // settle time before the ring arms
 const DRAG_THRESHOLD_PX = 8; // movement before a tap becomes a spin
 const DEG_PER_STEP = 60; // finger travel per detent
 const WHEEL_PER_STEP = 40; // wheel delta per detent
+const DAILY_UNDOS = 3; // undo charges per daily run (practice is unlimited)
 const DAILY_EPOCH = '2026-06-10'; // Daily #1
 // =======================================================
 
@@ -74,6 +75,16 @@ type Action = 'word' | 'orbit' | 'pass';
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 type ClearFx = { id: string; letter: string; left: number; top: number };
 type RingInfo = { pivotId: string; cells: HexCell[]; slots: Array<{ x: number; y: number }>; n: number };
+type Snapshot = {
+    letters: Array<[string, string]>;
+    phase: Phase;
+    wavesDropped: number;
+    nextWave: string[];
+    score: number;
+    words: string[];
+    actionLog: Action[];
+    rngState: number;
+};
 
 interface DailyResult {
     score: number;
@@ -229,6 +240,8 @@ const OrbitGame = () => {
     const [dragging, setDragging] = useState(false);
     const [clearFx, setClearFx] = useState<ClearFx[]>([]);
     const [scoreFx, setScoreFx] = useState<{ x: number; y: number; text: string; key: number } | null>(null);
+    const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
+    const [undosUsed, setUndosUsed] = useState(0);
     const [stats, setStats] = useState<OrbitStats>(loadStats);
     const [showOnboarding, setShowOnboarding] = useState(
         () => typeof window !== 'undefined' && !localStorage.getItem(LS_ONBOARDED)
@@ -309,6 +322,8 @@ const OrbitGame = () => {
         setActionLog([]);
         setSelected([]);
         setIsValid(false);
+        setUndoStack([]);
+        setUndosUsed(0);
     }, [dateStr]);
 
     const enterMode = useCallback((m: Mode) => {
@@ -356,6 +371,8 @@ const OrbitGame = () => {
                     setScore(run.score);
                     setWords(run.words);
                     setActionLog(run.actionLog);
+                    setUndoStack(run.undoStack || []);
+                    setUndosUsed(run.undosUsed || 0);
                     return;
                 }
             }
@@ -378,9 +395,11 @@ const OrbitGame = () => {
                 actionLog,
                 rngState: rngRef.current?.state ?? 0,
                 letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
+                undoStack,
+                undosUsed,
             }));
         } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog]);
+    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || !endReason || recordedRef.current) return;
@@ -454,6 +473,7 @@ const OrbitGame = () => {
             if (unplaced.length > 0) {
                 setPhase('over');
                 setEndReason('drowned');
+                haptics.error();
             } else if (nextWaves >= WAVES) {
                 setPhase('cleanup');
             }
@@ -479,6 +499,60 @@ const OrbitGame = () => {
         });
         return () => { cancelled = true; };
     }, [phase, grid]);
+
+    // ---------- undo ----------
+
+    const takeSnapshot = useCallback((): Snapshot => ({
+        letters: grid.filter(c => c.letter).map(c => [c.id, c.letter] as [string, string]),
+        phase,
+        wavesDropped,
+        nextWave: [...nextWave],
+        score,
+        words: [...words],
+        actionLog: [...actionLog],
+        rngState: rngRef.current?.state ?? 0,
+    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog]);
+
+    const pushUndo = useCallback(() => {
+        // Snapshot eagerly: inside the updater it would run at render time,
+        // after the action has already advanced the RNG
+        const snap = takeSnapshot();
+        setUndoStack(s => [...s.slice(-9), snap]);
+    }, [takeSnapshot]);
+
+    const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
+    const canUndo = phase !== 'over' && undoStack.length > 0 && undosLeft > 0;
+
+    // Reverts the last action AND its wave. The RNG state is restored too, so
+    // redoing drops the exact same letters — undo lets you reconsider, not
+    // re-roll
+    const undo = useCallback(() => {
+        if (phase === 'over' || undoStack.length === 0) return;
+        if (mode === 'daily' && undosUsed >= DAILY_UNDOS) return;
+        const snap = undoStack[undoStack.length - 1];
+        const board = buildBoard();
+        const letterById = new Map(snap.letters);
+        board.forEach(c => {
+            const l = letterById.get(c.id);
+            if (l) { c.letter = l; c.isPlaced = true; }
+        });
+        rngRef.current?.setState(snap.rngState);
+        pendingAnimsRef.current.clear();
+        setGrid(board);
+        setPhase(snap.phase);
+        setWavesDropped(snap.wavesDropped);
+        setNextWave(snap.nextWave);
+        setScore(snap.score);
+        setWords(snap.words);
+        setActionLog(snap.actionLog);
+        setUndoStack(s => s.slice(0, -1));
+        setUndosUsed(u => u + 1);
+        setSelected([]);
+        setIsValid(false);
+        setClearFx([]);
+        setScoreFx(null);
+        haptics.select();
+    }, [phase, undoStack, mode, undosUsed]);
 
     // ---------- ring arming ----------
 
@@ -584,6 +658,7 @@ const OrbitGame = () => {
         if (!ring || phase === 'over') return;
         const kk = mod(k, ring.n);
         if (kk === 0) return;
+        pushUndo();
 
         // Settle animation: from the current preview position to the final slot
         const kf = Math.floor(fromP);
@@ -617,7 +692,7 @@ const OrbitGame = () => {
         haptics.success();
         if (phase === 'storm') setActionLog(log => [...log, 'orbit']);
         afterAction(newGrid);
-    }, [phase, grid, queueMove, clearPreviewTransforms, afterAction]);
+    }, [phase, grid, queueMove, clearPreviewTransforms, afterAction, pushUndo]);
 
     // ---------- drag (the dial) ----------
 
@@ -740,6 +815,7 @@ const OrbitGame = () => {
 
     const submit = useCallback(() => {
         if (phase === 'over' || !isValid || selected.length < 3) return;
+        pushUndo();
         const word = currentWord;
         const clearedCells = selected
             .map(id => grid.find(c => c.id === id))
@@ -766,15 +842,16 @@ const OrbitGame = () => {
         setIsValid(false);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
         afterAction(newGrid);
-    }, [phase, isValid, selected, currentWord, grid, queueMove, afterAction]);
+    }, [phase, isValid, selected, currentWord, grid, queueMove, afterAction, pushUndo]);
 
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
+        pushUndo();
         setSelected([]);
         setIsValid(false);
         setActionLog(log => [...log, 'pass']);
         afterAction(grid.map(c => ({ ...c })));
-    }, [phase, grid, afterAction]);
+    }, [phase, grid, afterAction, pushUndo]);
 
     const finish = useCallback(() => {
         if (phase !== 'cleanup') return;
@@ -874,10 +951,18 @@ const OrbitGame = () => {
         const stranded = endReason !== 'swept' && tilesLeft > 0 ? ` · ${tilesLeft} stranded` : '';
         const strip = actionLog.map(a => ACTION_EMOJI[a]).join('');
         const text = `${title} — ${score}/${TOTAL_LETTERS} ${headline}${stranded}\n${strip}${bestWord ? `\nBest: ${bestWord}` : ''}\nhttps://waxle.netlify.app/orbit`;
-        navigator.clipboard.writeText(text).then(
+        const copy = () => navigator.clipboard.writeText(text).then(
             () => toastService.success('Result copied!'),
             () => toastService.error('Could not copy')
         );
+        // Native share sheet where available (mobile), clipboard elsewhere
+        if (navigator.share) {
+            navigator.share({ text }).catch(err => {
+                if (err?.name !== 'AbortError') copy();
+            });
+        } else {
+            copy();
+        }
     }, [mode, dailyNo, endReason, tilesLeft, actionLog, score, bestWord]);
 
     const dismissOnboarding = useCallback(() => {
@@ -1068,6 +1153,21 @@ const OrbitGame = () => {
                 )}
             </div>
             <div className="flex gap-2 items-center">
+                <Button
+                    onClick={undo}
+                    disabled={!canUndo}
+                    variant="secondary"
+                    size="gameControl"
+                    className="gap-1 relative"
+                    aria-label={mode === 'daily' ? `Undo (${Math.max(0, undosLeft)} left)` : 'Undo'}
+                >
+                    <Undo2 className="w-4 h-4" />
+                    {mode === 'daily' && (
+                        <span className="text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center bg-secondary/30">
+                            {Math.max(0, undosLeft)}
+                        </span>
+                    )}
+                </Button>
                 {phase === 'storm' && (
                     <Button onClick={endTurn} variant="destructive" size="gameControl">
                         End Turn
