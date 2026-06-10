@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { ChevronDown, Hourglass, Undo2 } from 'lucide-react';
+import { ChevronDown, Droplets, Hourglass, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
@@ -17,9 +17,13 @@ import { haptics } from '../lib/haptics';
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
 // path words + free orbits are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
-// The flood is endless and grows every few waves; the run ends when a tile
-// can't fit. Score = letters cleared before the board fills
-const waveSize = (wave: number) => 3 + Math.floor(wave / 3);
+// Pressure economy: the flood meter IS the next wave's size. Spins raise
+// it (+2), words drain it by length-2, overflow past the cap spills
+// tiles instantly, and the floor (sea level) creeps up every 4 waves
+const METER_START = 3;
+const METER_MAX = 10;
+const SPIN_PRESSURE = 2;
+const meterFloor = (waves: number) => Math.min(METER_MAX, 1 + Math.floor(waves / 4));
 const SEED_TILES = 8;
 const WORD_MIN = 3; // smallest playable word
 const WORD_MAX = 8; // largest word indexed
@@ -32,7 +36,7 @@ const DAILY_UNDOS = 3;
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v7';
+const LS_RUN = 'waxle-orbit-run-v8';
 const LS_STATS = 'waxle-orbit-stats-v1';
 const LS_ONBOARDED = 'waxle-orbit-onboarded-v5';
 
@@ -77,13 +81,6 @@ function buildBoard(): HexCell[] {
 // Constant reference board for seed-pure letter generation (never mutated)
 const EMPTY_BOARD = buildBoard();
 
-// Absolute stream position where wave n's letters begin
-const waveStart = (n: number) => {
-    let s = SEED_TILES;
-    for (let i = 0; i < n; i++) s += waveSize(i);
-    return s;
-};
-
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
 type Action = 'word' | 'pass';
@@ -95,7 +92,8 @@ type Snapshot = {
     letters: Array<[string, string]>;
     phase: Phase;
     wavesDropped: number;
-    nextWave: string[];
+    meter: number;
+    streamPos: number;
     score: number;
     words: string[];
     actionLog: Action[];
@@ -223,7 +221,9 @@ const OrbitGame = () => {
     const [grid, setGrid] = useState<HexCell[]>([]);
     const [phase, setPhase] = useState<Phase>('storm');
     const [wavesDropped, setWavesDropped] = useState(0);
-    const [nextWave, setNextWave] = useState<string[]>([]);
+    const [meter, setMeter] = useState(METER_START);
+    const [streamPos, setStreamPos] = useState(SEED_TILES);
+    const [streamEpoch, setStreamEpoch] = useState(0);
     const [score, setScore] = useState(0);
     const [words, setWords] = useState<string[]>([]);
     const [actionLog, setActionLog] = useState<Action[]>([]);
@@ -331,7 +331,9 @@ const OrbitGame = () => {
         pendingAnimsRef.current.clear();
         recordedRef.current = false;
         setGrid(newGrid);
-        setNextWave(takeLetters(waveStart(0), waveSize(0)));
+        setMeter(METER_START);
+        setStreamPos(SEED_TILES);
+        setStreamEpoch(e => e + 1);
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -361,7 +363,6 @@ const OrbitGame = () => {
             setWords(result.best ? [result.best] : []);
             setActionLog(result.strip);
             setWavesDropped(result.waves ?? 0);
-            setNextWave([]);
             return;
         }
         try {
@@ -381,7 +382,9 @@ const OrbitGame = () => {
                     setGrid(board);
                     setPhase(run.phase);
                     setWavesDropped(run.wavesDropped);
-                    setNextWave(run.nextWave);
+                    setMeter(run.meter ?? METER_START);
+                    setStreamPos(run.streamPos ?? SEED_TILES);
+                    setStreamEpoch(e => e + 1);
                     setScore(run.score);
                     setWords(run.words);
                     setActionLog(run.actionLog);
@@ -403,7 +406,8 @@ const OrbitGame = () => {
                 dateStr,
                 phase,
                 wavesDropped,
-                nextWave,
+                meter,
+                streamPos,
                 score,
                 words,
                 actionLog,
@@ -413,7 +417,7 @@ const OrbitGame = () => {
                 undosUsed,
             }));
         } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, undoStack, undosUsed]);
+    }, [mode, dateStr, grid, phase, wavesDropped, meter, streamPos, score, words, actionLog, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
@@ -440,48 +444,52 @@ const OrbitGame = () => {
 
     // ---------- game flow ----------
 
-    // Word/pass ends the turn: the next wave drops — endlessly, and growing
-    const afterAction = useCallback((g: HexCell[]) => {
+    const queueFloodAnims = useCallback((newGrid: HexCell[], paths: Record<string, string[]>) => {
+        const placed = newGrid.filter(c => c.placedThisTurn);
+        const specs = placed.map(c => {
+            const ids = paths[c.id]?.length ? paths[c.id] : [c.id];
+            const pts = ids
+                .map(id => newGrid.find(x => x.id === id))
+                .filter((x): x is HexCell => !!x)
+                .map(x => ({ x: cellX(x), y: cellY(x) }));
+            pts.unshift({ x: pts[0].x, y: pts[0].y - TILE_H * 0.9 });
+            return { cellId: c.id, points: pts };
+        });
+        specs.sort((a, b) => a.points[0].x - b.points[0].x);
+        specs.forEach((spec, idx) => {
+            const pts = spec.points;
+            const cum = [0];
+            for (let i = 1; i < pts.length; i++) {
+                cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+            }
+            const total = cum[cum.length - 1];
+            if (total <= 0) return;
+            const last = pts[pts.length - 1];
+            pendingAnimsRef.current.set(spec.cellId, {
+                keyframes: pts.map((p, i) => ({
+                    transform: `translate(${p.x - last.x}px, ${p.y - last.y}px)`,
+                    opacity: i === 0 ? 0 : 1,
+                    offset: 1 - Math.sqrt(1 - cum[i] / total),
+                    easing: 'linear',
+                })),
+                duration: Math.min(560, Math.max(280, 150 * Math.sqrt(total / TILE_H))),
+                delay: idx * FLOOD_STAGGER_MS,
+            });
+        });
+    }, []);
+
+    // Word/pass ends the turn: the flood drops `meterNow` tiles. The meter
+    // persists (it's pressure, not a tank) and never sinks below the floor
+    const afterAction = useCallback((g: HexCell[], meterNow: number) => {
         if (phase === 'storm') {
-            const letters = takeLetters(waveStart(wavesDropped), waveSize(wavesDropped));
-            const { newGrid, paths, unplaced } = orbitFlood(g, letters, placementRng(`w${wavesDropped}`));
-
-            const placed = newGrid.filter(c => c.placedThisTurn);
-            const specs = placed.map(c => {
-                const ids = paths[c.id]?.length ? paths[c.id] : [c.id];
-                const pts = ids
-                    .map(id => newGrid.find(x => x.id === id))
-                    .filter((x): x is HexCell => !!x)
-                    .map(x => ({ x: cellX(x), y: cellY(x) }));
-                pts.unshift({ x: pts[0].x, y: pts[0].y - TILE_H * 0.9 });
-                return { cellId: c.id, points: pts };
-            });
-            specs.sort((a, b) => a.points[0].x - b.points[0].x);
-            specs.forEach((spec, idx) => {
-                const pts = spec.points;
-                const cum = [0];
-                for (let i = 1; i < pts.length; i++) {
-                    cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
-                }
-                const total = cum[cum.length - 1];
-                if (total <= 0) return;
-                const last = pts[pts.length - 1];
-                pendingAnimsRef.current.set(spec.cellId, {
-                    keyframes: pts.map((p, i) => ({
-                        transform: `translate(${p.x - last.x}px, ${p.y - last.y}px)`,
-                        opacity: i === 0 ? 0 : 1,
-                        offset: 1 - Math.sqrt(1 - cum[i] / total),
-                        easing: 'linear',
-                    })),
-                    duration: Math.min(560, Math.max(280, 150 * Math.sqrt(total / TILE_H))),
-                    delay: idx * FLOOD_STAGGER_MS,
-                });
-            });
-
+            const letters = takeLetters(streamPos, meterNow);
+            const { newGrid, paths, unplaced } = orbitFlood(g, letters, placementRng(`p${streamPos}`));
+            queueFloodAnims(newGrid, paths);
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
+            setStreamPos(streamPos + meterNow);
+            setMeter(Math.max(meterNow, meterFloor(nextWaves)));
             setGrid(newGrid);
-            setNextWave(takeLetters(waveStart(nextWaves), waveSize(nextWaves)));
             if (unplaced.length > 0) {
                 setPhase('over');
                 haptics.error();
@@ -489,7 +497,7 @@ const OrbitGame = () => {
         } else {
             setGrid(g);
         }
-    }, [phase, wavesDropped, takeLetters, placementRng]);
+    }, [phase, wavesDropped, streamPos, takeLetters, placementRng, queueFloodAnims]);
 
     // ---------- undo ----------
 
@@ -498,11 +506,12 @@ const OrbitGame = () => {
         letters: grid.filter(c => c.letter).map(c => [c.id, c.letter] as [string, string]),
         phase,
         wavesDropped,
-        nextWave: [...nextWave],
+        meter,
+        streamPos,
         score,
         words: [...words],
         actionLog: [...actionLog],
-    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog]);
+    }), [grid, phase, wavesDropped, meter, streamPos, score, words, actionLog]);
 
     const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
@@ -530,7 +539,8 @@ const OrbitGame = () => {
         setGrid(board);
         setPhase(snap.phase);
         setWavesDropped(snap.wavesDropped);
-        setNextWave(snap.nextWave);
+        setMeter(snap.meter);
+        setStreamPos(snap.streamPos);
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
@@ -638,7 +648,8 @@ const OrbitGame = () => {
         clearPreviewTransforms(true);
     }, [clearPreviewTransforms]);
 
-    // Orbits are free and never end the turn, but each spot pivots only once
+    // Orbits never end the turn, but each one pumps the flood meter +2;
+    // pressure past the cap spills tiles onto the board immediately
     const commitRotation = useCallback((k: number, fromP: number) => {
         const ring = ringRef.current;
         if (!ring || phase === 'over') return;
@@ -675,8 +686,23 @@ const OrbitGame = () => {
         setSelected([]);
         setMatch(null);
         haptics.success();
+
+        const overflow = Math.max(0, meter + SPIN_PRESSURE - METER_MAX);
+        setMeter(Math.min(METER_MAX, meter + SPIN_PRESSURE));
+        if (overflow > 0 && phase === 'storm') {
+            const letters = takeLetters(streamPos, overflow);
+            const { newGrid: flooded, paths, unplaced } = orbitFlood(newGrid, letters, placementRng(`p${streamPos}`));
+            queueFloodAnims(flooded, paths);
+            setStreamPos(streamPos + overflow);
+            setGrid(flooded);
+            if (unplaced.length > 0) {
+                setPhase('over');
+                haptics.error();
+            }
+            return;
+        }
         setGrid(newGrid);
-    }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
+    }, [phase, grid, meter, streamPos, queueMove, clearPreviewTransforms, pushUndo, takeLetters, placementRng, queueFloodAnims]);
 
     // ---------- drag (the dial) ----------
 
@@ -823,8 +849,11 @@ const OrbitGame = () => {
         setMatch(null);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
         haptics.success();
-        afterAction(newGrid);
-    }, [phase, match, selected, grid, queueMove, afterAction, pushUndo]);
+        // Words drain pressure by length-2 (down to the floor) before the wave
+        const relieved = Math.max(meterFloor(wavesDropped), Math.min(METER_MAX, meter - (selected.length - 2)));
+        setMeter(relieved);
+        afterAction(newGrid, relieved);
+    }, [phase, match, selected, grid, meter, wavesDropped, queueMove, afterAction, pushUndo]);
 
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
@@ -832,8 +861,8 @@ const OrbitGame = () => {
         setSelected([]);
         setMatch(null);
         setActionLog(log => [...log, 'pass']);
-        afterAction(grid.map(c => ({ ...c })));
-    }, [phase, grid, afterAction, pushUndo]);
+        afterAction(grid.map(c => ({ ...c })), meter);
+    }, [phase, grid, meter, afterAction, pushUndo]);
 
     useEffect(() => () => { fxTimersRef.current.forEach(t => window.clearTimeout(t)); }, []);
 
@@ -921,6 +950,15 @@ const OrbitGame = () => {
 
     // ---------- derived ----------
 
+    // The NEXT strip is a live window into the seed-pure stream: exactly
+    // `meter` letters — spins visibly grow it, words shrink it
+    const nextWindow = useMemo(
+        () => (phase === 'storm' ? takeLetters(streamPos, meter) : []),
+        // streamEpoch invalidates the window when a new run resets the stream
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [phase, streamPos, meter, streamEpoch, takeLetters]
+    );
+
     const bestWord = useMemo(
         () => words.reduce((a, b) => (b.length > a.length ? b : a), ''),
         [words]
@@ -986,9 +1024,9 @@ const OrbitGame = () => {
 
     const nextChips = (size: string) => (
         <div className="flex gap-1">
-            {nextWave.map((letter, idx) => (
+            {nextWindow.map((letter, idx) => (
                 <div
-                    key={`${wavesDropped}-${idx}`}
+                    key={`${streamPos}-${idx}`}
                     className={cn(
                         size,
                         'bg-bg-secondary border border-secondary/30 rounded-lg flex items-center justify-center font-semibold text-text-primary anim-chip-in'
@@ -1015,12 +1053,16 @@ const OrbitGame = () => {
                         <span className="text-xl font-bold text-text-primary tabular-nums">{score}</span>
                         <span className="text-xs text-text-secondary">pts</span>
                     </div>
-                    {phase === 'storm' && nextWave.length > 0 && (
-                        <div className="absolute left-1/2 -translate-x-1/2 bg-amber/10 border border-amber/20 rounded-xl px-2.5 py-1.5">
-                            {nextChips(nextWave.length >= 6 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
+                    {phase === 'storm' && nextWindow.length > 0 && (
+                        <div className="absolute left-1/2 -translate-x-1/2 bg-amber/10 border border-amber/20 rounded-xl px-2 py-1.5 max-w-[55%] overflow-hidden">
+                            {nextChips(nextWindow.length >= 7 ? 'w-4 h-4 text-[10px]' : nextWindow.length >= 6 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
                         </div>
                     )}
                     <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1 text-text-secondary" aria-label={`Flood meter ${meter}`}>
+                            <Droplets size={14} className="text-amber" />
+                            <span className="text-sm font-semibold tabular-nums">{meter}</span>
+                        </span>
                         <span className="flex items-center gap-1 text-text-secondary" aria-label={`Wave ${wavesDropped}`}>
                             <Hourglass size={14} className="text-amber" />
                             <span className="text-sm font-semibold tabular-nums">{wavesDropped}</span>
@@ -1101,14 +1143,38 @@ const OrbitGame = () => {
                         <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
                     </div>
 
+                    {/* Flood meter: the next wave's size. Dark base = the floor (sea level) */}
+                    <div className="relative">
+                        <div className="bg-bg-secondary border border-secondary/20 rounded-xl p-3 pt-4 flex gap-1 justify-center">
+                            {Array.from({ length: METER_MAX }, (_, i) => (
+                                <span
+                                    key={i}
+                                    className={cn(
+                                        'w-3.5 h-5 rounded-sm transition-colors duration-200',
+                                        i < meterFloor(wavesDropped) ? 'bg-amber-dark'
+                                            : i < meter ? 'bg-amber'
+                                            : 'bg-secondary/20'
+                                    )}
+                                />
+                            ))}
+                        </div>
+                        <div className="absolute -top-3 left-4">
+                            <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
+                                Flood {meter}
+                            </span>
+                        </div>
+                    </div>
+
                     {/* Mode */}
                     <div className="flex justify-center">{modePills}</div>
 
-                    {/* Next drop */}
-                    {phase === 'storm' && nextWave.length > 0 && (
+                    {/* Next drop: grows and shrinks with the meter */}
+                    {phase === 'storm' && nextWindow.length > 0 && (
                         <div className="relative">
                             <div className="bg-amber/10 border border-amber/20 rounded-xl p-3">
-                                <div className="flex items-center justify-center">{nextChips('w-7 h-7 text-xs')}</div>
+                                <div className="flex items-center justify-center flex-wrap gap-y-1">
+                                    {nextChips(nextWindow.length >= 8 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
+                                </div>
                             </div>
                             <div className="absolute -top-3 left-4">
                                 <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">Next</span>
@@ -1340,8 +1406,8 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin freely.</span> Drag around a tile to spin its ring of neighbours — spins never end your turn.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spins pump the flood.</span> Drag around a tile to spin its ring — free, anytime, but every spin raises the flood meter by 2. Past 10 it spills instantly.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Mind the meter.</span> After every word or pass, the meter is how many tiles fall. Words drain it — longer words drain more — and the sea level slowly rises.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
