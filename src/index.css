@@ -1389,6 +1389,16 @@ button {
   background-color: rgba(245, 158, 11, 0.18);
 }
 
+/* Spent pivot spots: a ring was orbited off this cell, it can't pivot again.
+   Declared after the ring tint so the dark spot wins inside an armed ring */
+.orbit-cell--spent .orbit-hexbg {
+  background-color: rgba(68, 64, 60, 0.32);
+}
+
+.orbit-cell--spent .orbit-tile:not(.orbit-tile--selected):not(.orbit-tile--invalid) {
+  filter: brightness(0.88);
+}
+
 @keyframes orbitJiggle {
   0%, 100% { transform: rotate(-3.5deg) translateY(-1px); }
   50% { transform: rotate(3.5deg) translateY(1px); }
