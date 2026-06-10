@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Undo2, RotateCw, ArrowLeftRight } from 'lucide-react';
@@ -205,4 +205,4 @@ const GameControls = ({
   );
 };
 
-export default memo(GameControls);
+export default GameControls;

@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Trophy, Hourglass } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -274,4 +274,4 @@ const WaxleMobileGameControls = ({
   );
 };
 
-export default memo(WaxleMobileGameControls);
+export default WaxleMobileGameControls;
