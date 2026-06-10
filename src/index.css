@@ -1371,6 +1371,13 @@ button {
   }
 }
 
+/* App shell height: dvh tracks the mobile URL bar showing/hiding, so
+   vertically centred content stays centred in the VISIBLE area */
+.app-height {
+  height: 100vh; /* fallback */
+  height: 100dvh;
+}
+
 /* ==================== Orbit prototype (/orbit) ==================== */
 
 .orbit-cell {

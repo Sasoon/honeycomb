@@ -27,7 +27,7 @@ function AppContent() {
   const closeMenu = () => setIsSidebarOpen(false);
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="app-height flex flex-col">
       <Header toggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
       <MobileSidebar isOpen={isSidebarOpen} onClose={closeMenu} />
       <Toaster
