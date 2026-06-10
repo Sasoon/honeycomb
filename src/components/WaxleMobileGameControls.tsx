@@ -115,7 +115,7 @@ const WaxleMobileGameControls = ({
                 <span className="font-semibold text-amber bg-amber/10 px-2 py-0.5 rounded-full text-xs">
                   <OptimizedCounter 
                     value={score} 
-                    duration={0.65}
+                    duration={1.0}
                     animationType="ticker"
                     className="tabular-nums"
                     delay={0}
@@ -154,7 +154,7 @@ const WaxleMobileGameControls = ({
                 <span className="font-semibold tabular-nums text-xs">
                   <OptimizedCounter 
                     value={score}
-                    duration={0.65}
+                    duration={1.0}
                     animationType="ticker"
                     className="tabular-nums"
                     delay={0}
