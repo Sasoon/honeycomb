@@ -39,11 +39,6 @@ const LS_ONBOARDED = 'waxle-orbit-onboarded-v4';
 const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
 ];
-// Distance-2 shell, clockwise from top-left (12 slots on a full board)
-const RING2_OFFSETS: Array<[number, number]> = [
-    [-2, -1], [-2, 0], [-2, 1], [-1, 1.5], [0, 2], [1, 1.5],
-    [2, 1], [2, 0], [2, -1], [1, -1.5], [0, -2], [-1, -1.5],
-];
 
 // Classic tile metrics (70px tiles, uniform hex lattice spacing)
 const TILE_W = 70;
@@ -54,10 +49,6 @@ const COLS = Math.max(...ROW_COUNTS);
 const BOARD_W = (COLS - 1) * PITCH_X + TILE_W;
 const BOARD_H = (ROW_COUNTS.length - 1) * PITCH_Y + TILE_H;
 const GUIDE_R = PITCH_X;
-const GUIDE_R2 = PITCH_X * 1.95;
-const LAYER_SPLIT = 1.35; // annulus boundary between ring 1 and ring 2, in PITCH_X units
-const FLICK_MS = 220;
-const FLICK_MIN_DEG = 8;
 
 const cellX = (c: HexCell) => c.position.col * PITCH_X;
 const cellY = (c: HexCell) => c.position.row * PITCH_Y;
@@ -88,14 +79,7 @@ type Mode = 'daily' | 'practice';
 type Action = 'word' | 'pass';
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 type ClearFx = { id: string; letter: string; left: number; top: number };
-type RingInfo = {
-    pivotId: string;
-    cells: HexCell[];
-    slots: Array<{ x: number; y: number }>;
-    n: number;
-    layer: 1 | 2;
-    degPerStep: number;
-};
+type RingInfo = { pivotId: string; cells: HexCell[]; slots: Array<{ x: number; y: number }>; n: number };
 type Snapshot = {
     kind: 'spin' | 'turn';
     letters: Array<[string, string]>;
@@ -239,7 +223,6 @@ const OrbitGame = () => {
     const [match, setMatch] = useState<string | null>(null);
     const [usedPivots, setUsedPivots] = useState<string[]>([]);
     const [armed, setArmed] = useState(false);
-    const [ringLayer, setRingLayer] = useState<1 | 2>(1);
     const [statsOpen, setStatsOpen] = useState(false);
     const [previewSteps, setPreviewSteps] = useState(0);
     const [dragging, setDragging] = useState(false);
@@ -270,8 +253,6 @@ const OrbitGame = () => {
         active: boolean;
         lastAngle: number;
         accum: number;
-        startAccum: number;
-        startTime: number;
         lastDetent: number;
         raf: number;
         pendingP: number;
@@ -296,30 +277,6 @@ const OrbitGame = () => {
         }
         return ring;
     }, [byPos]);
-
-    const ring2Of = useCallback((pivot: HexCell): HexCell[] => {
-        const ring: HexCell[] = [];
-        for (const [dr, dc] of RING2_OFFSETS) {
-            const n = byPos.get(`${pivot.position.row + dr},${pivot.position.col + dc}`);
-            if (n) ring.push(n);
-        }
-        return ring;
-    }, [byPos]);
-
-    const buildRing = useCallback((pivot: HexCell, layer: 1 | 2): RingInfo | null => {
-        const cells = layer === 2 ? ring2Of(pivot) : ringOf(pivot);
-        if (cells.length < 3) return null;
-        return {
-            pivotId: pivot.id,
-            cells,
-            slots: cells.map(c => ({ x: cellX(c), y: cellY(c) })),
-            n: cells.length,
-            layer,
-            // Ring 2 detents are 30°: matched to its 12-slot geometry so the
-            // physical sweep per step feels the same as ring 1
-            degPerStep: layer === 2 ? 30 : 60,
-        };
-    }, [ringOf, ring2Of]);
 
     const tileEl = useCallback((id: string) =>
         boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`) ?? null, []);
@@ -583,16 +540,12 @@ const OrbitGame = () => {
 
     useEffect(() => {
         setArmed(false);
-        setRingLayer(1);
         if (!pivotCell) return;
         const t = window.setTimeout(() => setArmed(true), HANDLE_DELAY_MS);
         return () => window.clearTimeout(t);
     }, [pivotCell]);
 
     useEffect(() => {
-        // A gesture in flight owns the ring (instant-arm drags build it on
-        // pointerdown); rebuilding here would clear its transforms mid-drag
-        if (dragRef.current) return;
         const prev = ringRef.current;
         if (prev) {
             prev.cells.forEach(c => {
@@ -602,16 +555,23 @@ const OrbitGame = () => {
         }
         previewRef.current = 0;
         setPreviewSteps(0);
-        ringRef.current = (pivotCell && armed && phase !== 'over')
-            ? buildRing(pivotCell, ringLayer)
-            : null;
-    }, [pivotCell, armed, phase, ringLayer, buildRing, tileEl]);
+        if (pivotCell && armed && phase !== 'over') {
+            const cells = ringOf(pivotCell);
+            ringRef.current = {
+                pivotId: pivotCell.id,
+                cells,
+                slots: cells.map(c => ({ x: cellX(c), y: cellY(c) })),
+                n: cells.length,
+            };
+        } else {
+            ringRef.current = null;
+        }
+    }, [pivotCell, armed, phase, ringOf, tileEl]);
 
     const ringIds = useMemo(() => {
         if (!pivotCell || !armed) return new Set<string>();
-        const cells = ringLayer === 2 ? ring2Of(pivotCell) : ringOf(pivotCell);
-        return new Set(cells.map(c => c.id));
-    }, [pivotCell, armed, ringLayer, ringOf, ring2Of]);
+        return new Set(ringOf(pivotCell).map(c => c.id));
+    }, [pivotCell, armed, ringOf]);
 
     // ---------- rotation preview / commit ----------
 
@@ -709,29 +669,16 @@ const OrbitGame = () => {
     }, []);
 
     const onBoardPointerDown = useCallback((e: React.PointerEvent) => {
-        if (phase === 'over' || !pivotCell) return;
-        const pivotWrapper = boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(pivotCell.id)}"]`);
+        const ring = ringRef.current;
+        if (!ring || phase === 'over') return;
+        const pivotWrapper = boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(ring.pivotId)}"]`);
         if (!pivotWrapper) return;
         const r = pivotWrapper.getBoundingClientRect();
         const cx = r.x + r.width / 2;
         const cy = r.y + r.height / 2;
+        const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
         const unit = r.width / TILE_W;
-        const d = Math.hypot(e.clientX - cx, e.clientY - cy) / (PITCH_X * unit);
-        if (d < 0.55 || d > 2.6) return;
-        // Grab distance picks the shell: close spins ring 1, wide spins ring 2
-        const layer: 1 | 2 = d < LAYER_SPLIT ? 1 : 2;
-        let ring = ringRef.current;
-        if (!ring || ring.pivotId !== pivotCell.id || ring.layer !== layer) {
-            // Instant arm: build the ring on demand instead of waiting out
-            // the visual delay, dropping any preview pending on another layer
-            if (ring && previewRef.current !== 0) clearPreviewTransforms(false);
-            previewRef.current = 0;
-            setPreviewSteps(0);
-            ring = buildRing(pivotCell, layer);
-            if (!ring) return;
-            ringRef.current = ring;
-            setRingLayer(layer);
-        }
+        if (dist < 0.55 * PITCH_X * unit || dist > 1.7 * PITCH_X * unit) return;
         dragRef.current = {
             pointerId: e.pointerId,
             startX: e.clientX,
@@ -740,14 +687,12 @@ const OrbitGame = () => {
             pivotCy: cy,
             active: false,
             lastAngle: 0,
-            accum: previewRef.current * ring.degPerStep,
-            startAccum: previewRef.current * ring.degPerStep,
-            startTime: performance.now(),
+            accum: previewRef.current * DEG_PER_STEP,
             lastDetent: previewRef.current,
             raf: 0,
             pendingP: previewRef.current,
         };
-    }, [phase, pivotCell, buildRing, clearPreviewTransforms]);
+    }, [phase]);
 
     const onBoardPointerMove = useCallback((e: React.PointerEvent) => {
         const d = dragRef.current;
@@ -758,7 +703,6 @@ const OrbitGame = () => {
             d.lastAngle = pointerAngle(d.startX, d.startY);
             suppressClickRef.current = true;
             setDragging(true);
-            setArmed(true); // an active drag shows the ring without the tap delay
             boardRef.current?.setPointerCapture(e.pointerId);
         }
         const ang = pointerAngle(e.clientX, e.clientY);
@@ -767,7 +711,7 @@ const OrbitGame = () => {
         if (delta < -180) delta += 360;
         d.lastAngle = ang;
         d.accum += delta;
-        d.pendingP = d.accum / (ringRef.current?.degPerStep ?? DEG_PER_STEP);
+        d.pendingP = d.accum / DEG_PER_STEP;
         const detent = Math.round(d.pendingP);
         if (detent !== d.lastDetent) {
             d.lastDetent = detent;
@@ -792,16 +736,8 @@ const OrbitGame = () => {
         // clear the suppression right after so the next real tap isn't eaten
         window.setTimeout(() => { suppressClickRef.current = false; }, 0);
         const p = d.pendingP;
-        let k = Math.round(p);
+        const k = Math.round(p);
         const ring = ringRef.current;
-        // Flick: a short sharp drag that didn't reach the detent still
-        // commits one step in its direction
-        if (ring && k === 0) {
-            const swept = d.accum - d.startAccum;
-            if (performance.now() - d.startTime < FLICK_MS && Math.abs(swept) >= FLICK_MIN_DEG) {
-                k = Math.sign(swept);
-            }
-        }
         if (!ring || mod(k, ring.n) === 0) {
             previewRef.current = 0;
             setPreviewSteps(0);
@@ -1229,58 +1165,42 @@ const OrbitGame = () => {
                 </div>
             </div>
 
-            {/* Main play area: the board group floats to the vertical centre.
-                overflow-x-clip stops the outer guide circle widening the page */}
-            <div className="flex-1 flex flex-col items-center px-3 py-4 overflow-x-clip">
+            {/* Main play area: the board group floats to the vertical centre */}
+            <div className="flex-1 flex flex-col items-center px-3 py-4">
                 <div className="my-auto flex flex-col items-center w-full">
                 {/* Board */}
                 <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
                     <div
                         ref={boardRef}
-                        className={cn('relative', pivotCell && 'touch-none', dragging && 'orbit-dragging')}
+                        className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
                         style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
                         onPointerDown={onBoardPointerDown}
                         onPointerMove={onBoardPointerMove}
                         onPointerUp={onBoardPointerUp}
                         onPointerCancel={onBoardPointerUp}
                     >
-                        {pivotCell && armed && phase !== 'over' && (() => {
-                            const hasOuter = ring2Of(pivotCell).length >= 3;
-                            const size = (hasOuter ? GUIDE_R2 : GUIDE_R) * 2 + 12;
-                            return (
-                                <svg
-                                    className="orbit-guide"
-                                    width={size}
-                                    height={size}
-                                    style={{
-                                        left: cellX(pivotCell) + TILE_W / 2 - size / 2,
-                                        top: cellY(pivotCell) + TILE_H / 2 - size / 2,
-                                    }}
-                                    aria-hidden="true"
-                                >
-                                    <circle
-                                        cx={size / 2}
-                                        cy={size / 2}
-                                        r={GUIDE_R}
-                                        fill="none"
-                                        stroke={ringLayer === 1 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(245, 158, 11, 0.2)'}
-                                        strokeWidth="2"
-                                        strokeDasharray="7 6"
-                                    />
-                                    {hasOuter && (
-                                        <circle
-                                            cx={size / 2}
-                                            cy={size / 2}
-                                            r={GUIDE_R2}
-                                            fill="none"
-                                            stroke={ringLayer === 2 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(245, 158, 11, 0.2)'}
-                                            strokeWidth="2"
-                                            strokeDasharray="7 6"
-                                        />
-                                    )}
-                                </svg>
-                            );
-                        })()}
+                        {pivotCell && armed && phase !== 'over' && (
+                            <svg
+                                className="orbit-guide"
+                                width={GUIDE_R * 2 + 12}
+                                height={GUIDE_R * 2 + 12}
+                                style={{
+                                    left: cellX(pivotCell) + TILE_W / 2 - GUIDE_R - 6,
+                                    top: cellY(pivotCell) + TILE_H / 2 - GUIDE_R - 6,
+                                }}
+                                aria-hidden="true"
+                            >
+                                <circle
+                                    cx={GUIDE_R + 6}
+                                    cy={GUIDE_R + 6}
+                                    r={GUIDE_R}
+                                    fill="none"
+                                    stroke="rgba(245, 158, 11, 0.45)"
+                                    strokeWidth="2"
+                                    strokeDasharray="7 6"
+                                />
+                            </svg>
+                        )}
 
                         {grid.map(cell => {
                             const isSelected = selected.includes(cell.id);
@@ -1355,7 +1275,7 @@ const OrbitGame = () => {
                         </span>
                     ) : (
                         <span className="text-xs text-text-muted italic">
-                            Tap adjacent tiles in order · drag around a tile to spin — grab wider for the outer ring
+                            Tap adjacent tiles in order · drag around a tile to spin
                         </span>
                     )}
                 </div>
@@ -1429,7 +1349,7 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — grab wider to spin the outer ring. Each spot pivots once; clear a word over it to win it back.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — each spot pivots only once, but clearing a word over it wins it back.</p>
                                 <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Outlast the flood.</span> Every word or pass drops a wave, and the waves keep growing — score as high as you can before the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
