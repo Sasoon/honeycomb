@@ -25,10 +25,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // Web worker should be separate
-          if (id.includes('dictionaryWorker')) {
-            return 'worker';
-          }
           // Vendor libs - split by size/usage
           if (id.includes('node_modules')) {
             if (id.includes('react') || id.includes('react-dom')) {

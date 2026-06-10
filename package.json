@@ -13,7 +13,8 @@
     "playwright:install": "playwright install --with-deps",
     "blobs:list-daily": "netlify blobs:list leaderboard-daily --prefix dev_",
     "blobs:list-alltime": "netlify blobs:list leaderboard-alltime --prefix dev_",
-    "blobs:clear-dev": "curl -X POST http://localhost:8888/.netlify/functions/clear-dev-data"
+    "blobs:clear-dev": "curl -X POST http://localhost:8888/.netlify/functions/clear-dev-data",
+    "build:dictionary": "node scripts/build-dictionary.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.9",
