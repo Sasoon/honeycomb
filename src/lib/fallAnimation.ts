@@ -87,3 +87,22 @@ export function buildFallFrames(
 
     return { frames, totalMs };
 }
+
+/**
+ * Per-segment easing functions that keep speed continuous through every
+ * waypoint. Globally the fall follows s(t) = D·t² (constant acceleration);
+ * within segment i, spanning normalised times [a, b], local progress p maps
+ * to distance fraction ((a + p·(b−a))² − a²) / (b² − a²). With linear
+ * per-segment easing instead, speed is constant inside each segment and
+ * jumps at waypoints — the visible jank this removes.
+ */
+export function gravityEasings(times: number[]): Array<(p: number) => number> {
+    const eases: Array<(p: number) => number> = [];
+    for (let i = 0; i < times.length - 1; i++) {
+        const a = times[i];
+        const b = times[i + 1];
+        const denom = b * b - a * a || 1;
+        eases.push((p: number) => ((a + p * (b - a)) ** 2 - a * a) / denom);
+    }
+    return eases;
+}

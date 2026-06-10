@@ -178,9 +178,15 @@ button {
   width: 100%;
   padding-bottom: 115.47%; /* = 100% * cos(30°) / sin(60°) */
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  transition: transform 0.2s ease;
+  /* background/filter ease so selection and highlight changes glide instead of snapping */
+  transition: transform 0.2s ease, background-color 0.18s ease, filter 0.18s ease;
   cursor: pointer;
   z-index: 1;
+}
+
+/* Letters fade in/out quickly (covers the falling-overlay handoff) */
+.hex-grid__item .letter-tile {
+  transition: opacity 0.12s ease;
 }
 
 /* Hover lift only on devices that actually hover (prevents sticky scale on touch) */
