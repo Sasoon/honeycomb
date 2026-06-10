@@ -21,7 +21,7 @@ const ROW_COUNTS = [3, 4, 5, 4, 3];
 // passes each grow it by one — for good. The only relief: a word at
 // least as long as the wave pushes it back one (out-spell the flood).
 // The floor (sea level) creeps up every 4 waves
-const METER_START = 3;
+const METER_START = 4;
 // The sea never sits below 3: cooling brakes your own ratcheting, it
 // can't drain the opening to a trickle
 const meterFloor = (waves: number) => 3 + Math.floor(waves / 4);
@@ -291,12 +291,17 @@ const OrbitGame = () => {
     const tileEl = useCallback((id: string) =>
         boardRef.current?.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`) ?? null, []);
 
+    // Moves overshoot the slot slightly and settle back — tiles land with
+    // weight instead of stopping dead
     const queueMove = useCallback((id: string, dx: number, dy: number) => {
         pendingAnimsRef.current.set(id, {
-            keyframes: [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
-            duration: 180,
+            keyframes: [
+                { transform: `translate(${dx}px, ${dy}px)`, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' },
+                { transform: `translate(${-dx * 0.07}px, ${-dy * 0.07}px)`, offset: 0.7, easing: 'ease-out' },
+                { transform: 'translate(0, 0)' },
+            ],
+            duration: 270,
             delay: 0,
-            easing: 'cubic-bezier(0.25, 0.8, 0.4, 1)',
         });
     }, []);
 
@@ -470,14 +475,21 @@ const OrbitGame = () => {
             const total = cum[cum.length - 1];
             if (total <= 0) return;
             const last = pts[pts.length - 1];
+            // The descent fills the first 80% of the timeline; the tail is a
+            // squash-and-settle pop so tiles land with weight
+            const kfs: Keyframe[] = pts.map((p, i) => ({
+                transform: `translate(${p.x - last.x}px, ${p.y - last.y}px) scale(1)`,
+                opacity: i === 0 ? 0 : 1,
+                offset: (1 - Math.sqrt(1 - cum[i] / total)) * 0.8,
+                easing: 'linear',
+            }));
+            kfs.push(
+                { transform: 'translate(0, 0) scale(1.09)', opacity: 1, offset: 0.9, easing: 'ease-out' },
+                { transform: 'translate(0, 0) scale(1)', opacity: 1, offset: 1 }
+            );
             pendingAnimsRef.current.set(spec.cellId, {
-                keyframes: pts.map((p, i) => ({
-                    transform: `translate(${p.x - last.x}px, ${p.y - last.y}px)`,
-                    opacity: i === 0 ? 0 : 1,
-                    offset: 1 - Math.sqrt(1 - cum[i] / total),
-                    easing: 'linear',
-                })),
-                duration: Math.min(560, Math.max(280, 150 * Math.sqrt(total / TILE_H))),
+                keyframes: kfs,
+                duration: Math.min(660, Math.max(360, 150 * Math.sqrt(total / TILE_H) + 100)),
                 delay: idx * FLOOD_STAGGER_MS,
             });
         });
