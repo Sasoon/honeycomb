@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { Flame, RotateCw, Undo2 } from 'lucide-react';
+import { ChevronDown, Flame, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
@@ -15,30 +15,27 @@ import { haptics } from '../lib/haptics';
 
 // ==================== ORBIT TUNING ====================
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
-// cluster words + a scarce spin bank are the player's power
+// path words + orbits (free, but once per spot) are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
 // The flood escalates: late waves nearly fill what early waves trickled
 const WAVE_SIZES = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6];
 const WAVES = WAVE_SIZES.length;
 const SEED_TILES = 8;
 const TOTAL_LETTERS = SEED_TILES + WAVE_SIZES.reduce((a, b) => a + b, 0); // 50
-const CLUSTER_MIN = 3; // smallest playable word
-const CLUSTER_MAX = 8; // largest anagram indexed
+const WORD_MIN = 3; // smallest playable word
+const WORD_MAX = 8; // largest word indexed
 const FLOOD_STAGGER_MS = 50;
 const HANDLE_DELAY_MS = 250;
 const DRAG_THRESHOLD_PX = 8;
 const DEG_PER_STEP = 60;
 const WHEEL_PER_STEP = 40;
 const DAILY_UNDOS = 3;
-const SPIN_START = 3;
-const SPIN_MAX = 5;
-const SPIN_EARN_LEN = 5; // words this long or longer earn a spin back
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-const LS_RUN = 'waxle-orbit-run-v3';
+const LS_RUN = 'waxle-orbit-run-v4';
 const LS_STATS = 'waxle-orbit-stats-v1';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v2';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v3';
 
 const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
@@ -92,7 +89,7 @@ type Snapshot = {
     score: number;
     words: string[];
     actionLog: Action[];
-    spins: number;
+    usedPivots: string[];
     rngState: number;
 };
 
@@ -132,8 +129,6 @@ const yesterdayOf = (date: string) => {
     const d = new Date(Date.parse(date) - 86400000);
     return d.toISOString().slice(0, 10);
 };
-const sortKey = (letters: string) => letters.toLowerCase().split('').sort().join('');
-
 function loadStats(): OrbitStats {
     try {
         const raw = localStorage.getItem(LS_STATS);
@@ -142,25 +137,23 @@ function loadStats(): OrbitStats {
     return { streak: 0, lastDate: '', games: 0, sweeps: 0, results: {} };
 }
 
-// Anagram index: sorted letters -> a representative dictionary word.
-// Cluster words match if the selected letters anagram to any entry
-let anagramPromise: Promise<Map<string, string>> | null = null;
-function loadAnagrams(): Promise<Map<string, string>> {
-    if (!anagramPromise) {
-        anagramPromise = fetch('/dictionary.txt')
+// Dictionary words, keyed exactly: a selection is valid only if the tiles
+// spell the word in tap order
+let wordSetPromise: Promise<Set<string>> | null = null;
+function loadWordSet(): Promise<Set<string>> {
+    if (!wordSetPromise) {
+        wordSetPromise = fetch('/dictionary.txt')
             .then(r => r.text())
             .then(text => {
-                const map = new Map<string, string>();
+                const set = new Set<string>();
                 for (const w of text.split('\n')) {
-                    if (w.length < CLUSTER_MIN || w.length > CLUSTER_MAX) continue;
-                    const key = sortKey(w);
-                    if (!map.has(key)) map.set(key, w);
+                    if (w.length >= WORD_MIN && w.length <= WORD_MAX) set.add(w);
                 }
-                return map;
+                return set;
             })
-            .catch(() => { anagramPromise = null; return new Map<string, string>(); });
+            .catch(() => { wordSetPromise = null; return new Set<string>(); });
     }
-    return anagramPromise;
+    return wordSetPromise;
 }
 
 // Flood placement: globally deepest reachable cell per tile
@@ -217,37 +210,32 @@ function orbitFlood(
     return { newGrid, paths, unplaced };
 }
 
-// Cleanup dead-end detection: does any connected cluster of 3-5 tiles
-// anagram to a word?
-function anyClusterWord(grid: HexCell[], index: Map<string, string>): boolean {
+// Cleanup dead-end detection: does any linear adjacent path of 3-5 tiles
+// spell a word?
+function anyPathWord(grid: HexCell[], words: Set<string>): boolean {
     const lettered = grid.filter(c => c.letter);
-    if (lettered.length < CLUSTER_MIN) return false;
+    if (lettered.length < WORD_MIN) return false;
     const adj = new Map<string, HexCell[]>();
     lettered.forEach(c => {
         adj.set(c.id, lettered.filter(o => o.id !== c.id && areCellsAdjacent(c, o)));
     });
-    const seen = new Set<string>();
     let budget = 30000;
 
-    const grow = (set: HexCell[]): boolean => {
+    const walk = (path: HexCell[], used: Set<string>): boolean => {
         if (budget-- <= 0) return false;
-        if (set.length >= CLUSTER_MIN) {
-            const key = sortKey(set.map(c => c.letter).join(''));
-            if (index.has(key)) return true;
+        if (path.length >= WORD_MIN && words.has(path.map(c => c.letter).join('').toLowerCase())) {
+            return true;
         }
-        if (set.length >= 5) return false;
-        const inSet = new Set(set.map(c => c.id));
-        const frontier = new Map<string, HexCell>();
-        set.forEach(c => adj.get(c.id)!.forEach(n => { if (!inSet.has(n.id)) frontier.set(n.id, n); }));
-        for (const n of frontier.values()) {
-            const ids = [...inSet, n.id].sort().join('|');
-            if (seen.has(ids)) continue;
-            seen.add(ids);
-            if (grow([...set, n])) return true;
+        if (path.length >= 5) return false;
+        for (const n of adj.get(path[path.length - 1].id)!) {
+            if (used.has(n.id)) continue;
+            used.add(n.id);
+            if (walk([...path, n], used)) return true;
+            used.delete(n.id);
         }
         return false;
     };
-    return lettered.some(c => grow([c]));
+    return lettered.some(c => walk([c], new Set([c.id])));
 }
 
 const OrbitGame = () => {
@@ -263,8 +251,9 @@ const OrbitGame = () => {
     const [actionLog, setActionLog] = useState<Action[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
     const [match, setMatch] = useState<string | null>(null);
-    const [spins, setSpins] = useState(SPIN_START);
+    const [usedPivots, setUsedPivots] = useState<string[]>([]);
     const [armed, setArmed] = useState(false);
+    const [statsOpen, setStatsOpen] = useState(false);
     const [previewSteps, setPreviewSteps] = useState(0);
     const [dragging, setDragging] = useState(false);
     const [clearFx, setClearFx] = useState<ClearFx[]>([]);
@@ -351,7 +340,7 @@ const OrbitGame = () => {
         setActionLog([]);
         setSelected([]);
         setMatch(null);
-        setSpins(SPIN_START);
+        setUsedPivots([]);
         setUndoStack([]);
         setUndosUsed(0);
     }, [dateStr]);
@@ -401,7 +390,7 @@ const OrbitGame = () => {
                     setScore(run.score);
                     setWords(run.words);
                     setActionLog(run.actionLog);
-                    setSpins(typeof run.spins === 'number' ? run.spins : SPIN_START);
+                    setUsedPivots(run.usedPivots || []);
                     setUndoStack(run.undoStack || []);
                     setUndosUsed(run.undosUsed || 0);
                     return;
@@ -424,14 +413,14 @@ const OrbitGame = () => {
                 score,
                 words,
                 actionLog,
-                spins,
+                usedPivots,
                 rngState: rngRef.current?.state ?? 0,
                 letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
                 undoStack,
                 undosUsed,
             }));
         } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, spins, undoStack, undosUsed]);
+    }, [mode, dateStr, grid, phase, wavesDropped, nextWave, score, words, actionLog, usedPivots, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || !endReason || recordedRef.current) return;
@@ -523,9 +512,9 @@ const OrbitGame = () => {
     useEffect(() => {
         if (phase !== 'cleanup') return;
         let cancelled = false;
-        loadAnagrams().then(index => {
-            if (cancelled || index.size === 0) return;
-            if (!anyClusterWord(grid, index)) {
+        loadWordSet().then(words => {
+            if (cancelled || words.size === 0) return;
+            if (!anyPathWord(grid, words)) {
                 setPhase('over');
                 setEndReason(grid.every(c => !c.letter) ? 'swept' : 'finished');
                 if (grid.some(c => c.letter)) toastService.success('No words left — run complete');
@@ -545,9 +534,9 @@ const OrbitGame = () => {
         score,
         words: [...words],
         actionLog: [...actionLog],
-        spins,
+        usedPivots: [...usedPivots],
         rngState: rngRef.current?.state ?? 0,
-    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog, spins]);
+    }), [grid, phase, wavesDropped, nextWave, score, words, actionLog, usedPivots]);
 
     const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
@@ -580,7 +569,7 @@ const OrbitGame = () => {
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
-        setSpins(snap.spins);
+        setUsedPivots(snap.usedPivots);
         setUndoStack(s => s.slice(0, -1));
         if (snap.kind === 'turn') setUndosUsed(u => u + 1);
         setSelected([]);
@@ -597,13 +586,13 @@ const OrbitGame = () => {
         [selected, grid]
     );
 
-    const spinAvailable = phase !== 'over' && spins > 0;
-
+    // A spot can pivot once per run: orbiting off it darkens it for good
     const pivotCell = useMemo(() => {
-        if (!spinAvailable || selected.length !== 1) return null;
+        if (phase === 'over' || selected.length !== 1) return null;
         const c = grid.find(x => x.id === selected[0]) || null;
-        return c && ringOf(c).length >= 3 ? c : null;
-    }, [spinAvailable, selected, grid, ringOf]);
+        if (!c || usedPivots.includes(c.id)) return null;
+        return ringOf(c).length >= 3 ? c : null;
+    }, [phase, selected, grid, usedPivots, ringOf]);
 
     useEffect(() => {
         setArmed(false);
@@ -687,7 +676,7 @@ const OrbitGame = () => {
         clearPreviewTransforms(true);
     }, [clearPreviewTransforms]);
 
-    // Spends a spin: rotates the ring without ending the turn
+    // Orbits are free and never end the turn, but each spot pivots only once
     const commitRotation = useCallback((k: number, fromP: number) => {
         const ring = ringRef.current;
         if (!ring || phase === 'over') return;
@@ -723,7 +712,7 @@ const OrbitGame = () => {
         setPreviewSteps(0);
         setSelected([]);
         setMatch(null);
-        setSpins(s => Math.max(0, s - 1));
+        setUsedPivots(u => [...u, ring.pivotId]);
         haptics.success();
         setGrid(newGrid);
     }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
@@ -846,7 +835,7 @@ const OrbitGame = () => {
     // ---------- player actions ----------
 
     const submit = useCallback(() => {
-        if (phase === 'over' || !match || selected.length < CLUSTER_MIN) return;
+        if (phase === 'over' || !match || selected.length < WORD_MIN) return;
         pushUndo('turn');
         const clearedCells = selected
             .map(id => grid.find(c => c.id === id))
@@ -855,9 +844,8 @@ const OrbitGame = () => {
         const fx = clearedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
         const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
-        const earnsSpin = selected.length >= SPIN_EARN_LEN && spins < SPIN_MAX;
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: earnsSpin ? `+${selected.length} · +1 spin` : `+${selected.length}`, key: Date.now() });
+        setScoreFx({ x: cx, y: cy, text: `+${selected.length}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
         const t2 = window.setTimeout(() => setScoreFx(null), 750);
         fxTimersRef.current.push(t1, t2);
@@ -869,14 +857,13 @@ const OrbitGame = () => {
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
         setScore(s => s + selected.length);
-        if (earnsSpin) setSpins(s => Math.min(SPIN_MAX, s + 1));
         setWords(w => [...w, match]);
         setSelected([]);
         setMatch(null);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
         haptics.success();
         afterAction(newGrid);
-    }, [phase, match, selected, grid, spins, queueMove, afterAction, pushUndo]);
+    }, [phase, match, selected, grid, queueMove, afterAction, pushUndo]);
 
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
@@ -916,45 +903,31 @@ const OrbitGame = () => {
         }
         const idx = selected.indexOf(cell.id);
         if (idx !== -1) {
-            // Remove only if the remaining cluster stays connected
-            const rest = selected.filter(id => id !== cell.id);
-            if (rest.length <= 1) { setSelected(rest); return; }
-            const cells = rest.map(id => grid.find(c => c.id === id)!).filter(Boolean);
-            const seen = new Set<string>([cells[0].id]);
-            const queue = [cells[0]];
-            while (queue.length) {
-                const cur = queue.shift()!;
-                cells.forEach(o => {
-                    if (!seen.has(o.id) && areCellsAdjacent(cur, o)) { seen.add(o.id); queue.push(o); }
-                });
-            }
-            if (seen.size === cells.length) setSelected(rest);
-            else haptics.error();
+            // Tap the last tile to remove it; tap an earlier tile to trim back to it
+            setSelected(idx === selected.length - 1 ? selected.slice(0, -1) : selected.slice(0, idx + 1));
             return;
         }
         if (selected.length === 0) {
             setSelected([cell.id]);
             return;
         }
-        // Cluster rule: the tile just has to touch ANY selected tile
-        const touchesCluster = selected.some(id => {
-            const s = grid.find(c => c.id === id);
-            return s && areCellsAdjacent(cell, s);
-        });
-        if (touchesCluster) {
+        // Path rule: each tile must touch the LAST selected tile
+        const last = grid.find(c => c.id === selected[selected.length - 1]);
+        if (last && areCellsAdjacent(cell, last)) {
             setSelected([...selected, cell.id]);
         } else {
             setSelected([cell.id]);
         }
     }, [phase, selected, grid, commitRotation, resetPreview]);
 
-    // Anagram validation: any ordering of the cluster's letters
+    // Path validation: the tap-order letters must spell a dictionary word
     useEffect(() => {
-        if (selectedLetters.length < CLUSTER_MIN) { setMatch(null); return; }
+        if (selectedLetters.length < WORD_MIN) { setMatch(null); return; }
         const seq = ++validateSeqRef.current;
-        loadAnagrams().then(index => {
+        loadWordSet().then(words => {
             if (validateSeqRef.current !== seq) return;
-            setMatch(index.get(sortKey(selectedLetters)) ?? null);
+            const w = selectedLetters.toLowerCase();
+            setMatch(words.has(w) ? w : null);
         });
     }, [selectedLetters]);
 
@@ -1023,7 +996,7 @@ const OrbitGame = () => {
         try { localStorage.setItem(LS_ONBOARDED, '1'); } catch { /* non-fatal */ }
     }, []);
 
-    const wordState = selectedLetters.length >= CLUSTER_MIN ? (match ? 'valid' : 'invalid') : 'neutral';
+    const wordState = selectedLetters.length >= WORD_MIN ? (match ? 'valid' : 'invalid') : 'neutral';
     const dailyResult = stats.results[dateStr];
     const quietRing = previewSteps !== 0 || dragging;
 
@@ -1084,35 +1057,68 @@ const OrbitGame = () => {
 
     return (
         <div className="flex-1 flex flex-col md:flex-row bg-bg-primary select-none">
-            {/* Mobile top bar (classic flush header) */}
-            <div className={cn(
-                'md:hidden sticky top-0 z-10',
-                'bg-bg-primary border-b border-secondary/20',
-                'px-4 shadow-lg shadow-secondary/10',
-                'h-[60px] flex items-center justify-between'
-            )}>
-                <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-bold text-text-primary tabular-nums">{score}</span>
-                    <span className="text-xs text-text-secondary">/ {TOTAL_LETTERS}</span>
-                </div>
-                {phase === 'storm' && nextWave.length > 0 && (
-                    <div className="bg-amber/10 border border-amber/20 rounded-xl px-2 py-1.5">
-                        {nextChips('w-5 h-5 text-[11px]')}
+            {/* Mobile top bar (classic flush header, tap to expand stats) */}
+            <div className="md:hidden sticky top-0 z-30 w-full">
+                <div className={cn(
+                    'bg-bg-primary border-b border-secondary/20',
+                    'px-4 shadow-lg shadow-secondary/10 cursor-pointer',
+                    'active:bg-bg-secondary/50',
+                    'h-[60px] flex items-center justify-between'
+                )} onClick={() => setStatsOpen(o => !o)}>
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-bold text-text-primary tabular-nums">{score}</span>
+                        <span className="text-xs text-text-secondary">/ {TOTAL_LETTERS}</span>
                     </div>
-                )}
-                <div className="flex items-center gap-2">
-                    <span className={cn(
-                        'flex items-center gap-0.5 text-xs font-semibold',
-                        spins > 0 ? 'text-text-primary' : 'text-text-muted'
-                    )}>
-                        <RotateCw size={12} className="text-amber" /> {spins}
-                    </span>
-                    {stats.streak > 0 && (
-                        <span className="flex items-center gap-0.5 text-xs font-semibold text-amber">
-                            <Flame size={12} /> {stats.streak}
-                        </span>
+                    {phase === 'storm' && nextWave.length > 0 && (
+                        <div className="bg-amber/10 border border-amber/20 rounded-xl px-2 py-1.5">
+                            {nextChips('w-5 h-5 text-[11px]')}
+                        </div>
                     )}
-                    {waveDots}
+                    <div className="flex items-center gap-2">
+                        {stats.streak > 0 && (
+                            <span className="flex items-center gap-0.5 text-xs font-semibold text-amber">
+                                <Flame size={12} /> {stats.streak}
+                            </span>
+                        )}
+                        {waveDots}
+                        <div className={cn(
+                            'p-1 rounded-lg bg-secondary/10 transition-transform duration-200',
+                            statsOpen && 'rotate-180'
+                        )}>
+                            <ChevronDown size={16} className="text-text-secondary" />
+                        </div>
+                    </div>
+                </div>
+                {/* Expandable stats panel: clipped compositor slide (classic pattern) */}
+                <div className="absolute left-0 right-0 top-full overflow-hidden pointer-events-none">
+                    <div className={cn(
+                        'mobile-stats-panel bg-bg-primary border-b border-secondary/20',
+                        'shadow-xl shadow-secondary/20',
+                        statsOpen && 'show pointer-events-auto'
+                    )}>
+                        <div className="p-4 space-y-4">
+                            <div className="flex justify-center">{modePills}</div>
+                            <div className="bg-success/10 border border-success/20 rounded-2xl p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-semibold text-text-primary">Words Found</h3>
+                                    <span className="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">
+                                        {words.length}
+                                    </span>
+                                </div>
+                                {words.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                        {words.slice(-15).map((w, i) => (
+                                            <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
+                                                {w.toUpperCase()}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-text-muted italic text-center py-2">No words found yet</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1142,31 +1148,12 @@ const OrbitGame = () => {
                         </div>
                     </div>
 
-                    {/* Stats row */}
-                    <div className="flex justify-between gap-2">
-                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
-                            <div className="text-xl font-semibold text-text-primary tabular-nums">
-                                {wavesDropped}<span className="text-text-secondary text-sm">/{WAVES}</span>
-                            </div>
-                            <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
+                    {/* Wave progress */}
+                    <div className="bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
+                        <div className="text-xl font-semibold text-text-primary tabular-nums">
+                            {wavesDropped}<span className="text-text-secondary text-sm">/{WAVES}</span>
                         </div>
-                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
-                            <div className={cn(
-                                'text-xl font-semibold flex items-center justify-center gap-1',
-                                spins > 0 ? 'text-text-primary' : 'text-text-muted'
-                            )}>
-                                <RotateCw size={16} className="text-amber" />
-                                <span className="tabular-nums">{spins}</span>
-                            </div>
-                            <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Spins</div>
-                        </div>
-                        <div className="flex-1 bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
-                            <div className="text-xl font-semibold text-text-primary flex items-center justify-center gap-1">
-                                <Flame size={16} className="text-amber" />
-                                <span className="tabular-nums">{stats.streak}</span>
-                            </div>
-                            <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Streak</div>
-                        </div>
+                        <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
                     </div>
 
                     {/* Mode */}
@@ -1192,9 +1179,9 @@ const OrbitGame = () => {
                                 ? 'text-red-500 bg-red-500/10 border border-red-500/30'
                                 : 'text-amber bg-amber/10 border border-amber/30'
                         )}>
-                            {match
-                                ? <>{match.toUpperCase()}<span className="ml-2 text-sm">+{selected.length}</span></>
-                                : (selectedLetters || <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>)}
+                            {selectedLetters
+                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{selected.length}</span>}</>
+                                : <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>}
                         </div>
                         <div className="absolute -top-3 left-4">
                             <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">Current</span>
@@ -1225,8 +1212,9 @@ const OrbitGame = () => {
                 </div>
             </div>
 
-            {/* Main play area */}
-            <div className="flex-1 flex flex-col items-center px-3 pt-4 pb-8">
+            {/* Main play area: the board group floats to the vertical centre */}
+            <div className="flex-1 flex flex-col items-center px-3 py-4">
+                <div className="my-auto flex flex-col items-center w-full">
                 {/* Board */}
                 <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
                     <div
@@ -1265,6 +1253,9 @@ const OrbitGame = () => {
                             const isSelected = selected.includes(cell.id);
                             const inRing = ringIds.has(cell.id);
                             const isPivot = pivotCell?.id === cell.id && armed;
+                            // Desync the ring jiggle: 31/17 mod 9 puts every hex-neighbour
+                            // direction on a different phase of the 230ms cycle
+                            const jigglePhase = `${-((cell.position.row * 31 + Math.round(cell.position.col * 2) * 17) % 9) * 26}ms`;
                             return (
                                 <div
                                     key={cell.id}
@@ -1274,17 +1265,21 @@ const OrbitGame = () => {
                                     className={cn(
                                         'orbit-cell',
                                         inRing && 'orbit-cell--ring',
-                                        inRing && quietRing && 'orbit-cell--quiet'
+                                        inRing && quietRing && 'orbit-cell--quiet',
+                                        usedPivots.includes(cell.id) && 'orbit-cell--spent'
                                     )}
                                     style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
                                 >
                                     <div className="orbit-hexbg" />
                                     {cell.letter && (
-                                        <div className={cn(
-                                            'orbit-tile',
-                                            isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
-                                            isPivot && 'orbit-tile--pivot'
-                                        )}>
+                                        <div
+                                            className={cn(
+                                                'orbit-tile',
+                                                isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected'),
+                                                isPivot && 'orbit-tile--pivot'
+                                            )}
+                                            style={{ animationDelay: jigglePhase }}
+                                        >
                                             {cell.letter}
                                         </div>
                                     )}
@@ -1322,17 +1317,16 @@ const OrbitGame = () => {
                             wordState === 'invalid' && 'text-red-500 bg-red-500/10',
                             wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
                         )}>
-                            {match
-                                ? <>{match.toUpperCase()}<span className="ml-2 text-sm">+{selected.length}</span></>
-                                : selectedLetters}
+                            {selectedLetters}
+                            {match && <span className="ml-2 text-sm">+{selected.length}</span>}
                         </span>
                     ) : (
                         <span className="text-xs text-text-muted italic">
-                            Tap touching tiles in any order · drag around a tile to spin
+                            Tap adjacent tiles in order · drag around a tile to spin
                         </span>
                     )}
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 sm:gap-3 items-center">
                     <Button
                         onClick={undo}
                         disabled={!canUndo}
@@ -1349,39 +1343,22 @@ const OrbitGame = () => {
                         )}
                     </Button>
                     {phase === 'storm' && (
-                        <Button onClick={endTurn} variant="destructive" size="gameControl">
-                            End Turn
+                        <Button onClick={endTurn} variant="destructive" size="gameControl" className="gap-1 sm:gap-2">
+                            <span className="hidden sm:inline">End Turn</span>
+                            <span className="sm:hidden text-lg">⏭</span>
                         </Button>
                     )}
-                    <Button onClick={submit} disabled={!match || phase === 'over'} size="gameControl">
-                        Submit
+                    <Button onClick={submit} disabled={!match || phase === 'over'} size="gameControl" className="gap-1 sm:gap-2">
+                        <span className="hidden sm:inline">Submit</span>
+                        <span className="sm:hidden text-lg">✓</span>
                     </Button>
                     {phase === 'cleanup' && (
-                        <Button onClick={finish} variant="secondary" size="gameControl">
-                            Finish
+                        <Button onClick={finish} variant="secondary" size="gameControl" className="gap-1 sm:gap-2">
+                            <span className="hidden sm:inline">Finish</span>
+                            <span className="sm:hidden text-lg">🏁</span>
                         </Button>
                     )}
                 </div>
-
-                {/* Mobile-only: mode pills + found words */}
-                <div className="md:hidden mt-4 flex flex-col items-center gap-3">
-                    {modePills}
-                    {words.length > 0 && phase !== 'over' && (
-                        <div className="relative max-w-md">
-                            <div className="bg-success/10 border border-success/20 rounded-xl px-3 py-2 flex flex-wrap gap-1.5 justify-center">
-                                {words.slice(-10).map((w, i) => (
-                                    <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
-                                        {w.toUpperCase()}
-                                    </span>
-                                ))}
-                            </div>
-                            <div className="absolute -top-2 left-3">
-                                <span className="bg-bg-primary px-1.5 text-[10px] font-medium text-amber uppercase tracking-wide">
-                                    Found ({words.length})
-                                </span>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 {/* Game over */}
@@ -1428,8 +1405,8 @@ const OrbitGame = () => {
                         <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in">
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
-                                <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap touching tiles in any order — if the letters spell a word, Submit clears them.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spin wisely.</span> Drag around a tile to spin its ring. You have {SPIN_START} spins — words of {SPIN_EARN_LEN}+ letters earn one back.</p>
+                                <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — Submit clears them.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Orbit once per spot.</span> Drag around a tile to spin its ring — free, but each spot pivots only once, then darkens.</p>
                                 <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Beat the flood.</span> Every word or pass drops a bigger wave — survive {WAVES}, then empty the board for a Clean Sweep.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
