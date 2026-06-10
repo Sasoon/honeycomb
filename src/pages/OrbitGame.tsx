@@ -51,7 +51,6 @@ const PITCH_Y = 65;
 const COLS = Math.max(...ROW_COUNTS);
 const BOARD_W = (COLS - 1) * PITCH_X + TILE_W;
 const BOARD_H = (ROW_COUNTS.length - 1) * PITCH_Y + TILE_H;
-const GUIDE_R = PITCH_X;
 
 const cellX = (c: HexCell) => c.position.col * PITCH_X;
 const cellY = (c: HexCell) => c.position.row * PITCH_Y;
@@ -1204,29 +1203,6 @@ const OrbitGame = () => {
                         onPointerUp={onBoardPointerUp}
                         onPointerCancel={onBoardPointerUp}
                     >
-                        {pivotCell && armed && phase !== 'over' && (
-                            <svg
-                                className="orbit-guide"
-                                width={GUIDE_R * 2 + 12}
-                                height={GUIDE_R * 2 + 12}
-                                style={{
-                                    left: cellX(pivotCell) + TILE_W / 2 - GUIDE_R - 6,
-                                    top: cellY(pivotCell) + TILE_H / 2 - GUIDE_R - 6,
-                                }}
-                                aria-hidden="true"
-                            >
-                                <circle
-                                    cx={GUIDE_R + 6}
-                                    cy={GUIDE_R + 6}
-                                    r={GUIDE_R}
-                                    fill="none"
-                                    stroke="rgba(245, 158, 11, 0.45)"
-                                    strokeWidth="2"
-                                    strokeDasharray="7 6"
-                                />
-                            </svg>
-                        )}
-
                         {grid.map(cell => {
                             const isSelected = selected.includes(cell.id);
                             const inRing = ringIds.has(cell.id);
