@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { ChevronDown, Droplets, Hourglass, Undo2 } from 'lucide-react';
+import { ChevronDown, Hourglass, Undo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
@@ -17,13 +17,12 @@ import { haptics } from '../lib/haptics';
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
 // path words + free orbits are the player's power
 const ROW_COUNTS = [3, 4, 5, 4, 3];
-// Pressure economy: the flood meter IS the next wave's size. Spins raise
-// it (+2), words drain it by length-2, overflow past the cap spills
-// tiles instantly, and the floor (sea level) creeps up every 4 waves
+// Ratchet economy: the flood meter IS the next wave's size and it only
+// ever grows — every spin or pass adds one tile to all future waves,
+// words leave it untouched. The floor (sea level) creeps up every 4
+// waves so pure-word play can't run forever
 const METER_START = 3;
-const METER_MAX = 10;
-const SPIN_PRESSURE = 2;
-const meterFloor = (waves: number) => Math.min(METER_MAX, 1 + Math.floor(waves / 4));
+const meterFloor = (waves: number) => 1 + Math.floor(waves / 4);
 const SEED_TILES = 8;
 const WORD_MIN = 3; // smallest playable word
 const WORD_MAX = 8; // largest word indexed
@@ -478,17 +477,17 @@ const OrbitGame = () => {
         });
     }, []);
 
-    // Word/pass ends the turn: the flood drops `meterNow` tiles. The meter
-    // persists (it's pressure, not a tank) and never sinks below the floor
-    const afterAction = useCallback((g: HexCell[], meterNow: number) => {
+    // Word/pass ends the turn: the flood drops `waveCount` tiles, then the
+    // meter settles at `meterAfter` (never below the creeping floor)
+    const afterAction = useCallback((g: HexCell[], waveCount: number, meterAfter: number) => {
         if (phase === 'storm') {
-            const letters = takeLetters(streamPos, meterNow);
+            const letters = takeLetters(streamPos, waveCount);
             const { newGrid, paths, unplaced } = orbitFlood(g, letters, placementRng(`p${streamPos}`));
             queueFloodAnims(newGrid, paths);
             const nextWaves = wavesDropped + 1;
             setWavesDropped(nextWaves);
-            setStreamPos(streamPos + meterNow);
-            setMeter(Math.max(meterNow, meterFloor(nextWaves)));
+            setStreamPos(streamPos + waveCount);
+            setMeter(Math.max(meterAfter, meterFloor(nextWaves)));
             setGrid(newGrid);
             if (unplaced.length > 0) {
                 setPhase('over');
@@ -648,8 +647,8 @@ const OrbitGame = () => {
         clearPreviewTransforms(true);
     }, [clearPreviewTransforms]);
 
-    // Orbits never end the turn, but each one pumps the flood meter +2;
-    // pressure past the cap spills tiles onto the board immediately
+    // Orbits never end the turn, but each one permanently grows the flood
+    // by one tile per wave
     const commitRotation = useCallback((k: number, fromP: number) => {
         const ring = ringRef.current;
         if (!ring || phase === 'over') return;
@@ -686,23 +685,9 @@ const OrbitGame = () => {
         setSelected([]);
         setMatch(null);
         haptics.success();
-
-        const overflow = Math.max(0, meter + SPIN_PRESSURE - METER_MAX);
-        setMeter(Math.min(METER_MAX, meter + SPIN_PRESSURE));
-        if (overflow > 0 && phase === 'storm') {
-            const letters = takeLetters(streamPos, overflow);
-            const { newGrid: flooded, paths, unplaced } = orbitFlood(newGrid, letters, placementRng(`p${streamPos}`));
-            queueFloodAnims(flooded, paths);
-            setStreamPos(streamPos + overflow);
-            setGrid(flooded);
-            if (unplaced.length > 0) {
-                setPhase('over');
-                haptics.error();
-            }
-            return;
-        }
+        setMeter(m => m + 1);
         setGrid(newGrid);
-    }, [phase, grid, meter, streamPos, queueMove, clearPreviewTransforms, pushUndo, takeLetters, placementRng, queueFloodAnims]);
+    }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
 
     // ---------- drag (the dial) ----------
 
@@ -849,19 +834,17 @@ const OrbitGame = () => {
         setMatch(null);
         if (phase === 'storm') setActionLog(log => [...log, 'word']);
         haptics.success();
-        // Words drain pressure by length-2 (down to the floor) before the wave
-        const relieved = Math.max(meterFloor(wavesDropped), Math.min(METER_MAX, meter - (selected.length - 2)));
-        setMeter(relieved);
-        afterAction(newGrid, relieved);
-    }, [phase, match, selected, grid, meter, wavesDropped, queueMove, afterAction, pushUndo]);
+        afterAction(newGrid, meter, meter);
+    }, [phase, match, selected, grid, meter, queueMove, afterAction, pushUndo]);
 
+    // Passing drops the current wave AND permanently grows the flood by one
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
         pushUndo('turn');
         setSelected([]);
         setMatch(null);
         setActionLog(log => [...log, 'pass']);
-        afterAction(grid.map(c => ({ ...c })), meter);
+        afterAction(grid.map(c => ({ ...c })), meter, meter + 1);
     }, [phase, grid, meter, afterAction, pushUndo]);
 
     useEffect(() => () => { fxTimersRef.current.forEach(t => window.clearTimeout(t)); }, []);
@@ -1023,7 +1006,7 @@ const OrbitGame = () => {
     );
 
     const nextChips = (size: string) => (
-        <div className="flex gap-1">
+        <div className="flex flex-wrap justify-center gap-1">
             {nextWindow.map((letter, idx) => (
                 <div
                     key={`${streamPos}-${idx}`}
@@ -1054,15 +1037,11 @@ const OrbitGame = () => {
                         <span className="text-xs text-text-secondary">pts</span>
                     </div>
                     {phase === 'storm' && nextWindow.length > 0 && (
-                        <div className="absolute left-1/2 -translate-x-1/2 bg-amber/10 border border-amber/20 rounded-xl px-2 py-1.5 max-w-[55%] overflow-hidden">
+                        <div className="absolute left-1/2 -translate-x-1/2 bg-amber/10 border border-amber/20 rounded-xl px-2 py-1 max-w-[58%]">
                             {nextChips(nextWindow.length >= 7 ? 'w-4 h-4 text-[10px]' : nextWindow.length >= 6 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
                         </div>
                     )}
                     <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1 text-text-secondary" aria-label={`Flood meter ${meter}`}>
-                            <Droplets size={14} className="text-amber" />
-                            <span className="text-sm font-semibold tabular-nums">{meter}</span>
-                        </span>
                         <span className="flex items-center gap-1 text-text-secondary" aria-label={`Wave ${wavesDropped}`}>
                             <Hourglass size={14} className="text-amber" />
                             <span className="text-sm font-semibold tabular-nums">{wavesDropped}</span>
@@ -1141,28 +1120,6 @@ const OrbitGame = () => {
                             <span className="tabular-nums">{wavesDropped}</span>
                         </div>
                         <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
-                    </div>
-
-                    {/* Flood meter: the next wave's size. Dark base = the floor (sea level) */}
-                    <div className="relative">
-                        <div className="bg-bg-secondary border border-secondary/20 rounded-xl p-3 pt-4 flex gap-1 justify-center">
-                            {Array.from({ length: METER_MAX }, (_, i) => (
-                                <span
-                                    key={i}
-                                    className={cn(
-                                        'w-3.5 h-5 rounded-sm transition-colors duration-200',
-                                        i < meterFloor(wavesDropped) ? 'bg-amber-dark'
-                                            : i < meter ? 'bg-amber'
-                                            : 'bg-secondary/20'
-                                    )}
-                                />
-                            ))}
-                        </div>
-                        <div className="absolute -top-3 left-4">
-                            <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
-                                Flood {meter}
-                            </span>
-                        </div>
                     </div>
 
                     {/* Mode */}
@@ -1406,8 +1363,8 @@ const OrbitGame = () => {
                             <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
                             <div className="space-y-3 text-sm text-text-secondary mb-5">
                                 <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spins pump the flood.</span> Drag around a tile to spin its ring — free, anytime, but every spin raises the flood meter by 2. Past 10 it spills instantly.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Mind the meter.</span> After every word or pass, the meter is how many tiles fall. Words drain it — longer words drain more — and the sea level slowly rises.</p>
+                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spins feed the flood.</span> Drag around a tile to spin its ring — free, anytime, but every spin (and every pass) makes the flood one tile bigger. For good.</p>
+                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Watch the NEXT row.</span> That's exactly what falls after your word or pass — it only ever grows. Score as much as you can before the board fills.</p>
                             </div>
                             <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
                         </div>
