@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Trophy, Hourglass } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { calculateDisplayWordScore } from '../lib/gameUtils';
@@ -38,7 +37,7 @@ const WaxleMobileGameControls = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
       {/* Flush Compact Header */}
       <div 
         className={cn(
@@ -190,18 +189,13 @@ const WaxleMobileGameControls = ({
         </div>
       </div>
       
-      {/* Modern Expandable Panel */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ opacity: 0, height: 0, scale: 0.95 }}
-            animate={{ opacity: 1, height: 'auto', scale: 1 }}
-            exit={{ opacity: 0, height: 0, scale: 0.95 }}
-            transition={{ duration: 0.3, type: "spring", damping: 15 }}
+      {/* Expandable stats panel: clipped compositor slide (no height animation) */}
+      <div className="absolute left-0 right-0 top-full overflow-hidden pointer-events-none">
+          <div
             className={cn(
-              "bg-bg-primary border-b border-secondary/20",
+              "mobile-stats-panel bg-bg-primary border-b border-secondary/20",
               "shadow-xl shadow-secondary/20",
-              "overflow-hidden"
+              isExpanded && "show pointer-events-auto"
             )}
           >
             <div className="p-4 space-y-4">
@@ -261,9 +255,8 @@ const WaxleMobileGameControls = ({
                 </div>
               )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+      </div>
     </div>
   );
 };
