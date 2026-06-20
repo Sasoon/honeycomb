@@ -67,8 +67,10 @@ interface GameModeState {
     dailyDate?: string;
     challengeStartTime?: number;
     seededRNG?: SeededRNG;
-    // Action history for undo functionality (only swaps are undoable: word
-    // submissions immediately end the round, which clears the history)
+    // Action history for undo functionality, scoped to the current flood:
+    // every swap since the last flood can be undone step by step (history is
+    // cleared at the flood boundary in endRound). Only swaps are undoable;
+    // word submissions immediately trigger the next flood, ending the scope.
     actionHistory: Array<{
         type: 'swap';
         previousState: {
@@ -366,7 +368,8 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                 const state = getCurrentGameState();
                 const newRound = state.round + 1;
 
-                // Clear action history at round end since we can't undo across rounds
+                // Clear action history at the flood boundary: undo is scoped to
+                // the current flood and cannot cross into the previous round.
                 get().clearActionHistory();
 
                 // Progressive difficulty: +1 tile every 3 rounds (accounting for Round 1 offset)
@@ -831,17 +834,16 @@ export const useWaxleGameStore = create<WaxleGameState>()(
                     tilesCleared: state.tilesCleared
                 };
 
-                // Add to history
+                // Add to history. No cap is applied: undo is scoped to the
+                // current flood (history is cleared at endRound, the flood
+                // boundary), so the player can always step back through every
+                // action taken since the last flood. The list is naturally
+                // bounded per flood by the available swaps.
                 const newHistory = [...state.actionHistory, {
                     type: actionType,
                     previousState: snapshot,
                     timestamp: Date.now()
                 }];
-
-                // Limit history to last 10 actions for memory management
-                if (newHistory.length > 10) {
-                    newHistory.shift();
-                }
 
                 updateCurrentGameState({ actionHistory: newHistory });
             },
