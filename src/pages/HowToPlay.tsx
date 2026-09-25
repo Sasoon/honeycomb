@@ -38,8 +38,9 @@ const HowToPlay = () => {
         </p>
         <p className="text-text-secondary mb-4">
           <span className="font-semibold text-amber">Leap:</span> once per word, you may leap from your last tile to any tile two
-          steps away. Chevrons between tiles show your word's order, a dashed line marks the leap, and dashed outlines
-          show where a leap can still land.
+          steps away. Your tiles brighten from the first letter to the newest, the tile a leap landed on gets a rim, and
+          the word is spelled out under the board with a hop mark where you leapt. Faint rims show where a leap can
+          still land.
         </p>
         <p className="text-text-secondary mb-3">
           Every tile shows its letter value, Scrabble style. A word scores the sum of its letters, then

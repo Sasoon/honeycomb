@@ -6,7 +6,7 @@ Play at https://waxle.netlify.app
 
 ## How to play
 
-- **Build words.** Tap tiles in order, each touching the last, to spell a word of 3+ letters. Once per word you may leap to a tile two steps away; chevrons on the board show the order, a dashed line marks the leap, and dashed outlines show where a leap can land. Every tile shows its Scrabble value; a word scores its letter total ×2 at 5–6 letters and ×3 at 7+.
+- **Build words.** Tap tiles in order, each touching the last, to spell a word of 3+ letters. Once per word you may leap to a tile two steps away; selected tiles brighten from first to newest, the leap's landing tile gets a rim, the word is spelled out under the board with a hop mark at the leap, and faint rims show where a leap can still land. Every tile shows its Scrabble value; a word scores its letter total ×2 at 5–6 letters and ×3 at 7+.
 - **Gold tiles** arrive in some waves and double any word that uses them (two make it ×4).
 - **The flood.** Submitting a word or passing ends your turn. The tiles under **NEXT** then drop in and sink as deep as they can. Waves start at 3 tiles and grow by one every 3 waves. If the next wave won't fit, NEXT turns red and warns you.
 - **Spin.** Tap one tile, then drag around it (or scroll, or use ←/→ and Enter) to rotate its neighbours. The first spin each turn is free; each extra spin adds one tile to that turn's wave only.

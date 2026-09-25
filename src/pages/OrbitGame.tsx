@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, type CSSProperties } from 'react';
 import { AlertTriangle, BarChart3, Check, ChevronDown, CircleHelp, Hourglass, RotateCcw, SkipForward, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
@@ -25,7 +25,6 @@ import {
     clearAndSettle,
     isAdjacent,
     leapOver,
-    leapUsed,
     letterValue,
     longestWord,
     orbitFlood,
@@ -84,6 +83,19 @@ const mod = (a: number, n: number) => ((a % n) + n) % n;
 const SNAP_K = 5;
 const SNAP_NORM = 2 * Math.tanh(SNAP_K / 2);
 const snapF = (f: number) => 0.5 + Math.tanh((f - 0.5) * SNAP_K) / SNAP_NORM;
+
+// Word order as light: selected tiles ramp from a cooled teal on the first
+// tap to full accent on the newest, so direction reads at a glance
+const RAMP = { valid: ['#1B8F84', '#3FD8C7'], invalid: ['#33435A', '#5A6C84'] } as const;
+const hexRgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function trailColor(i: number, n: number, invalid: boolean): string {
+    const [a, b] = RAMP[invalid ? 'invalid' : 'valid'].map(hexRgb);
+    const t = n <= 1 ? 1 : i / (n - 1);
+    return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`;
+}
+const tileVar = (color: string) => ({ '--tile': color }) as CSSProperties;
+// Hex outline inside a 70x80 tile, for the leap rim and leap-target hints
+const RIM_POINTS = '35,5.5 64.5,22.5 64.5,57.5 35,74.5 5.5,57.5 5.5,22.5';
 
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
@@ -1138,36 +1150,21 @@ const OrbitGame = () => {
         <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
     );
 
-    // Word-order overlay: a chevron in the gap between consecutive tiles, a
-    // dashed line for the leap, and dashed outlines where a leap can land
-    const pathOverlay = useMemo(() => {
-        if (!selectedCells.length || phase === 'over') return null;
-        const centre = (c: HexCell) => ({ x: cellX(c) + TILE_W / 2, y: cellY(c) + TILE_H / 2 });
-        const trim = 26;
-        const links = selectedCells.slice(1).map((c, i) => {
-            const prev = selectedCells[i];
-            const a = centre(prev);
-            const b = centre(c);
-            const len = Math.hypot(b.x - a.x, b.y - a.y);
-            const ux = (b.x - a.x) / len;
-            const uy = (b.y - a.y) / len;
-            const angle = (Math.atan2(uy, ux) * 180) / Math.PI;
-            const leap = !isAdjacent(prev, c);
-            // Neighbours: the chevron sits in the gap between the two tiles.
-            // Leaps: a dashed line, chevron past the hopped tile, clear of letters
-            const t = leap ? 0.74 : 0.5;
-            const at = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-            const d = leap
-                ? `M${a.x + ux * trim},${a.y + uy * trim} L${b.x - ux * trim},${b.y - uy * trim}`
-                : null;
-            return { key: c.id, d, at, angle, leap };
-        });
-        const last = selectedCells[selectedCells.length - 1];
-        const hopTargets = leapUsed(selectedCells)
-            ? []
-            : grid.filter(c => c.letter && !selected.includes(c.id) && !!leapOver(last, c, grid));
-        return { links, hopTargets };
-    }, [selectedCells, selected, grid, phase]);
+    // Word order lives on the tiles and the rail under the board: the teal
+    // ramp gives direction, the newest tile glows, the tile the leap landed on
+    // wears a rim, and tiles a leap could still reach get a faint rim
+    const trail = useMemo(() => {
+        const n = selectedCells.length;
+        const order = new Map(selectedCells.map((c, i) => [c.id, i]));
+        const leapAt = selectedCells.findIndex((c, i) => i > 0 && !isAdjacent(selectedCells[i - 1], c));
+        const last = selectedCells[n - 1];
+        const reach = new Set<string>();
+        if (n && leapAt === -1 && phase === 'storm') {
+            grid.forEach(c => { if (c.letter && !order.has(c.id) && leapOver(last, c, grid)) reach.add(c.id); });
+        }
+        return { n, order, leapAt, reach };
+    }, [selectedCells, grid, phase]);
+    const invalidWord = wordState === 'invalid';
 
     let status: React.ReactNode;
     if (previewSteps !== 0) {
@@ -1179,25 +1176,49 @@ const OrbitGame = () => {
         );
     } else if (selectedLetters) {
         status = (
-            <span className={cn(
-                'px-4 py-1 rounded-xl font-mono font-bold text-lg tracking-wide flex items-center gap-2',
-                wordState === 'valid' && 'text-amber bg-amber/10',
-                wordState === 'invalid' && 'text-red-400 bg-red-500/10',
-                wordState === 'neutral' && 'text-text-primary bg-secondary/20'
-            )}>
-                {selectedLetters}
-                {wordScore && (
-                    <span className="text-sm font-sans font-semibold flex items-baseline gap-1.5">
-                        +{wordScore.total}
-                        <span className="text-[11px] text-text-secondary font-medium">
+            <div className={cn('orbit-rail', invalidWord && 'orbit-rail--invalid')}>
+                <div className="orbit-rail__word" aria-label={selectedLetters}>
+                    {selectedCells.map((c, i) => (
+                        <Fragment key={c.id}>
+                            {i > 0 && (i === trail.leapAt ? (
+                                <span className="orbit-rail__leap" aria-hidden="true">
+                                    <svg width="30" height="18" viewBox="0 0 30 18">
+                                        <path d="M3 15 Q15 -3 27 15" />
+                                        <circle cx="27" cy="15" r="1.8" />
+                                    </svg>
+                                </span>
+                            ) : <span className="orbit-rail__join" />)}
+                            <span
+                                className={cn('orbit-rail__tile', c.isGem && 'orbit-rail__tile--gem')}
+                                style={tileVar(trailColor(i, trail.n, invalidWord))}
+                            >
+                                {c.letter}
+                            </span>
+                        </Fragment>
+                    ))}
+                    {trail.leapAt === -1 && !invalidWord && (
+                        <span className="orbit-rail__spare" title="Leap still available">
+                            <svg width="30" height="18" viewBox="0 0 30 18" aria-hidden="true">
+                                <path d="M3 15 Q15 -3 27 15" />
+                            </svg>
+                            <span className="orbit-rail__ghost" />
+                        </span>
+                    )}
+                </div>
+                {wordScore ? (
+                    <div className="orbit-rail__score">
+                        <span className="orbit-rail__pts">+{wordScore.total}</span>
+                        <span className="orbit-rail__why">
                             {wordScore.letters}
                             {wordScore.lengthMult > 1 && ` ×${wordScore.lengthMult}`}
                             {wordScore.gems > 0 && <span className="text-gold"> ×{2 ** wordScore.gems}</span>}
                             {cools && ' · wave −1'}
                         </span>
-                    </span>
-                )}
-            </span>
+                    </div>
+                ) : invalidWord ? (
+                    <span className="orbit-rail__bad">not a word</span>
+                ) : null}
+            </div>
         );
     } else if (phase === 'over') {
         status = <span className="text-xs text-text-muted">The board is full. Tap Results to see how you did.</span>;
@@ -1362,6 +1383,8 @@ const OrbitGame = () => {
                         >
                             {grid.map(cell => {
                                 const isSelected = selected.includes(cell.id);
+                                const orderIdx = trail.order.get(cell.id) ?? -1;
+                                const isHead = isSelected && orderIdx === trail.n - 1;
                                 const inRing = ringIds.has(cell.id);
                                 const isPivot = pivotCell?.id === cell.id && armed;
                                 // Desync the ring jiggle: 31/17 mod 9 puts every hex-neighbour
@@ -1380,7 +1403,8 @@ const OrbitGame = () => {
                                             'orbit-cell',
                                             inRing && 'orbit-cell--ring',
                                             inRing && quietRing && 'orbit-cell--quiet',
-                                            isPivot && 'orbit-cell--pivot'
+                                            isPivot && 'orbit-cell--pivot',
+                                            isHead && !invalidWord && 'orbit-cell--head'
                                         )}
                                         style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
                                     >
@@ -1392,44 +1416,29 @@ const OrbitGame = () => {
                                                     cell.isGem && 'orbit-tile--gem',
                                                     isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
                                                 )}
-                                                style={{ animationDelay: jigglePhase }}
+                                                style={{
+                                                    animationDelay: jigglePhase,
+                                                    ...(isSelected ? tileVar(trailColor(orderIdx, trail.n, invalidWord)) : null),
+                                                }}
                                             >
                                                 <span className="orbit-tile__letter">{cell.letter}</span>
                                                 <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
-                                                {isSelected && selected.length > 1 && (
-                                                    <span className="orbit-tile__order">{selected.indexOf(cell.id) + 1}</span>
-                                                )}
+                                                {(orderIdx === trail.leapAt && orderIdx > 0) || (trail.reach.has(cell.id) && previewSteps === 0 && !dragging) ? (
+                                                    <svg
+                                                        className={cn('orbit-tile__rim', !isSelected && 'orbit-tile__rim--reach')}
+                                                        viewBox="0 0 70 80"
+                                                        preserveAspectRatio="none"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <polygon points={RIM_POINTS} />
+                                                    </svg>
+                                                ) : null}
                                             </div>
                                         )}
                                     </div>
                                 );
                             })}
 
-                            {pathOverlay && (
-                                <svg className="orbit-path" width={BOARD_W} height={BOARD_H} aria-hidden="true">
-                                    {previewSteps === 0 && !dragging && pathOverlay.hopTargets.map(c => {
-                                        const x = cellX(c);
-                                        const y = cellY(c);
-                                        const i = 5;
-                                        return (
-                                            <polygon
-                                                key={`hop-${c.id}`}
-                                                className="orbit-path__hop"
-                                                points={`${x + TILE_W / 2},${y + i} ${x + TILE_W - i},${y + TILE_H / 4 + i / 2} ${x + TILE_W - i},${y + (3 * TILE_H) / 4 - i / 2} ${x + TILE_W / 2},${y + TILE_H - i} ${x + i},${y + (3 * TILE_H) / 4 - i / 2} ${x + i},${y + TILE_H / 4 + i / 2}`}
-                                            />
-                                        );
-                                    })}
-                                    {pathOverlay.links.map(l => (
-                                        <g key={l.key} className={cn('orbit-path__link', l.leap && 'orbit-path__link--leap', wordState === 'invalid' && 'orbit-path__link--invalid')}>
-                                            {l.d && <path d={l.d} className="orbit-path__leap" />}
-                                            <g transform={`translate(${l.at.x} ${l.at.y}) rotate(${l.angle})`}>
-                                                <rect x={-11} y={-7} width={22} height={14} rx={7} className="orbit-path__pill" />
-                                                <polyline points="-3,-4 2,0 -3,4" className="orbit-path__chevron" />
-                                            </g>
-                                        </g>
-                                    ))}
-                                </svg>
-                            )}
                             {clearFx.map(fx => (
                                 <div
                                     key={fx.id}
