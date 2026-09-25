@@ -1,17 +1,15 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { AlertTriangle, BarChart3, Check, ChevronDown, CircleHelp, FlaskConical, Hourglass, RotateCcw, SkipForward, Undo2, Volume2, VolumeX } from 'lucide-react';
+import { AlertTriangle, BarChart3, Check, ChevronDown, CircleHelp, Hourglass, RotateCcw, SkipForward, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
 import { HexCell } from '../components/HexGrid';
 import { HelpModal } from '../components/orbit/HelpModal';
 import { ResultsModal } from '../components/orbit/ResultsModal';
-import { LabModal } from '../components/orbit/LabModal';
 import { loadDictionary, peekDictionary } from '../lib/wordValidator';
 import {
     COLS,
     DAILY_UNDOS,
-    DEFAULT_RULES,
     FREE_SPINS,
     RING_OFFSETS,
     ROW_COUNTS,
@@ -25,14 +23,9 @@ import {
     loadStats,
     canExtend,
     clearAndSettle,
-    describeRules,
-    extraClears,
-    growEveryFor,
-    isDefaultRules,
-    loadLabRules,
-    resolveWord,
-    saveLabRules,
-    WILD,
+    isAdjacent,
+    leapOver,
+    leapUsed,
     letterValue,
     longestWord,
     orbitFlood,
@@ -50,7 +43,6 @@ import {
     type BoardLetters,
     type DailyResult,
     type OrbitStats,
-    type Rules,
 } from '../lib/orbit';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
@@ -69,10 +61,10 @@ const praiseFor = (len: number, gems: number, points: number) =>
     len >= 8 ? 'Legendary!' : len >= 7 ? 'Superb!' : points >= 60 ? 'Jackpot!'
         : len >= 6 ? 'Great!' : gems > 0 ? 'Golden!' : len >= 5 ? 'Nice!' : null;
 
-// v10: per-turn spins, letter values and gold tiles (older saved runs are dropped)
-const LS_RUN_DAILY = 'waxle-orbit-run-v10';
-const LS_RUN_PRACTICE = 'waxle-orbit-practice-v2';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v6';
+// v11: leap words (older saved runs are dropped)
+const LS_RUN_DAILY = 'waxle-orbit-run-v11';
+const LS_RUN_PRACTICE = 'waxle-orbit-practice-v3';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v7';
 const LS_MODE = 'waxle-orbit-mode';
 const LS_NAME = 'waxle-player-name';
 
@@ -95,7 +87,7 @@ const snapF = (f: number) => 0.5 + Math.tanh((f - 0.5) * SNAP_K) / SNAP_NORM;
 
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
-type Modal = 'help' | 'results' | 'lab' | null;
+type Modal = 'help' | 'results' | null;
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 type ClearFx = { id: string; letter: string; left: number; top: number };
 type RingInfo = { pivotId: string; cells: HexCell[]; slots: Array<{ x: number; y: number }>; n: number };
@@ -105,9 +97,6 @@ type Snapshot = {
     phase: Phase;
     wavesDropped: number;
     spins: number;
-    // Multi-word turns (lab): words played and out-spells made this turn
-    turnWords?: number;
-    turnShrink?: number;
     score: number;
     words: string[];
     actionLog: Action[];
@@ -115,7 +104,6 @@ type Snapshot = {
 type SavedRun = Omit<Snapshot, 'kind'> & {
     dateStr?: string;
     seedStr: string;
-    rules?: Rules;
     undoStack: Snapshot[];
     undosUsed: number;
 };
@@ -161,10 +149,6 @@ const OrbitGame = () => {
     const [wavesDropped, setWavesDropped] = useState(0);
     // Spins made this turn: the first is free, each extra adds a tile to this wave
     const [spins, setSpins] = useState(0);
-    const [turnWords, setTurnWords] = useState(0);
-    const [turnShrink, setTurnShrink] = useState(0);
-    // The daily always plays the standard rules; practice can use lab rules
-    const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
     const [score, setScore] = useState(0);
     const [words, setWords] = useState<string[]>([]);
     const [actionLog, setActionLog] = useState<Action[]>([]);
@@ -301,9 +285,6 @@ const OrbitGame = () => {
         setPhase(run.phase);
         setWavesDropped(run.wavesDropped);
         setSpins(run.spins ?? 0);
-        setTurnWords(run.turnWords ?? 0);
-        setTurnShrink(run.turnShrink ?? 0);
-        setRules(run.rules ?? DEFAULT_RULES);
         setScore(run.score);
         setWords(run.words);
         setActionLog(run.actionLog);
@@ -314,16 +295,12 @@ const OrbitGame = () => {
     const startFresh = useCallback((m: Mode) => {
         clearTransient();
         const seed = m === 'daily' ? dateStr : `practice-${Math.floor(Math.random() * 1e9)}`;
-        const r = m === 'daily' ? DEFAULT_RULES : loadLabRules();
-        const { newGrid, paths } = orbitFlood(buildBoard(), waveTiles(seed, 'seed', SEED_TILES, r.specials), placementRng(seed, 'seed'));
+        const { newGrid, paths } = orbitFlood(buildBoard(), waveTiles(seed, 'seed', SEED_TILES), placementRng(seed, 'seed'));
         queueFloodAnims(newGrid, paths);
         recordedRef.current = false;
         setSeedStr(seed);
-        setRules(r);
         setGrid(newGrid);
         setSpins(0);
-        setTurnWords(0);
-        setTurnShrink(0);
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -351,9 +328,6 @@ const OrbitGame = () => {
                 setActionLog(result.strip);
                 setWavesDropped(result.waves ?? 0);
                 setSpins(0);
-                setTurnWords(0);
-                setTurnShrink(0);
-                setRules(DEFAULT_RULES);
                 setUndoStack([]);
                 setUndosUsed(0);
                 if (showResults) setModal(md => md ?? 'results');
@@ -406,9 +380,6 @@ const OrbitGame = () => {
             phase,
             wavesDropped,
             spins,
-            turnWords,
-            turnShrink,
-            rules: mode === 'practice' ? rules : undefined,
             score,
             words,
             actionLog,
@@ -417,7 +388,7 @@ const OrbitGame = () => {
             undosUsed,
         };
         storage.set(runKey(mode), JSON.stringify(run));
-    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, spins, turnWords, turnShrink, rules, score, words, actionLog, undoStack, undosUsed]);
+    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, spins, score, words, actionLog, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
@@ -456,12 +427,10 @@ const OrbitGame = () => {
     // spin tally resets
     const afterAction = useCallback((g: HexCell[], count: number) => {
         const tag = waveTag(wavesDropped);
-        const { newGrid, paths, unplaced } = orbitFlood(g, waveTiles(seedStr, tag, count, rules.specials), placementRng(seedStr, tag));
+        const { newGrid, paths, unplaced } = orbitFlood(g, waveTiles(seedStr, tag, count), placementRng(seedStr, tag));
         queueFloodAnims(newGrid, paths);
         setWavesDropped(wavesDropped + 1);
         setSpins(0);
-        setTurnWords(0);
-        setTurnShrink(0);
         setGrid(newGrid);
         sfx.land(0.3);
         if (unplaced.length > 0) {
@@ -471,7 +440,7 @@ const OrbitGame = () => {
             window.clearTimeout(resultsTimerRef.current);
             resultsTimerRef.current = window.setTimeout(() => setModal(md => md ?? 'results'), RESULTS_DELAY_MS);
         }
-    }, [wavesDropped, seedStr, rules, queueFloodAnims]);
+    }, [wavesDropped, seedStr, queueFloodAnims]);
 
     // ---------- undo ----------
 
@@ -484,14 +453,12 @@ const OrbitGame = () => {
             phase,
             wavesDropped,
             spins,
-            turnWords,
-            turnShrink,
             score,
             words: [...words],
             actionLog: [...actionLog],
         };
         setUndoStack(s => [...s.slice(-9), snap]);
-    }, [grid, phase, wavesDropped, spins, turnWords, turnShrink, score, words, actionLog]);
+    }, [grid, phase, wavesDropped, spins, score, words, actionLog]);
 
     const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
     const topUndo = undoStack[undoStack.length - 1];
@@ -506,8 +473,6 @@ const OrbitGame = () => {
         setPhase(snap.phase);
         setWavesDropped(snap.wavesDropped);
         setSpins(snap.spins);
-        setTurnWords(snap.turnWords ?? 0);
-        setTurnShrink(snap.turnShrink ?? 0);
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
@@ -528,8 +493,8 @@ const OrbitGame = () => {
     // can never lag behind (or outlive) the selection it describes
     const match = useMemo(() => {
         if (selectedLetters.length < WORD_MIN || !dict) return null;
-        // Wild tiles (lab) stand in for whichever letter makes a word
-        return resolveWord(selectedLetters.toLowerCase(), w => dict.has(w));
+        const w = selectedLetters.toLowerCase();
+        return dict.has(w) ? w : null;
     }, [selectedLetters, dict]);
 
     useEffect(() => {
@@ -544,11 +509,7 @@ const OrbitGame = () => {
         () => (match ? scoreWord(selectedCells.map(c => c.letter), selectedCells.filter(c => c.isGem).length) : null),
         [match, selectedCells]
     );
-    const currentWave = waveSize(wavesDropped, spins, Math.max(0, turnWords - 1), turnShrink, growEveryFor(rules));
-    // Multi-word turns: a second word costs a tile, an out-spell refunds one
-    const wordWaveDelta = useCallback((len: number) =>
-        (rules.multiWord && turnWords > 0 ? 1 : 0) - (outSpelled(len, currentWave) ? 1 : 0),
-    [rules, turnWords, currentWave]);
+    const currentWave = waveSize(wavesDropped, spins);
 
     // A chime the moment a path becomes a real word
     const prevMatchRef = useRef<string | null>(null);
@@ -663,12 +624,11 @@ const OrbitGame = () => {
             const dst = byId.get(ring.cells[mod(i + k, ring.n)].id)!;
             dst.letter = src.letter;
             dst.isGem = src.isGem;
-            dst.special = src.special;
             dst.isPlaced = src.isPlaced;
         });
         if (ring.cells.every(c => {
             const d = byId.get(c.id)!;
-            return d.letter === c.letter && !!d.isGem === !!c.isGem && d.special === c.special;
+            return d.letter === c.letter && !!d.isGem === !!c.isGem;
         })) {
             resetPreview();
             return;
@@ -818,25 +778,19 @@ const OrbitGame = () => {
         pushUndo('turn');
         // Out-spell the flood: a word at least as long as the wave shrinks
         // the very wave about to drop
-        const out = outSpelled(selected.length, currentWave);
-        const delta = wordWaveDelta(selected.length);
+        const incoming = outSpelled(selected.length, currentWave) ? currentWave - 1 : currentWave;
         const points = wordScore.total;
-        // Bombs and magnets (lab) take extra tiles with the word
-        const extra = extraClears(grid, selected);
-        const cleared = [...selectedCells, ...extra.map(id => grid.find(c => c.id === id)!)];
 
-        const fx = cleared.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
-        const wordFx = fx.slice(0, selectedCells.length);
-        const cx = wordFx.reduce((sum, f) => sum + f.left, 0) / wordFx.length + TILE_W / 2;
-        const cy = Math.min(...wordFx.map(f => f.top));
-        const waveNote = delta < 0 ? ' · wave −1' : delta > 0 ? ' · wave +1' : '';
+        const fx = selectedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
+        const cx = fx.reduce((sum, f) => sum + f.left, 0) / fx.length + TILE_W / 2;
+        const cy = Math.min(...fx.map(f => f.top));
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: `+${points}${waveNote}`, key: Date.now() });
+        setScoreFx({ x: cx, y: cy, text: `+${points}${incoming < currentWave ? ' · wave −1' : ''}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
         const t2 = window.setTimeout(() => setScoreFx(null), 900);
         fxTimersRef.current.push(t1, t2);
 
-        const { newGrid, moveSources } = clearAndSettle(grid, [...selected, ...extra]);
+        const { newGrid, moveSources } = clearAndSettle(grid, selected);
         moveSources.forEach((srcId, dstId) => {
             const src = grid.find(c => c.id === srcId);
             const dst = newGrid.find(c => c.id === dstId);
@@ -849,25 +803,18 @@ const OrbitGame = () => {
         haptics.success();
         sfx.word(selected.length, wordScore.gems);
         celebrate(selected.length, wordScore.gems, points);
-        if (rules.multiWord) {
-            // The turn goes on: the wave waits for End turn
-            setTurnWords(n => n + 1);
-            if (out) setTurnShrink(n => n + 1);
-            setGrid(newGrid);
-        } else {
-            afterAction(newGrid, out ? currentWave - 1 : currentWave);
-        }
-    }, [phase, match, wordScore, selected, selectedCells, grid, currentWave, rules, wordWaveDelta, queueMove, afterAction, pushUndo, celebrate]);
+        afterAction(newGrid, incoming);
+    }, [phase, match, wordScore, selected, selectedCells, grid, currentWave, queueMove, afterAction, pushUndo, celebrate]);
 
-    // Passing (or ending a multi-word turn) drops the wave
+    // Passing clears nothing and takes the whole wave
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
         pushUndo('turn');
         setSelected([]);
-        if (turnWords === 0) setActionLog(log => [...log, 'pass']);
+        setActionLog(log => [...log, 'pass']);
         sfx.pass();
         afterAction(grid.map(c => ({ ...c })), currentWave);
-    }, [phase, grid, currentWave, turnWords, afterAction, pushUndo]);
+    }, [phase, grid, currentWave, afterAction, pushUndo]);
 
     useEffect(() => () => {
         fxTimersRef.current.forEach(t => window.clearTimeout(t));
@@ -905,16 +852,15 @@ const OrbitGame = () => {
             sfx.deselect();
             return;
         }
-        // Shape rule: path (touch the last tile), branch (touch any picked
-        // tile) or leap (path plus one hop per word)
-        if (canExtend(rules.shape, selectedCells, cell, grid)) {
+        // Path rule: each tile touches the last one, with one leap per word
+        if (canExtend(selectedCells, cell, grid)) {
             setSelected([...selected, cell.id]);
             sfx.select(selected.length);
         } else {
             setSelected([cell.id]);
             sfx.select(0);
         }
-    }, [phase, selected, selectedCells, grid, rules, commitRotation, resetPreview]);
+    }, [phase, selected, selectedCells, grid, commitRotation, resetPreview]);
 
     // ---------- wheel + keyboard ----------
 
@@ -1009,8 +955,8 @@ const OrbitGame = () => {
     // The NEXT strip is exactly the wave about to drop: this wave's own
     // stream, grown by extra spins this turn
     const nextWindow = useMemo(
-        () => (phase === 'storm' && seedStr ? waveTiles(seedStr, waveTag(wavesDropped), currentWave, rules.specials) : []),
-        [phase, seedStr, wavesDropped, currentWave, rules]
+        () => (phase === 'storm' && seedStr ? waveTiles(seedStr, waveTag(wavesDropped), currentWave) : []),
+        [phase, seedStr, wavesDropped, currentWave]
     );
 
     // Danger: the incoming wave won't fit the board as it stands
@@ -1090,9 +1036,7 @@ const OrbitGame = () => {
 
     const wordState = selectedLetters.length >= WORD_MIN && dict ? (match ? 'valid' : 'invalid') : 'neutral';
     const quietRing = previewSteps !== 0 || dragging;
-    const waveDelta = match ? wordWaveDelta(selected.length) : 0;
-    const shownWord = match && selectedLetters.includes(WILD) ? match.toUpperCase() : selectedLetters.split(WILD).join('✱');
-    const labActive = mode === 'practice' && !isDefaultRules(rules);
+    const cools = !!match && outSpelled(selected.length, currentWave);
     const matchPoints = wordScore?.total ?? 0;
     const nextSpinCosts = spins >= FREE_SPINS;
 
@@ -1119,19 +1063,6 @@ const OrbitGame = () => {
                     {m === 'daily' ? `Daily #${dailyNo}` : 'Practice'}
                 </button>
             ))}
-            {mode === 'practice' && (
-                <button
-                    onClick={() => setModal('lab')}
-                    className={cn(
-                        'p-1 rounded-full transition-colors hover:bg-secondary/25',
-                        labActive ? 'text-amber' : 'text-text-secondary hover:text-text-primary'
-                    )}
-                    aria-label="Lab: try rule variants"
-                    title="Lab: try rule variants"
-                >
-                    <FlaskConical size={14} />
-                </button>
-            )}
             {mode === 'practice' && (
                 <button
                     onClick={() => startFresh('practice')}
@@ -1182,8 +1113,6 @@ const OrbitGame = () => {
                         'border rounded-md flex items-center justify-center font-semibold anim-chip-in',
                         tile.gem
                             ? 'bg-gold border-gold text-bg-primary'
-                            : tile.special === 'bomb' ? 'bg-bomb border-bomb text-bg-primary'
-                            : tile.special === 'magnet' ? 'bg-magnet border-magnet text-bg-primary'
                             : 'bg-bg-secondary border-secondary/40 text-text-primary',
                         // Tiles bought with extra spins this turn
                         idx >= currentWave - Math.max(0, spins - FREE_SPINS) && 'ring-1 ring-red-400/70'
@@ -1191,7 +1120,7 @@ const OrbitGame = () => {
                     style={{ animationDelay: `${idx * 50}ms` }}
                     title={tile.gem ? 'Gold tile: doubles any word that uses it' : undefined}
                 >
-                    {tile.letter === WILD ? '✱' : tile.letter}
+                    {tile.letter}
                 </div>
             ))}
         </div>
@@ -1209,6 +1138,37 @@ const OrbitGame = () => {
         <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
     );
 
+    // Word-order overlay: a chevron in the gap between consecutive tiles, a
+    // dashed line for the leap, and dashed outlines where a leap can land
+    const pathOverlay = useMemo(() => {
+        if (!selectedCells.length || phase === 'over') return null;
+        const centre = (c: HexCell) => ({ x: cellX(c) + TILE_W / 2, y: cellY(c) + TILE_H / 2 });
+        const trim = 26;
+        const links = selectedCells.slice(1).map((c, i) => {
+            const prev = selectedCells[i];
+            const a = centre(prev);
+            const b = centre(c);
+            const len = Math.hypot(b.x - a.x, b.y - a.y);
+            const ux = (b.x - a.x) / len;
+            const uy = (b.y - a.y) / len;
+            const angle = (Math.atan2(uy, ux) * 180) / Math.PI;
+            const leap = !isAdjacent(prev, c);
+            // Neighbours: the chevron sits in the gap between the two tiles.
+            // Leaps: a dashed line, chevron past the hopped tile, clear of letters
+            const t = leap ? 0.74 : 0.5;
+            const at = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+            const d = leap
+                ? `M${a.x + ux * trim},${a.y + uy * trim} L${b.x - ux * trim},${b.y - uy * trim}`
+                : null;
+            return { key: c.id, d, at, angle, leap };
+        });
+        const last = selectedCells[selectedCells.length - 1];
+        const hopTargets = leapUsed(selectedCells)
+            ? []
+            : grid.filter(c => c.letter && !selected.includes(c.id) && !!leapOver(last, c, grid));
+        return { links, hopTargets };
+    }, [selectedCells, selected, grid, phase]);
+
     let status: React.ReactNode;
     if (previewSteps !== 0) {
         status = (
@@ -1225,7 +1185,7 @@ const OrbitGame = () => {
                 wordState === 'invalid' && 'text-red-400 bg-red-500/10',
                 wordState === 'neutral' && 'text-text-primary bg-secondary/20'
             )}>
-                {shownWord}
+                {selectedLetters}
                 {wordScore && (
                     <span className="text-sm font-sans font-semibold flex items-baseline gap-1.5">
                         +{wordScore.total}
@@ -1233,8 +1193,7 @@ const OrbitGame = () => {
                             {wordScore.letters}
                             {wordScore.lengthMult > 1 && ` ×${wordScore.lengthMult}`}
                             {wordScore.gems > 0 && <span className="text-gold"> ×{2 ** wordScore.gems}</span>}
-                            {waveDelta < 0 && ' · wave −1'}
-                            {waveDelta > 0 && <span className="text-red-400"> · wave +1</span>}
+                            {cools && ' · wave −1'}
                         </span>
                     </span>
                 )}
@@ -1252,11 +1211,7 @@ const OrbitGame = () => {
     } else {
         status = (
             <span className="text-xs text-text-muted italic text-center">
-                {rules.shape === 'branch'
-                    ? 'Tap tiles in spelling order · each must touch any tile you picked'
-                    : rules.shape === 'leap'
-                        ? 'Tap adjacent tiles in order · one hop over a tile per word'
-                        : 'Tap adjacent tiles in order · drag around a tile to spin'}
+                Tap tiles in order · leap one tile per word · drag around a tile to spin
             </span>
         );
     }
@@ -1394,14 +1349,6 @@ const OrbitGame = () => {
                     {modePills}
                     {iconButtons}
                 </div>
-                {labActive && (
-                    <button
-                        onClick={() => setModal('lab')}
-                        className="mt-2 text-[11px] font-medium text-amber bg-amber/10 border border-amber/25 rounded-full px-3 py-0.5"
-                    >
-                        Lab rules: {describeRules(rules)}
-                    </button>
-                )}
                 <div className="my-auto flex flex-col items-center w-full">
                     <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
                         <div
@@ -1427,7 +1374,7 @@ const OrbitGame = () => {
                                         data-letter={cell.letter}
                                         onClick={() => handleCellTap(cell)}
                                         role={cell.letter ? 'button' : undefined}
-                                        aria-label={cell.letter ? `${cell.letter === WILD ? 'wild' : cell.letter}, ${letterValue(cell.letter)} points${cell.isGem ? ', gold' : ''}${cell.special ? `, ${cell.special}` : ''}` : undefined}
+                                        aria-label={cell.letter ? `${cell.letter}, ${letterValue(cell.letter)} points${cell.isGem ? ', gold' : ''}` : undefined}
                                         aria-pressed={cell.letter ? isSelected : undefined}
                                         className={cn(
                                             'orbit-cell',
@@ -1443,16 +1390,11 @@ const OrbitGame = () => {
                                                 className={cn(
                                                     'orbit-tile',
                                                     cell.isGem && 'orbit-tile--gem',
-                                                    cell.special && `orbit-tile--${cell.special}`,
-                                                    cell.letter === WILD && 'orbit-tile--wild',
                                                     isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
                                                 )}
                                                 style={{ animationDelay: jigglePhase }}
                                             >
-                                                <span className="orbit-tile__letter">{cell.letter === WILD ? '✱' : cell.letter}</span>
-                                                {cell.special && (
-                                                    <span className="orbit-tile__badge" aria-hidden="true">{cell.special === 'bomb' ? '✹' : '⊕'}</span>
-                                                )}
+                                                <span className="orbit-tile__letter">{cell.letter}</span>
                                                 <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
                                                 {isSelected && selected.length > 1 && (
                                                     <span className="orbit-tile__order">{selected.indexOf(cell.id) + 1}</span>
@@ -1463,6 +1405,31 @@ const OrbitGame = () => {
                                 );
                             })}
 
+                            {pathOverlay && (
+                                <svg className="orbit-path" width={BOARD_W} height={BOARD_H} aria-hidden="true">
+                                    {previewSteps === 0 && !dragging && pathOverlay.hopTargets.map(c => {
+                                        const x = cellX(c);
+                                        const y = cellY(c);
+                                        const i = 5;
+                                        return (
+                                            <polygon
+                                                key={`hop-${c.id}`}
+                                                className="orbit-path__hop"
+                                                points={`${x + TILE_W / 2},${y + i} ${x + TILE_W - i},${y + TILE_H / 4 + i / 2} ${x + TILE_W - i},${y + (3 * TILE_H) / 4 - i / 2} ${x + TILE_W / 2},${y + TILE_H - i} ${x + i},${y + (3 * TILE_H) / 4 - i / 2} ${x + i},${y + TILE_H / 4 + i / 2}`}
+                                            />
+                                        );
+                                    })}
+                                    {pathOverlay.links.map(l => (
+                                        <g key={l.key} className={cn('orbit-path__link', l.leap && 'orbit-path__link--leap', wordState === 'invalid' && 'orbit-path__link--invalid')}>
+                                            {l.d && <path d={l.d} className="orbit-path__leap" />}
+                                            <g transform={`translate(${l.at.x} ${l.at.y}) rotate(${l.angle})`}>
+                                                <rect x={-11} y={-7} width={22} height={14} rx={7} className="orbit-path__pill" />
+                                                <polyline points="-3,-4 2,0 -3,4" className="orbit-path__chevron" />
+                                            </g>
+                                        </g>
+                                    ))}
+                                </svg>
+                            )}
                             {clearFx.map(fx => (
                                 <div
                                     key={fx.id}
@@ -1511,8 +1478,8 @@ const OrbitGame = () => {
                                         </span>
                                     )}
                                 </Button>
-                                <Button onClick={endTurn} variant="secondary" className="h-12 flex-1" title={turnWords > 0 ? 'End turn: drop the wave' : 'Pass: take the wave without a word'}>
-                                    <SkipForward className="w-4 h-4" /> {turnWords > 0 ? 'End turn' : 'Pass'}
+                                <Button onClick={endTurn} variant="secondary" className="h-12 flex-1" title="Pass: drop the wave and grow the flood by one">
+                                    <SkipForward className="w-4 h-4" /> Pass
                                 </Button>
                                 <Button onClick={submit} disabled={!match} className="h-12 flex-[1.4] text-base font-semibold">
                                     <Check className="w-5 h-5" /> Submit{match ? ` +${matchPoints}` : ''}
@@ -1536,17 +1503,6 @@ const OrbitGame = () => {
             </div>
 
             {modal === 'help' && <HelpModal onClose={closeModal} />}
-            {modal === 'lab' && (
-                <LabModal
-                    initial={loadLabRules()}
-                    onClose={closeModal}
-                    onStart={r => {
-                        saveLabRules(r);
-                        setModal(null);
-                        startFresh('practice');
-                    }}
-                />
-            )}
             {modal === 'results' && (
                 <ResultsModal
                     onClose={closeModal}

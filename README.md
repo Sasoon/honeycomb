@@ -6,14 +6,12 @@ Play at https://waxle.netlify.app
 
 ## How to play
 
-- **Build words.** Tap tiles in order, each touching the last, to spell a word of 3+ letters. Every tile shows its Scrabble value; a word scores its letter total ×2 at 5–6 letters and ×3 at 7+.
+- **Build words.** Tap tiles in order, each touching the last, to spell a word of 3+ letters. Once per word you may leap to a tile two steps away; chevrons on the board show the order, a dashed line marks the leap, and dashed outlines show where a leap can land. Every tile shows its Scrabble value; a word scores its letter total ×2 at 5–6 letters and ×3 at 7+.
 - **Gold tiles** arrive in some waves and double any word that uses them (two make it ×4).
-- **The flood.** Submitting a word or passing ends your turn. The tiles under **NEXT** then drop in and sink as deep as they can. Waves start at 3 tiles and grow by one every 4 waves. If the next wave won't fit, NEXT turns red and warns you.
+- **The flood.** Submitting a word or passing ends your turn. The tiles under **NEXT** then drop in and sink as deep as they can. Waves start at 3 tiles and grow by one every 3 waves. If the next wave won't fit, NEXT turns red and warns you.
 - **Spin.** Tap one tile, then drag around it (or scroll, or use ←/→ and Enter) to rotate its neighbours. The first spin each turn is free; each extra spin adds one tile to that turn's wave only.
 - **Out-spell the flood.** A word at least as long as the NEXT row shrinks that wave by one.
 - **Daily vs practice.** The daily gives everyone the same tiles and 3 turn undos (spin undos are free). After the run you can share an emoji summary and post your score to the leaderboard. Practice is a random board with unlimited undos.
-
-**Lab (practice only):** the flask icon next to Practice opens rule experiments: word shape (Path / Branch / Leap), multi-word turns, and wild / bomb / magnet special tiles. Looser rules grow waves every 3 turns instead of 4. The daily always plays the standard rules.
 
 Keyboard: Enter submits, Backspace drops the last letter, Esc clears, Ctrl/⌘+Z undoes. Sound can be muted from the speaker icon.
 
@@ -34,7 +32,7 @@ Leaderboard functions live in `netlify/functions` and run under `netlify dev`. S
 - `src/pages/OrbitGame.tsx`: the game screen (input, spin dial, animation, persistence)
 - `src/lib/orbit.ts`: pure game logic and tuning (board, flood placement, scoring, seeded per-wave tile streams, stats, sharing)
 - `src/lib/sfx.ts`: synthesized WebAudio sound effects
-- `src/components/orbit/`: help, results and lab dialogs
+- `src/components/orbit/`: help and results dialogs
 - `public/dictionary.txt`: word list, built by `npm run build:dictionary`
 
 The classic game (`WaxleGame.tsx`, `DailyChallenge.tsx` and the zustand store) is still in the source tree but no longer routed.

@@ -36,6 +36,11 @@ const HowToPlay = () => {
           that order, 3 letters or more. Valid words light up; press <span className="font-semibold text-text-primary">Submit</span> to
           score them. The tiles vanish and everything above them slides down.
         </p>
+        <p className="text-text-secondary mb-4">
+          <span className="font-semibold text-amber">Leap:</span> once per word, you may leap from your last tile to any tile two
+          steps away. Chevrons between tiles show your word's order, a dashed line marks the leap, and dashed outlines
+          show where a leap can still land.
+        </p>
         <p className="text-text-secondary mb-3">
           Every tile shows its letter value, Scrabble style. A word scores the sum of its letters, then
           <span className="font-semibold text-text-primary"> ×2 for 5–6 letters</span> and

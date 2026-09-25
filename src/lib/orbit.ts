@@ -13,22 +13,18 @@ export const DAILY_UNDOS = 3;
 // The flood runs on a fixed schedule: every wave is a little bigger than
 // the last few, so pressure builds on its own instead of punishing play
 export const WAVE_START = 3;
-export const WAVE_GROWTH_EVERY = 4;
-export const baseWave = (wave: number, growEvery = WAVE_GROWTH_EVERY) => WAVE_START + Math.floor(wave / growEvery);
+// Leap finds ~3x the words of strict paths, so waves grow every 3 turns
+// (simulated no-spin runs: 14-20 waves, ~17.5 on average)
+export const WAVE_GROWTH_EVERY = 3;
+export const baseWave = (wave: number) => WAVE_START + Math.floor(wave / WAVE_GROWTH_EVERY);
 // Spins are the signature move, so the first each turn is free. Every
 // extra spin adds one tile to THIS turn's wave only
 export const FREE_SPINS = 1;
-// With multi-word turns (lab), every word after the first adds a tile too and
-// each out-spell takes one off; a wave never drops below one tile
-export const waveSize = (wave: number, spins: number, extraWords = 0, shrink = 0, growEvery = WAVE_GROWTH_EVERY) =>
-    Math.max(1, baseWave(wave, growEvery) + Math.max(0, spins - FREE_SPINS) + extraWords - shrink);
+export const waveSize = (wave: number, spins: number) => baseWave(wave) + Math.max(0, spins - FREE_SPINS);
 // Out-spell the flood: a word at least as long as the wave shrinks it by one
 export const outSpelled = (wordLen: number, size: number) => wordLen >= size;
 // Roughly one gold tile every other wave
 const GEM_CHANCE = 0.13;
-// Lab specials (wild / bomb / magnet) share a wave's single special slot
-const LAB_SPECIAL_CHANCE = 0.12;
-export const WILD = '*';
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
@@ -43,7 +39,7 @@ const LETTER_VALUES: Record<string, number> = {
     J: 8, X: 8,
     Q: 10, Z: 10,
 };
-export const letterValue = (l: string) => (l === WILD ? 0 : LETTER_VALUES[l.toUpperCase()] ?? 1);
+export const letterValue = (l: string) => LETTER_VALUES[l.toUpperCase()] ?? 1;
 // Long words carry the run
 export const lengthMult = (len: number) => (len >= 7 ? 3 : len >= 5 ? 2 : 1);
 
@@ -54,97 +50,27 @@ export interface WordScore {
     total: number;
 }
 
-// ---------- rules (the daily uses DEFAULT_RULES; practice can try lab rules) ----------
-// path: each tile touches the one before it
-// branch: each tile touches ANY tile already picked
-// leap: path, plus one hop over a single tile per word
-export type WordShape = 'path' | 'branch' | 'leap';
-export type Special = 'wild' | 'bomb' | 'magnet';
-export interface Rules {
-    shape: WordShape;
-    multiWord: boolean;
-    specials: Special[];
-}
-export const DEFAULT_RULES: Rules = { shape: 'path', multiWord: false, specials: [] };
-// Looser shapes and specials clear more per turn, so the flood grows faster
-// to keep runs near the same length (tuned by simulation: ~17-23 waves)
-export const growEveryFor = (r: Rules) => (r.shape === 'path' && !r.specials.length ? WAVE_GROWTH_EVERY : 3);
-export const isDefaultRules = (r: Rules) =>
-    r.shape === DEFAULT_RULES.shape && r.multiWord === DEFAULT_RULES.multiWord && r.specials.length === 0;
-
-const LS_LAB = 'waxle-orbit-lab-v1';
-const SHAPES: WordShape[] = ['path', 'branch', 'leap'];
-const SPECIALS: Special[] = ['wild', 'bomb', 'magnet'];
-
-// Lab rules picked for new practice games
-export function loadLabRules(): Rules {
-    try {
-        const raw = JSON.parse(localStorage.getItem(LS_LAB) || 'null');
-        if (raw && SHAPES.includes(raw.shape)) {
-            return {
-                shape: raw.shape,
-                multiWord: !!raw.multiWord,
-                specials: Array.isArray(raw.specials) ? raw.specials.filter((x: Special) => SPECIALS.includes(x)) : [],
-            };
-        }
-    } catch { /* fall back to standard rules */ }
-    return DEFAULT_RULES;
-}
-
-export function saveLabRules(r: Rules) {
-    try { localStorage.setItem(LS_LAB, JSON.stringify(r)); } catch { /* non-fatal */ }
-}
-
-const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
-export const describeRules = (r: Rules) =>
-    [cap(r.shape), r.multiWord ? 'Multi-word' : '', r.specials.map(cap).join(' + ')].filter(Boolean).join(' · ');
+// ---------- word shape: path + one leap ----------
+// Each tile must touch the one before it, except that once per word you may
+// leap to a tile two steps away (any tile sharing a neighbour with the last)
 
 export const isAdjacent = (a: HexCell, b: HexCell) =>
     a.position.row === b.position.row
         ? Math.abs(a.position.col - b.position.col) === 1
         : Math.abs(a.position.row - b.position.row) === 1 && Math.abs(a.position.col - b.position.col) === 0.5;
 
-// Two tiles apart with a lettered tile between them
-const hopsOver = (a: HexCell, c: HexCell, grid: HexCell[]) =>
-    !isAdjacent(a, c) && grid.some(m => m.letter && m.id !== a.id && m.id !== c.id && isAdjacent(a, m) && isAdjacent(m, c));
+// The lettered tile `a` would leap over to reach `c`, if any
+export function leapOver(a: HexCell, c: HexCell, grid: HexCell[]): HexCell | null {
+    if (isAdjacent(a, c)) return null;
+    return grid.find(m => m.letter && m.id !== a.id && m.id !== c.id && isAdjacent(a, m) && isAdjacent(m, c)) ?? null;
+}
 
 export const leapUsed = (sel: HexCell[]) => sel.some((c, i) => i > 0 && !isAdjacent(sel[i - 1], c));
 
-// May `cell` be added to the selection under this shape rule?
-export function canExtend(shape: WordShape, sel: HexCell[], cell: HexCell, grid: HexCell[]): boolean {
+export function canExtend(sel: HexCell[], cell: HexCell, grid: HexCell[]): boolean {
     if (!sel.length) return true;
     const last = sel[sel.length - 1];
-    if (shape === 'branch') return sel.some(s => isAdjacent(s, cell));
-    if (shape === 'leap') return isAdjacent(last, cell) || (!leapUsed(sel) && hopsOver(last, cell, grid));
-    return isAdjacent(last, cell);
-}
-
-// Resolve wild tiles: the first dictionary word the '*'s can stand for
-export function resolveWord(raw: string, has: (w: string) => boolean): string | null {
-    const i = raw.indexOf(WILD);
-    if (i === -1) return has(raw) ? raw : null;
-    for (let code = 97; code <= 122; code++) {
-        const hit = resolveWord(raw.slice(0, i) + String.fromCharCode(code) + raw.slice(i + 1), has);
-        if (hit) return hit;
-    }
-    return null;
-}
-
-// Extra tiles a word takes with it: a bomb clears its whole ring, a magnet
-// pulls every matching letter off the board
-export function extraClears(grid: HexCell[], wordIds: string[]): string[] {
-    const inWord = new Set(wordIds);
-    const extra = new Set<string>();
-    for (const id of wordIds) {
-        const c = grid.find(x => x.id === id);
-        if (!c) continue;
-        if (c.special === 'bomb') {
-            grid.forEach(n => { if (n.letter && !inWord.has(n.id) && isAdjacent(c, n)) extra.add(n.id); });
-        } else if (c.special === 'magnet' && c.letter !== WILD) {
-            grid.forEach(n => { if (n.letter === c.letter && !inWord.has(n.id)) extra.add(n.id); });
-        }
-    }
-    return [...extra];
+    return isAdjacent(last, cell) || (!leapUsed(sel) && !!leapOver(last, cell, grid));
 }
 
 // Letter points x length bonus, doubled for every gold tile in the word
@@ -179,13 +105,11 @@ export function buildBoard(): HexCell[] {
     return cells;
 }
 
-// Saved board: [cellId, letter] plus 1 for a gold tile or a lab special
-type SavedTile = [string, string] | [string, string, 1 | 'bomb' | 'magnet'];
-export type BoardLetters = SavedTile[];
+// Saved board: [cellId, letter] or [cellId, letter, 1] for a gold tile
+export type BoardLetters = Array<[string, string] | [string, string, 1]>;
 
 export const boardLetters = (grid: HexCell[]): BoardLetters =>
-    grid.filter(c => c.letter).map((c): SavedTile =>
-        c.isGem ? [c.id, c.letter, 1] : c.special ? [c.id, c.letter, c.special] : [c.id, c.letter]);
+    grid.filter(c => c.letter).map(c => (c.isGem ? [c.id, c.letter, 1] : [c.id, c.letter]) as [string, string] | [string, string, 1]);
 
 export function boardFromLetters(letters: BoardLetters): HexCell[] {
     const board = buildBoard();
@@ -196,13 +120,12 @@ export function boardFromLetters(letters: BoardLetters): HexCell[] {
             c.letter = t[1];
             c.isPlaced = true;
             c.isGem = t[2] === 1;
-            if (t[2] === 'bomb' || t[2] === 'magnet') c.special = t[2];
         }
     });
     return board;
 }
 
-export type Tile = { letter: string; gem: boolean; special?: 'bomb' | 'magnet' };
+export type Tile = { letter: string; gem: boolean };
 
 // Flood placement: each tile enters the top row and sinks to the globally
 // deepest reachable empty cell. A tile with no way in ends the game
@@ -253,7 +176,6 @@ export function orbitFlood(
         }
         target.letter = tile.letter;
         target.isGem = tile.gem;
-        target.special = tile.special;
         target.isPlaced = true;
         target.placedThisTurn = true;
         paths[target.id] = path;
@@ -278,7 +200,7 @@ export function clearAndSettle(
     const byPos = new Map(newGrid.map(c => [`${c.position.row},${c.position.col}`, c]));
     const clear = new Set(clearIds);
     newGrid.forEach(c => {
-        if (clear.has(c.id)) { c.letter = ''; c.isGem = false; c.special = undefined; c.isPlaced = false; }
+        if (clear.has(c.id)) { c.letter = ''; c.isGem = false; c.isPlaced = false; }
     });
     // origin[cellId] = the cell the resident tile started this settle in
     const origin = new Map<string, string>();
@@ -296,13 +218,11 @@ export function clearAndSettle(
                 const dst = below[0];
                 dst.letter = c.letter;
                 dst.isGem = c.isGem;
-                dst.special = c.special;
                 dst.isPlaced = true;
                 origin.set(dst.id, origin.get(c.id)!);
                 origin.delete(c.id);
                 c.letter = '';
                 c.isGem = false;
-                c.special = undefined;
                 c.isPlaced = false;
                 moved = true;
             }
@@ -359,8 +279,8 @@ function nextWaveLetter(rng: SeededRNG, prefix: string[]): string {
 
 const streamCache = new Map<string, { rng: SeededRNG; tiles: Tile[] }>();
 
-export function waveTiles(seed: string, tag: string, count: number, specials: Special[] = []): Tile[] {
-    const key = `${seed}|tiles|${tag}${specials.length ? `|${[...specials].sort().join(',')}` : ''}`;
+export function waveTiles(seed: string, tag: string, count: number): Tile[] {
+    const key = `${seed}|tiles|${tag}`;
     let entry = streamCache.get(key);
     if (!entry) {
         entry = { rng: createSeededRNG(hashSeed(key)), tiles: [] };
@@ -369,22 +289,10 @@ export function waveTiles(seed: string, tag: string, count: number, specials: Sp
     while (entry.tiles.length < count) {
         const prefix = entry.tiles.map(t => t.letter);
         const letter = nextWaveLetter(entry.rng, prefix);
-        // At most one gold (or lab special) tile per wave, drawn after the
-        // letter so the stream stays prefix-stable
-        const open = !entry.tiles.some(t => t.gem || t.special || t.letter === WILD);
-        if (!specials.length) {
-            entry.tiles.push({ letter, gem: open && entry.rng.next() < GEM_CHANCE });
-            continue;
-        }
-        const r = open ? entry.rng.next() : 1;
-        if (r < GEM_CHANCE) {
-            entry.tiles.push({ letter, gem: true });
-        } else if (r < GEM_CHANCE + LAB_SPECIAL_CHANCE) {
-            const kind = specials[Math.floor(entry.rng.next() * specials.length)];
-            entry.tiles.push(kind === 'wild' ? { letter: WILD, gem: false } : { letter, gem: false, special: kind });
-        } else {
-            entry.tiles.push({ letter, gem: false });
-        }
+        // At most one gold tile per wave, drawn after the letter so the
+        // stream stays prefix-stable
+        const gem = !entry.tiles.some(t => t.gem) && entry.rng.next() < GEM_CHANCE;
+        entry.tiles.push({ letter, gem });
     }
     return entry.tiles.slice(0, count);
 }

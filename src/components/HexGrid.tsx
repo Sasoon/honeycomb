@@ -18,7 +18,6 @@ export type HexCell = {
   placedThisTurn?: boolean;
   isAutoClear?: boolean;
   isGem?: boolean; // Orbit gold tile: doubles any word that uses it
-  special?: 'bomb' | 'magnet'; // Orbit lab tiles with a clearing effect
 };
 
 export interface HexGridProps {

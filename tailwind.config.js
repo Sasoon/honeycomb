@@ -34,8 +34,6 @@ export default {
                     dark: 'var(--success-dark)',
                 },
                 gold: 'var(--gold)',
-                bomb: 'var(--bomb)',
-                magnet: 'var(--magnet)',
                 amber: {
                     DEFAULT: 'var(--amber)',
                     light: 'var(--amber-light)',
