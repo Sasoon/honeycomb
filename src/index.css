@@ -1411,7 +1411,8 @@ button {
 .orbit-tile {
   position: absolute;
   inset: 0;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  /* --hex: selected tiles get a socket cut where the previous tile keys in */
+  clip-path: var(--hex, polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%));
 }
 
 .orbit-hexbg {
@@ -1430,20 +1431,21 @@ button {
   will-change: transform;
 }
 
-/* Tile anatomy: letter centred, Scrabble value below it. Everything sits
-   over the gem inlay */
+/* Tile anatomy: letter centred, Scrabble value below it, tap order (selected
+   only) above it. Everything sits over the gem inlay */
 .orbit-tile__letter {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   font-size: 1.3rem;
   margin-top: -4px;
 }
 
-.orbit-tile__value {
+.orbit-tile__value,
+.orbit-tile__order {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1;
+  z-index: 3;
   font-size: 0.6rem;
   font-weight: 600;
   line-height: 1;
@@ -1452,6 +1454,36 @@ button {
 .orbit-tile__value {
   bottom: 15%;
   opacity: 0.55;
+}
+
+.orbit-tile__order {
+  top: 13%;
+  font-size: 0.58rem;
+  font-weight: 700;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* a leap glyph occupies the top corner */
+.orbit-tile__order--low { top: 16%; }
+
+/* the first tap's number sits on an ink disc */
+.orbit-tile__order--start {
+  opacity: 1;
+  color: var(--amber);
+  background: #0E1B2C;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -2px;
+}
+
+.orbit-cell--bad .orbit-tile__order--start {
+  background: #F2EFE8;
+  color: #354356;
 }
 
 
@@ -1552,150 +1584,88 @@ button {
   100% { transform: translate(-50%, -36px); opacity: 0; }
 }
 
-/* Word order on the board: the newest tile glows (on the unclipped wrapper),
-   the tile a leap landed on wears a pale inner rim, and tiles a leap could
-   still reach get a faint accent rim */
-.orbit-cell--head {
-  filter: drop-shadow(0 0 10px rgba(63, 216, 199, 0.55));
-  z-index: 2;
+/* Keyed tiles: each selected tile grows a key (an unclipped SVG painted in
+   the tile's colour) from the edge facing the next tile, and the next tile's
+   outline has a matching socket, so the dark seam bends into a chevron along
+   the word. Selected tiles paint above their neighbours so keys never hide */
+.orbit-cell--sel,
+.orbit-cell--bad { z-index: 1; }
+.orbit-cell--sel { --cue: rgba(14, 27, 44, 0.82); }
+.orbit-cell--bad { --cue: rgba(242, 239, 232, 0.9); }
+
+.orbit-key {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: 90px;
+  height: 100px;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.orbit-tile__rim {
+.orbit-key path {
+  fill: var(--tile, var(--amber));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: orbitKeyIn 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* A leap gets the only glyph: a double chevron on the tile it left (facing
+   the landing) and the tile it reached (facing back where it came from).
+   Ghosted, it marks every tile a leap could still reach */
+.orbit-cues {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
 }
 
-.orbit-tile__rim polygon {
+.orbit-cue--leap,
+.orbit-cue--ghost {
   fill: none;
-  stroke: rgba(242, 239, 232, 0.9);
-  stroke-width: 2.5;
-}
-
-.orbit-tile__rim--reach polygon {
-  stroke: var(--amber);
-  stroke-width: 2;
-  opacity: 0.45;
-}
-
-/* Word rail: the selection spelled out as mini tiles under the board, in the
-   same ramp colours; touching tiles sit a seam apart, a leap breaks the row
-   with a hop arc, and an unused leap waits as a ghost hop at the end */
-.orbit-rail {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-
-.orbit-rail__word {
-  display: flex;
-  align-items: center;
-}
-
-.orbit-rail__tile {
-  position: relative;
-  width: 30px;
-  height: 34px;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.95rem;
-  background: var(--tile, var(--amber));
-  color: #0E1B2C;
-  animation: orbitRailIn 180ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
-}
-
-.orbit-rail--invalid .orbit-rail__tile { color: #F2EFE8; }
-.orbit-rail__tile--gem { box-shadow: inset 0 0 0 3px var(--gold); }
-
-.orbit-rail__join { width: 3px; }
-
-.orbit-rail__leap,
-.orbit-rail__spare {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.orbit-rail__leap { width: 14px; height: 34px; }
-
-.orbit-rail__leap svg,
-.orbit-rail__spare svg {
-  position: absolute;
-  top: -8px;
-  overflow: visible;
-}
-
-.orbit-rail__leap svg { left: 50%; transform: translateX(-50%); }
-.orbit-rail__spare { margin-left: 14px; }
-.orbit-rail__spare svg { left: -22px; opacity: 0.55; }
-
-.orbit-rail__leap path,
-.orbit-rail__spare path {
-  fill: none;
-  stroke: var(--amber);
-  stroke-width: 2;
+  stroke: var(--cue);
+  stroke-width: 2.3;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.orbit-rail__spare path { stroke-dasharray: 2.4 2.6; }
-.orbit-rail__leap circle { fill: var(--amber); }
-.orbit-rail--invalid .orbit-rail__leap path { stroke: #8494AA; }
-.orbit-rail--invalid .orbit-rail__leap circle { fill: #8494AA; }
+.orbit-cue--ghost {
+  stroke: #27A89B;
+  stroke-width: 2;
+  opacity: 0.6;
+  animation: orbitGhost 2.6s ease-in-out infinite;
+}
 
-.orbit-rail__ghost {
-  width: 30px;
-  height: 34px;
+/* The newest tile: an inner rim (the gold tile's idiom) and a soft lift */
+.orbit-cell--head {
+  z-index: 2;
+  filter: drop-shadow(0 2px 9px rgba(63, 216, 199, 0.35));
+}
+
+.orbit-cell--head.orbit-cell--bad { filter: none; }
+
+.orbit-cell--head:not(.orbit-cell--gem) .orbit-tile::before,
+.orbit-cell--head:not(.orbit-cell--gem) .orbit-tile::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: rgba(190, 210, 235, 0.1);
 }
 
-.orbit-rail__score {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
+.orbit-cell--head:not(.orbit-cell--gem) .orbit-tile::before { inset: 4px; background: rgba(14, 27, 44, 0.5); }
+.orbit-cell--head:not(.orbit-cell--gem) .orbit-tile::after { inset: 6px; background: var(--tile, var(--amber)); }
+.orbit-cell--head.orbit-cell--bad:not(.orbit-cell--gem) .orbit-tile::before { background: rgba(242, 239, 232, 0.5); }
+
+@keyframes orbitKeyIn {
+  from { opacity: 0; transform: scale(0.3); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-.orbit-rail__pts {
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--amber);
-  font-variant-numeric: tabular-nums;
-}
-
-.orbit-rail__why {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.orbit-rail__bad {
-  font-size: 12px;
-  font-weight: 600;
-  color: #F08A8A;
-}
-
-@media (min-width: 768px) {
-  .orbit-rail__tile,
-  .orbit-rail__ghost {
-    width: 36px;
-    height: 41px;
-  }
-
-  .orbit-rail__tile { font-size: 1.1rem; }
-  .orbit-rail__leap { height: 41px; }
-}
-
-@keyframes orbitRailIn {
-  from { transform: scale(0.6); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+@keyframes orbitGhost {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.28; }
 }
 
 /* Praise callout for big words: pops over the board, then floats away */
@@ -1734,7 +1704,8 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .orbit-praise { animation: none; opacity: 0; }
-  .orbit-rail__tile { animation: none; }
+  .orbit-key path,
+  .orbit-cue--ghost { animation: none; }
   .orbit-danger { animation: none; }
   .orbit-cell--ring .orbit-tile { animation: none; }
   .orbit-clearfx { animation: none; opacity: 0; }
