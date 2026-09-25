@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Trophy, Clock, Target } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Trophy, Clock, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { cn } from '../lib/utils';
+import { todayStr } from '../lib/orbit';
+
+const LS_NAME = 'waxle-player-name';
+const savedName = () => {
+  try { return localStorage.getItem(LS_NAME) ?? ''; } catch { return ''; }
+};
 
 interface LeaderboardEntry {
   rank: number;
@@ -30,55 +37,44 @@ const Leaderboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load leaderboard data
-  const loadLeaderboard = async (type: 'daily' | 'alltime') => {
+  const loadLeaderboard = useCallback(async (type: 'daily' | 'alltime') => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Add extra cache busting for fresh submissions
-      const url = new URL(window.location.href);
-      const isJustSubmitted = url.searchParams.get('submitted') === 'true';
-      const cacheBreaker = isJustSubmitted ? `fresh=${Date.now()}&rand=${Math.random()}` : `t=${Date.now()}`;
-      
-      const response = await fetch(`/api/get-leaderboard?type=${type}&limit=10&${cacheBreaker}`, {
-        cache: 'no-store', // Force no browser caching
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-      
+      // Daily boards follow the player's local calendar day, like the puzzle
+      const params = new URLSearchParams({ type, game: 'orbit', date: todayStr(), limit: '20', t: String(Date.now()) });
+      const response = await fetch(`/api/get-leaderboard?${params}`, { cache: 'no-store' });
+
       if (!response.ok) {
         throw new Error(`Failed to load leaderboard: ${response.statusText}`);
       }
 
       const result: LeaderboardData = await response.json();
-      
+
       if (!result.success) {
         throw new Error('Failed to load leaderboard data');
       }
 
       setLeaderboardData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
+      setError(err instanceof Error && !/JSON/.test(err.message) ? err.message : 'Could not reach the leaderboard');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Load data when tab changes
   useEffect(() => {
     loadLeaderboard(activeTab);
-  }, [activeTab]);
+  }, [activeTab, loadLeaderboard]);
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const me = savedName().trim().toLowerCase();
+
+  const formatDate = (entry: LeaderboardEntry): string => {
+    if (activeTab === 'alltime' && entry.date) {
+      return new Date(`${entry.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    return new Date(entry.submittedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
 
@@ -91,7 +87,9 @@ const Leaderboard = () => {
             <Trophy className="w-8 h-8 text-amber" />
             <h1 className="text-4xl font-bold text-text-primary">Leaderboard</h1>
           </div>
-          <p className="text-text-secondary">Compete with players around the world</p>
+          <p className="text-text-secondary">
+            {activeTab === 'daily' ? "Today's daily: same letters for everyone" : 'Best single daily scores of all time'}
+          </p>
         </div>
 
         {/* Modern Tab Navigation */}
@@ -148,7 +146,7 @@ const Leaderboard = () => {
                 <h3 className="text-lg font-semibold text-text-primary mb-2">Failed to Load Leaderboard</h3>
                 <p className="text-text-secondary mb-4">{error}</p>
                 <Button 
-                  variant="destructive"
+                  variant="secondary"
                   onClick={() => loadLeaderboard(activeTab)}
                 >
                   Try Again
@@ -168,8 +166,9 @@ const Leaderboard = () => {
                     <Trophy className="w-8 h-8 text-amber" />
                   </div>
                   <div>
-                    <p className="text-lg font-medium text-text-primary">No scores yet!</p>
-                    <p className="text-text-secondary">Be the first to complete today's challenge.</p>
+                    <p className="text-lg font-medium text-text-primary">No scores yet</p>
+                    <p className="text-text-secondary mb-4">Finish today's daily and post your score from the results screen.</p>
+                    <Link to="/" className="inline-flex h-10 px-4 items-center rounded-xl bg-amber text-bg-primary font-semibold text-sm">Play today's daily</Link>
                   </div>
                 </div>
               ) : (
@@ -181,7 +180,8 @@ const Leaderboard = () => {
                         "flex items-center p-4 rounded-2xl transition-all duration-200",
                         "hover:bg-secondary/5 hover:shadow-lg hover:shadow-secondary/10",
                         entry.rank <= 3 && "bg-amber/5 border border-amber/20 shadow-lg shadow-amber/10",
-                        entry.rank === 1 && "ring-2 ring-amber/30"
+                        entry.rank === 1 && "ring-2 ring-amber/30",
+                        me && entry.playerName.toLowerCase() === me && "bg-amber/10 border border-amber/40"
                       )}
                     >
                       {/* Rank */}
@@ -204,29 +204,29 @@ const Leaderboard = () => {
                         </h3>
                         <div className="flex items-center space-x-2 text-sm text-text-secondary">
                           <Clock className="w-3 h-3" />
-                          <span>{formatDate(entry.submittedAt)}</span>
+                          <span>{formatDate(entry)}</span>
                         </div>
                       </div>
 
                       {/* Stats Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 ml-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 ml-3 md:ml-4">
                         <div className="text-center">
                           <div className="h-8 flex items-center justify-center text-2xl font-bold text-amber">{entry.score.toLocaleString()}</div>
                           <div className="text-xs text-text-secondary font-medium">Score</div>
                         </div>
                         <div className="text-center">
                           <div className="h-8 flex items-center justify-center text-lg font-semibold text-text-primary">{entry.round}</div>
-                          <div className="text-xs text-text-secondary font-medium">Round</div>
+                          <div className="text-xs text-text-secondary font-medium">Waves</div>
                         </div>
-                        <div className="text-center">
+                        <div className="text-center hidden md:block">
                           <div className="h-8 flex items-center justify-center text-lg font-semibold text-text-primary">{entry.totalWords}</div>
                           <div className="text-xs text-text-secondary font-medium">Words</div>
                         </div>
-                        <div className="text-center">
-                          <div className="h-8 flex items-center justify-center text-sm font-mono font-semibold text-text-primary truncate" title={entry.longestWord}>
+                        <div className="text-center hidden md:block">
+                          <div className="h-8 flex items-center justify-center text-sm font-mono font-semibold text-text-primary truncate uppercase" title={entry.longestWord}>
                             {entry.longestWord || '-'}
                           </div>
-                          <div className="text-xs text-text-secondary font-medium">Longest</div>
+                          <div className="text-xs text-text-secondary font-medium">Best word</div>
                         </div>
                       </div>
 
@@ -246,8 +246,8 @@ const Leaderboard = () => {
               onClick={() => loadLeaderboard(activeTab)}
               className="px-6 py-3"
             >
-              <Target className="w-4 h-4 mr-2" />
-              Refresh Leaderboard
+              <RefreshCw className="w-4 h-4" />
+              Refresh
             </Button>
           </div>
         )}

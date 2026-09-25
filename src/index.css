@@ -1379,7 +1379,7 @@ button {
   height: 100svh;
 }
 
-/* ==================== Orbit prototype (/orbit) ==================== */
+/* ==================== Orbit ==================== */
 
 .orbit-cell {
   position: absolute;
@@ -1425,6 +1425,18 @@ button {
   color: #15202E;
   transition: background-color 120ms ease, color 120ms ease;
   will-change: transform;
+}
+
+/* Tap-order index on selected tiles, so the path reads at a glance */
+.orbit-tile__order {
+  position: absolute;
+  bottom: 13%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.6;
 }
 
 .orbit-tile--selected {

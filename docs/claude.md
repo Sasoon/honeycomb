@@ -6,6 +6,15 @@ The Honeycomb Tetris game uses Netlify Blob Stores to persist leaderboard data. 
 
 ## Store Structure
 
+Each game has its own set of stores, picked by the `game` field (submit body) or
+`game` query param (get). `game=orbit` (the live game) uses `orbit-daily`,
+`orbit-daily-index`, `orbit-alltime` and `orbit-alltime-index`; anything else falls
+back to the classic `leaderboard-*` stores listed below.
+
+Daily dates are the player's local calendar day, so the server accepts any date
+within one day of UTC today, and `get-leaderboard` takes a `date` param. The purge
+job only removes daily entries older than UTC yesterday.
+
 ### Store Names
 - `leaderboard-daily` - Daily challenge scores
 - `leaderboard-alltime` - Best scores per player across all time

@@ -1,10 +1,45 @@
 import { getStore } from '@netlify/blobs';
 
+// Each game keeps its own leaderboard stores, so Orbit scores never mix
+// with the classic game's
+const STORE_NAMES = {
+  classic: {
+    daily: 'leaderboard-daily',
+    dailyIndex: 'leaderboard-daily-index',
+    alltime: 'leaderboard-alltime',
+    alltimeIndex: 'leaderboard-alltime-index',
+  },
+  orbit: {
+    daily: 'orbit-daily',
+    dailyIndex: 'orbit-daily-index',
+    alltime: 'orbit-alltime',
+    alltimeIndex: 'orbit-alltime-index',
+  },
+};
+
+function storeNamesFor(game) {
+  return STORE_NAMES[game] || STORE_NAMES.classic;
+}
+
+// Daily puzzles follow each player's local calendar day, so "today" is
+// anywhere from UTC yesterday to UTC tomorrow depending on time zone
+function isCurrentDailyDate(date) {
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const utcToday = Date.parse(new Date().toISOString().slice(0, 10));
+  const diffDays = Math.round((Date.parse(date) - utcToday) / 86400000);
+  return Math.abs(diffDays) <= 1;
+}
+
 export default async function handler(request, context) {
   try {
     const url = new URL(request.url);
     const type = url.searchParams.get('type') || 'daily';
     const limit = parseInt(url.searchParams.get('limit') || '20');
+    const stores = storeNamesFor(url.searchParams.get('game'));
+    // Clients ask for their own local day; anything outside the live window
+    // falls back to UTC today
+    const requestedDate = url.searchParams.get('date');
+    const date = isCurrentDailyDate(requestedDate) ? requestedDate : new Date().toISOString().split('T')[0];
 
     // Validate type parameter
     if (!['daily', 'alltime'].includes(type)) {
@@ -25,9 +60,9 @@ export default async function handler(request, context) {
     const isLocal = !context.site?.id;
 
     if (type === 'daily') {
-      return await getDailyLeaderboard(isLocal, context, maxLimit);
+      return await getDailyLeaderboard(isLocal, context, maxLimit, stores, date);
     } else {
-      return await getAllTimeLeaderboard(isLocal, context, maxLimit);
+      return await getAllTimeLeaderboard(isLocal, context, maxLimit, stores);
     }
 
   } catch (error) {
@@ -46,15 +81,14 @@ export default async function handler(request, context) {
   }
 };
 
-async function getDailyLeaderboard(isLocal, context, limit) {
-  const today = new Date().toISOString().split('T')[0];
+async function getDailyLeaderboard(isLocal, context, limit, stores, today) {
 
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
 
     // Read from strongly-consistent daily index for instant visibility
     const indexStore = getStore({
-      name: 'leaderboard-daily-index',
+      name: stores.dailyIndex,
       siteID: context.site?.id,
     });
 
@@ -62,7 +96,7 @@ async function getDailyLeaderboard(isLocal, context, limit) {
 
     // If no index exists yet, build-on-read from raw store and persist
     if (!data || !Array.isArray(data.leaderboard)) {
-      const built = await buildDailyIndex({ siteID: context.site?.id, isLocal, date: today });
+      const built = await buildDailyIndex({ siteID: context.site?.id, isLocal, date: today, stores });
       if (built) data = built;
     }
 
@@ -129,13 +163,13 @@ async function getDailyLeaderboard(isLocal, context, limit) {
   }
 }
 
-async function getAllTimeLeaderboard(isLocal, context, limit) {
+async function getAllTimeLeaderboard(isLocal, context, limit, stores) {
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
 
     // Read from strongly-consistent all-time index
     const indexStore = getStore({
-      name: 'leaderboard-alltime-index',
+      name: stores.alltimeIndex,
       siteID: context.site?.id,
     });
 
@@ -143,7 +177,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit) {
 
     // Build-on-read if missing
     if (!data || !Array.isArray(data.leaderboard)) {
-      const built = await buildAllTimeIndex({ siteID: context.site?.id, isLocal });
+      const built = await buildAllTimeIndex({ siteID: context.site?.id, isLocal, stores });
       if (built) data = built;
     }
 
@@ -203,11 +237,11 @@ function isPlausibleEntry(entry) {
   return entry.score <= Math.max(entry.totalWords || 0, 1) * 50;
 }
 
-async function buildDailyIndex({ siteID, isLocal, date }) {
+async function buildDailyIndex({ siteID, isLocal, date, stores }) {
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
-    const rawStore = getStore({ name: 'leaderboard-daily', siteID });
-    const indexStore = getStore({ name: 'leaderboard-daily-index', siteID });
+    const rawStore = getStore({ name: stores.daily, siteID });
+    const indexStore = getStore({ name: stores.dailyIndex, siteID });
     const indexKey = `${keyPrefix}${date}`;
 
     const itemsByPlayer = Object.create(null);
@@ -249,11 +283,11 @@ async function buildDailyIndex({ siteID, isLocal, date }) {
   }
 }
 
-async function buildAllTimeIndex({ siteID, isLocal }) {
+async function buildAllTimeIndex({ siteID, isLocal, stores }) {
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
-    const rawStore = getStore({ name: 'leaderboard-alltime', siteID });
-    const indexStore = getStore({ name: 'leaderboard-alltime-index', siteID });
+    const rawStore = getStore({ name: stores.alltime, siteID });
+    const indexStore = getStore({ name: stores.alltimeIndex, siteID });
     const indexKey = `${keyPrefix}all`;
 
     const itemsByPlayer = Object.create(null);

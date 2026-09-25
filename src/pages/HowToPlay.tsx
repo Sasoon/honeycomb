@@ -1,124 +1,117 @@
-import { ArrowLeftRight, Zap } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { RefreshCw, Waves, Type, Scissors, CalendarDays, Undo2 } from 'lucide-react';
+import { DAILY_UNDOS, METER_START, wordPoints } from '../lib/orbit';
+
+const card = 'rounded-2xl border border-secondary/40 bg-bg-secondary/60 p-6 section-spacing';
 
 const HowToPlay = () => {
   return (
     <div className="page-container page-container--standard">
       <h1 className="page-title">How to Play WAXLE</h1>
 
-      {/* Quick Start */}
-      <div className="bg-secondary-light rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4 text-text-primary">Quick Start</h2>
-        <p className="mb-4 text-text-secondary">
-          Letter tiles drop onto a hexagonal board. Tap adjacent tiles to spell words, submit them to clear those tiles, and keep the board from filling up as more tiles flood in every round. When the top row is full, the game is over — survive as long as you can for the highest score!
+      <div className={card}>
+        <p className="text-text-secondary text-lg">
+          Spell words on a honeycomb of 19 tiles while a flood of letters pours in from the top.
+          Every turn, clear what you can, and when a letter has nowhere left to land, the game is over.
+          Score as much as you can before the board fills.
         </p>
       </div>
 
-      {/* The Round Loop */}
-      <div className="rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4 text-text-primary">The Round Loop</h2>
-        <ol className="list-decimal list-inside space-y-3 text-text-secondary">
-          <li>
-            <span className="font-medium text-text-primary">Trace a word.</span> Tap tiles one by one — each tile must touch the previous one. Valid words (3+ letters) light up <span className="text-amber font-semibold">gold</span>; invalid ones turn dark.
-          </li>
-          <li>
-            <span className="font-medium text-text-primary">Submit it.</span> Submitting scores the word, clears its tiles, lets the rest settle, and drops the next wave of tiles. Submitting is your turn — make it count! Each word can only be scored <span className="font-semibold text-text-primary">once per game</span>.
-          </li>
-          <li>
-            <span className="font-medium text-text-primary">Or pass.</span> No good word? Hit <span className="font-semibold">End Turn</span> to skip straight to the next drop.
-          </li>
-          <li>
-            <span className="font-medium text-text-primary">Plan ahead.</span> The <span className="font-semibold text-amber">NEXT</span> panel always shows exactly which letters drop next — and the waves get bigger as rounds go on.
-          </li>
-        </ol>
-        <p className="mt-4 text-sm italic text-text-secondary">
-          If the entire top row is occupied, no new tiles can enter and the game ends.
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary flex items-center gap-2">
+          <Type className="w-5 h-5 text-amber" /> Build words
+        </h2>
+        <p className="text-text-secondary mb-4">
+          Tap tiles one at a time. Each tile must touch the one before it, and the letters must spell a word in
+          that order, 3 letters or more. Valid words light up; press <span className="font-semibold text-text-primary">Submit</span> to
+          score them. The tiles vanish and everything above them slides down.
         </p>
-      </div>
-
-      {/* Swap System */}
-      <div className="rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4 text-text-primary flex items-center">
-          <ArrowLeftRight className="w-5 h-5 text-amber mr-2" />
-          Swap System
-        </h2>
-        <div className="space-y-2 text-text-secondary">
-          <p>
-            Stuck one letter short? Press the <span className="font-semibold text-text-primary">Swap</span> button (it shows how many swaps you have), then tap any two tiles to exchange their letters. Swapping doesn't end your turn — swap, then submit!
-          </p>
-          <p className="text-sm">
-            You start with 1 swap and can hold up to <span className="font-semibold text-text-primary">3</span>. Earn one for every <span className="font-semibold text-text-primary">5+ letter word</span> you submit, and one for every auto-clear. Unused swaps carry over between rounds. Press the Swap button again to cancel swap mode.
-          </p>
-        </div>
-      </div>
-
-      {/* Auto-Clear Bonus Mechanic */}
-      <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/10 rounded-lg shadow-lg border border-amber-500/30 p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4 text-text-primary flex items-center">
-          <Zap className="w-5 h-5 text-amber-500 mr-2" />
-          Auto-Clear Bonus Mechanic
-        </h2>
-        <div className="space-y-4 text-text-secondary">
-          <p className="text-lg">
-            When the wave after a submitted word lands, WAXLE scans for bonus words along the <span className="font-semibold text-amber-500">straight lines</span> of the hex grid. (Passing with End Turn skips the scan — auto-clears reward playing a word.)
-          </p>
-          <div className="bg-bg-primary/50 rounded p-4 space-y-2">
-            <p><span className="font-semibold text-amber-500">✓</span> Valid <span className="font-semibold text-text-primary">4+ letter</span> words found on any line are automatically cleared!</p>
-            <p><span className="font-semibold text-amber-500">✓</span> Each auto-cleared word grants <span className="font-semibold text-text-primary">+1 swap</span> (no points)</p>
-            <p><span className="font-semibold text-amber-500">✓</span> Words clear sequentially with gravity between each</p>
-            <p><span className="font-semibold text-amber-500">✓</span> Marked with <span className="text-amber-500 font-semibold">⚡</span> in your word list — they never block you from playing the same word yourself</p>
-          </div>
-          <p className="text-sm italic">Set up lines deliberately — auto-clears buy you board space and stockpile swaps for tough situations!</p>
-        </div>
-      </div>
-
-      {/* Scoring & Gameplay */}
-      <div className="bg-bg-primary rounded-lg shadow-lg border border-secondary p-6 section-spacing">
-        <h2 className="text-xl font-semibold mb-4 text-text-primary">Scoring &amp; Gameplay</h2>
-
-        {/* Scoring Demonstration */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center mb-8">
-          <div>
-            <h3 className="text-lg font-medium text-text-primary mb-3 flex items-center">
-              <span className="w-5 h-5 text-amber mr-2">🎯</span>
-              Scoring
-            </h3>
-            <div className="space-y-2 text-text-secondary">
-              <p>3+ letter words only score.</p>
-              <p>Each letter is worth <span className="font-semibold text-text-primary">2 points</span>.</p>
-              <p>Creativity bonus: +1 for each <em>extra</em> connection between tiles in your word, beyond the path itself (max +4). Compact, folded words score more than straight lines!</p>
+        <p className="text-text-secondary mb-3">Long words are worth much more than several short ones:</p>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 max-w-lg">
+          {[3, 4, 5, 6, 7, 8].map(n => (
+            <div key={n} className="rounded-xl bg-bg-primary border border-secondary/40 py-2 text-center">
+              <div className="text-xs uppercase tracking-wide text-text-muted">{n} letters</div>
+              <div className="text-lg font-bold text-amber tabular-nums">+{wordPoints(n)}</div>
             </div>
-          </div>
-          <div className="bg-secondary/10 rounded-lg p-2 text-center">
-            <img
-              src="/tutorial/scoring-demo.gif"
-              alt="Real gameplay demonstration showing scoring mechanics and point calculation"
-              className="max-h-60 mx-auto rounded border border-secondary/20"
-              style={{ objectFit: 'contain' }}
-            />
-          </div>
+          ))}
         </div>
+        <p className="text-sm text-text-muted mt-3">
+          Tap the last tile again to drop it, an earlier tile to trim back to it, or the first tile to start over.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h3 className="font-medium text-text-primary mb-3">Scoring System</h3>
-            <ul className="space-y-2 text-text-secondary text-sm">
-              <li>• 3+ letters to score</li>
-              <li>• Score per word = 2 × letters + creativity bonus (max +4)</li>
-              <li>• No multipliers — fully additive and predictable</li>
-              <li>• Example: a straight 5-letter word = 10 points; the same 5 letters folded with 2 extra connections = 12 points</li>
-            </ul>
-          </div>
-          <div>
-            <h3 className="font-medium text-text-primary mb-3">Pro Tips</h3>
-            <ul className="space-y-2 text-text-secondary text-sm">
-              <li>• Plan ahead — the NEXT preview shows exactly what drops next</li>
-              <li>• Swapping doesn't end your turn — fix a near-word, then submit it</li>
-              <li>• 5+ letter words earn a swap as well as big points</li>
-              <li>• Line up 4+ letter words for the post-drop scan to earn bonus swaps</li>
-              <li>• Keep the top of the board clear at all costs</li>
-            </ul>
-          </div>
-        </div>
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary flex items-center gap-2">
+          <Waves className="w-5 h-5 text-amber" /> The flood
+        </h2>
+        <p className="text-text-secondary mb-3">
+          Submitting a word or pressing <span className="font-semibold text-text-primary">Pass</span> ends your turn. Then the
+          letters shown under <span className="font-semibold text-amber">NEXT</span> drop in from the top row and sink as deep
+          as they can. You always know exactly what's coming.
+        </p>
+        <p className="text-text-secondary">
+          The first wave is {METER_START} tiles. The smallest a wave can get starts at 3 and rises by one every 4 waves,
+          so the pressure keeps building.
+        </p>
+      </div>
+
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary flex items-center gap-2">
+          <RefreshCw className="w-5 h-5 text-amber" /> Spin
+        </h2>
+        <p className="text-text-secondary mb-3">
+          Tap a single tile and its neighbours start to wiggle. Drag around it to rotate that ring of letters
+          (on a computer you can also scroll or use the arrow keys, then press Enter). Spinning is free and doesn't
+          end your turn, so you can line up a word and then submit it.
+        </p>
+        <p className="text-text-secondary">
+          The catch: <span className="font-semibold text-text-primary">every spin makes each later wave one tile bigger, for good.</span> Passing
+          does the same. Spin when it wins you a big word, not to go fishing.
+        </p>
+      </div>
+
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary flex items-center gap-2">
+          <Scissors className="w-5 h-5 text-amber" /> Out-spell the flood
+        </h2>
+        <p className="text-text-secondary">
+          Submit a word at least as long as the NEXT row and that wave shrinks by one tile before it drops.
+          Long words score more and also ease the pressure. It's the only way to shrink the flood.
+        </p>
+      </div>
+
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary flex items-center gap-2">
+          <CalendarDays className="w-5 h-5 text-amber" /> Daily & practice
+        </h2>
+        <ul className="space-y-2 text-text-secondary">
+          <li>• <span className="font-semibold text-text-primary">Daily:</span> everyone gets the same starting board and the same letters. One run per day, then share your result and post it to the leaderboard.</li>
+          <li className="flex gap-1">
+            <span>•</span>
+            <span>
+              <Undo2 className="inline w-4 h-4 mr-1 text-amber" />
+              <span className="font-semibold text-text-primary">Undo:</span> undoing a spin is always free. In the daily you can take back {DAILY_UNDOS} turns, and the letters will be the same when you replay them.
+            </span>
+          </li>
+          <li>• <span className="font-semibold text-text-primary">Practice:</span> a fresh random board every game, with unlimited undos.</li>
+        </ul>
+      </div>
+
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary">Tips</h2>
+        <ul className="space-y-2 text-text-secondary">
+          <li>• Check NEXT before you move: a word that matches the wave's length keeps it from growing.</li>
+          <li>• Keep the top row open. A clear path down from the top keeps you alive.</li>
+          <li>• Plurals and endings (-S, -ED, -ER, -ING) turn a 4-letter word into a 6-letter one.</li>
+          <li>• One spin that sets up a 6-letter word pays for itself; three spins for a 4-letter word don't.</li>
+          <li>• Keyboard: Enter submits, Backspace drops the last letter, Esc clears, Ctrl/⌘+Z undoes.</li>
+        </ul>
+      </div>
+
+      <div className="text-center pb-8">
+        <Link to="/" className="inline-flex h-12 px-8 items-center rounded-xl bg-amber text-bg-primary font-semibold">
+          Play today's daily
+        </Link>
       </div>
     </div>
   );

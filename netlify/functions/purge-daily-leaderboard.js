@@ -18,52 +18,49 @@ export default async function handler(event, context) {
     let checkedCount = 0;
     let errors = [];
 
-    // Initialize daily leaderboard store
-    const dailyStore = getStore('leaderboard-daily');
+    // Players' local days run up to a day behind UTC, so yesterday (UTC)
+    // may still be live somewhere: only purge entries older than that
+    const cutoffDate = new Date(Date.parse(todayString + 'T00:00:00.000Z') - 86400000);
 
-    // Get all entries from the daily leaderboard store
-    const entries = dailyStore.list({ paginate: true });
-    
-    for await (const { blobs } of entries) {
-      for (const { key } of blobs) {
-        checkedCount++;
+    for (const storeName of ['leaderboard-daily', 'orbit-daily']) {
+      const dailyStore = getStore(storeName);
+      const entries = dailyStore.list({ paginate: true });
+
+      for await (const { blobs } of entries) {
+        for (const { key } of blobs) {
+          checkedCount++;
         
-        try {
-          // Extract date from key format: [prefix]YYYY-MM-DD_playerName
-          // Handle both dev_ prefixed and production keys
-          let dateFromKey;
-          if (key.startsWith('dev_')) {
-            // Extract date from dev_YYYY-MM-DD_playerName
-            const parts = key.substring(4).split('_');
-            dateFromKey = parts[0];
-          } else {
-            // Extract date from YYYY-MM-DD_playerName
-            const parts = key.split('_');
-            dateFromKey = parts[0];
+          try {
+            // Extract date from key format: [prefix]YYYY-MM-DD_playerName
+            // Handle both dev_ prefixed and production keys
+            let dateFromKey;
+            if (key.startsWith('dev_')) {
+              // Extract date from dev_YYYY-MM-DD_playerName
+              const parts = key.substring(4).split('_');
+              dateFromKey = parts[0];
+            } else {
+              // Extract date from YYYY-MM-DD_playerName
+              const parts = key.split('_');
+              dateFromKey = parts[0];
+            }
+          
+            // Validate date format (YYYY-MM-DD)
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFromKey)) {
+              console.warn(`Skipping key with invalid date format: ${key}`);
+              continue;
+            }
+          
+            const entryDate = new Date(dateFromKey + 'T00:00:00.000Z');
+            if (entryDate < cutoffDate) {
+              await dailyStore.delete(key);
+              deletedCount++;
+            }
+          
+          } catch (error) {
+            const errorMsg = `Error processing entry ${key}: ${error.message}`;
+            console.error(errorMsg);
+            errors.push(errorMsg);
           }
-          
-          // Validate date format (YYYY-MM-DD)
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFromKey)) {
-            console.warn(`Skipping key with invalid date format: ${key}`);
-            continue;
-          }
-          
-          // Only delete entries that are older than today (not today's entries)
-          const entryDate = new Date(dateFromKey + 'T00:00:00.000Z');
-          const todayDate = new Date(todayString + 'T00:00:00.000Z');
-          
-          if (entryDate < todayDate) {
-            await dailyStore.delete(key);
-            deletedCount++;
-            console.log(`Deleted old entry: ${key} (date: ${dateFromKey}, older than ${todayString})`);
-          } else {
-            console.log(`Kept current entry: ${key} (date: ${dateFromKey}, same as or newer than ${todayString})`);
-          }
-          
-        } catch (error) {
-          const errorMsg = `Error processing entry ${key}: ${error.message}`;
-          console.error(errorMsg);
-          errors.push(errorMsg);
         }
       }
     }
