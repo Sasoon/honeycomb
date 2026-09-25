@@ -22,7 +22,14 @@ export default async function handler(event, context) {
     // may still be live somewhere: only purge entries older than that
     const cutoffDate = new Date(Date.parse(todayString + 'T00:00:00.000Z') - 86400000);
 
-    for (const storeName of ['leaderboard-daily', 'orbit-daily']) {
+    // Raw per-player scores and the per-day indexes the leaderboard reads
+    // both age out on the same cutoff
+    const storeNames = [
+      'leaderboard-daily', 'leaderboard-daily-index',
+      'orbit-daily', 'orbit-daily-index',
+    ];
+
+    for (const storeName of storeNames) {
       const dailyStore = getStore(storeName);
       const entries = dailyStore.list({ paginate: true });
 
@@ -31,8 +38,8 @@ export default async function handler(event, context) {
           checkedCount++;
         
           try {
-            // Extract date from key format: [prefix]YYYY-MM-DD_playerName
-            // Handle both dev_ prefixed and production keys
+            // Keys are [dev_]YYYY-MM-DD_playerName (raw scores) or
+            // [dev_]YYYY-MM-DD (indexes); the date is the first segment
             let dateFromKey;
             if (key.startsWith('dev_')) {
               // Extract date from dev_YYYY-MM-DD_playerName
