@@ -41,6 +41,9 @@
 
   /* Gold tiles: the one warm colour on the board */
   --gold: #F2C14E;
+  /* Lab special tiles */
+  --bomb: #F08A6C;
+  --magnet: #93AEF5;
 
   /* Background and Text */
   --bg-primary: #0E1B2C;
@@ -1560,6 +1563,38 @@ button {
   15% { opacity: 1; }
   100% { transform: translate(-50%, -36px); opacity: 0; }
 }
+
+/* Lab specials: bomb and magnet get their own fill plus a corner badge;
+   wild shows a star in place of a letter */
+.orbit-tile--bomb { background-color: var(--bomb); }
+.orbit-tile--magnet { background-color: var(--magnet); }
+.orbit-tile--wild .orbit-tile__letter { color: #7C8B9C; }
+
+.orbit-tile__badge {
+  position: absolute;
+  left: 13%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.orbit-special-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  color: #0E1B2C;
+  background: #F2EFE8;
+}
+
+.orbit-special-chip--bomb { background: var(--bomb); }
+.orbit-special-chip--magnet { background: var(--magnet); }
 
 /* Praise callout for big words: pops over the board, then floats away */
 .orbit-praise {

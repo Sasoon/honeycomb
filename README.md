@@ -13,6 +13,8 @@ Play at https://waxle.netlify.app
 - **Out-spell the flood.** A word at least as long as the NEXT row shrinks that wave by one.
 - **Daily vs practice.** The daily gives everyone the same tiles and 3 turn undos (spin undos are free). After the run you can share an emoji summary and post your score to the leaderboard. Practice is a random board with unlimited undos.
 
+**Lab (practice only):** the flask icon next to Practice opens rule experiments: word shape (Path / Branch / Leap), multi-word turns, and wild / bomb / magnet special tiles. Looser rules grow waves every 3 turns instead of 4. The daily always plays the standard rules.
+
 Keyboard: Enter submits, Backspace drops the last letter, Esc clears, Ctrl/⌘+Z undoes. Sound can be muted from the speaker icon.
 
 ## Development
@@ -32,7 +34,7 @@ Leaderboard functions live in `netlify/functions` and run under `netlify dev`. S
 - `src/pages/OrbitGame.tsx`: the game screen (input, spin dial, animation, persistence)
 - `src/lib/orbit.ts`: pure game logic and tuning (board, flood placement, scoring, seeded per-wave tile streams, stats, sharing)
 - `src/lib/sfx.ts`: synthesized WebAudio sound effects
-- `src/components/orbit/`: help and results dialogs
+- `src/components/orbit/`: help, results and lab dialogs
 - `public/dictionary.txt`: word list, built by `npm run build:dictionary`
 
 The classic game (`WaxleGame.tsx`, `DailyChallenge.tsx` and the zustand store) is still in the source tree but no longer routed.
