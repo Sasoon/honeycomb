@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { BarChart3, Check, ChevronDown, CircleHelp, Hourglass, RotateCcw, SkipForward, Undo2 } from 'lucide-react';
+import { AlertTriangle, BarChart3, Check, ChevronDown, CircleHelp, Hourglass, RotateCcw, SkipForward, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
 import { HexCell } from '../components/HexGrid';
 import { HelpModal } from '../components/orbit/HelpModal';
 import { ResultsModal } from '../components/orbit/ResultsModal';
-import { clearTilesAndApplyGravity, areCellsAdjacent } from '../lib/waxleGameUtils';
+import { areCellsAdjacent } from '../lib/waxleGameUtils';
 import { loadDictionary, peekDictionary } from '../lib/wordValidator';
 import {
     COLS,
     DAILY_UNDOS,
-    METER_START,
+    FREE_SPINS,
     RING_OFFSETS,
     ROW_COUNTS,
     SEED_TILES,
@@ -22,16 +22,20 @@ import {
     buildBoard,
     dayNumber,
     loadStats,
+    clearAndSettle,
+    letterValue,
     longestWord,
-    meterFloor,
     orbitFlood,
+    outSpelled,
+    overflowCount,
     placementRng,
     saveStats,
     summarizeStats,
+    scoreWord,
     todayStr,
-    waveLetters,
+    waveSize,
     waveTag,
-    wordPoints,
+    waveTiles,
     type Action,
     type BoardLetters,
     type DailyResult,
@@ -39,6 +43,7 @@ import {
 } from '../lib/orbit';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
+import { sfx } from '../lib/sfx';
 
 const FLOOD_STAGGER_MS = 50;
 const HANDLE_DELAY_MS = 250;
@@ -46,12 +51,17 @@ const DRAG_THRESHOLD_PX = 8;
 const DEG_PER_STEP = 60;
 const WHEEL_PER_STEP = 40;
 // Let the final wave land before the results sheet covers it
-const RESULTS_DELAY_MS = 900;
+const RESULTS_DELAY_MS = 1100;
 
-// v9: waves draw from per-wave letter streams (older saved runs are dropped)
-const LS_RUN_DAILY = 'waxle-orbit-run-v9';
-const LS_RUN_PRACTICE = 'waxle-orbit-practice-v1';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v5';
+// Callouts for big plays, by word length
+const praiseFor = (len: number, gems: number, points: number) =>
+    len >= 8 ? 'Legendary!' : len >= 7 ? 'Superb!' : points >= 60 ? 'Jackpot!'
+        : len >= 6 ? 'Great!' : gems > 0 ? 'Golden!' : len >= 5 ? 'Nice!' : null;
+
+// v10: per-turn spins, letter values and gold tiles (older saved runs are dropped)
+const LS_RUN_DAILY = 'waxle-orbit-run-v10';
+const LS_RUN_PRACTICE = 'waxle-orbit-practice-v2';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v6';
 const LS_MODE = 'waxle-orbit-mode';
 const LS_NAME = 'waxle-player-name';
 
@@ -83,7 +93,7 @@ type Snapshot = {
     letters: BoardLetters;
     phase: Phase;
     wavesDropped: number;
-    meter: number;
+    spins: number;
     score: number;
     words: string[];
     actionLog: Action[];
@@ -134,7 +144,8 @@ const OrbitGame = () => {
     const [grid, setGrid] = useState<HexCell[]>([]);
     const [phase, setPhase] = useState<Phase>('storm');
     const [wavesDropped, setWavesDropped] = useState(0);
-    const [meter, setMeter] = useState(METER_START);
+    // Spins made this turn: the first is free, each extra adds a tile to this wave
+    const [spins, setSpins] = useState(0);
     const [score, setScore] = useState(0);
     const [words, setWords] = useState<string[]>([]);
     const [actionLog, setActionLog] = useState<Action[]>([]);
@@ -145,6 +156,8 @@ const OrbitGame = () => {
     const [dragging, setDragging] = useState(false);
     const [clearFx, setClearFx] = useState<ClearFx[]>([]);
     const [scoreFx, setScoreFx] = useState<{ x: number; y: number; text: string; key: number } | null>(null);
+    const [praise, setPraise] = useState<{ text: string; key: number } | null>(null);
+    const [soundOn, setSoundOn] = useState(() => !sfx.muted);
     const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
     const [undosUsed, setUndosUsed] = useState(0);
     const [stats, setStats] = useState<OrbitStats>(loadStats);
@@ -268,7 +281,7 @@ const OrbitGame = () => {
         setGrid(boardFromLetters(run.letters));
         setPhase(run.phase);
         setWavesDropped(run.wavesDropped);
-        setMeter(run.meter);
+        setSpins(run.spins ?? 0);
         setScore(run.score);
         setWords(run.words);
         setActionLog(run.actionLog);
@@ -279,12 +292,12 @@ const OrbitGame = () => {
     const startFresh = useCallback((m: Mode) => {
         clearTransient();
         const seed = m === 'daily' ? dateStr : `practice-${Math.floor(Math.random() * 1e9)}`;
-        const { newGrid, paths } = orbitFlood(buildBoard(), waveLetters(seed, 'seed', SEED_TILES), placementRng(seed, 'seed'));
+        const { newGrid, paths } = orbitFlood(buildBoard(), waveTiles(seed, 'seed', SEED_TILES), placementRng(seed, 'seed'));
         queueFloodAnims(newGrid, paths);
         recordedRef.current = false;
         setSeedStr(seed);
         setGrid(newGrid);
-        setMeter(METER_START);
+        setSpins(0);
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -311,7 +324,7 @@ const OrbitGame = () => {
                 setWords(result.words ?? (result.best ? [result.best] : []));
                 setActionLog(result.strip);
                 setWavesDropped(result.waves ?? 0);
-                setMeter(METER_START);
+                setSpins(0);
                 setUndoStack([]);
                 setUndosUsed(0);
                 if (showResults) setModal(md => md ?? 'results');
@@ -363,7 +376,7 @@ const OrbitGame = () => {
             seedStr,
             phase,
             wavesDropped,
-            meter,
+            spins,
             score,
             words,
             actionLog,
@@ -372,7 +385,7 @@ const OrbitGame = () => {
             undosUsed,
         };
         storage.set(runKey(mode), JSON.stringify(run));
-    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, meter, score, words, actionLog, undoStack, undosUsed]);
+    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, spins, score, words, actionLog, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
@@ -407,20 +420,20 @@ const OrbitGame = () => {
 
     // ---------- game flow ----------
 
-    // Word/pass ends the turn: the flood drops `waveCount` tiles, then the
-    // meter settles at `meterAfter` (never below the creeping floor)
-    const afterAction = useCallback((g: HexCell[], waveCount: number, meterAfter: number) => {
+    // Word/pass ends the turn: the flood drops `count` tiles and the turn's
+    // spin tally resets
+    const afterAction = useCallback((g: HexCell[], count: number) => {
         const tag = waveTag(wavesDropped);
-        const letters = waveLetters(seedStr, tag, waveCount);
-        const { newGrid, paths, unplaced } = orbitFlood(g, letters, placementRng(seedStr, tag));
+        const { newGrid, paths, unplaced } = orbitFlood(g, waveTiles(seedStr, tag, count), placementRng(seedStr, tag));
         queueFloodAnims(newGrid, paths);
-        const nextWaves = wavesDropped + 1;
-        setWavesDropped(nextWaves);
-        setMeter(Math.max(meterAfter, meterFloor(nextWaves)));
+        setWavesDropped(wavesDropped + 1);
+        setSpins(0);
         setGrid(newGrid);
+        sfx.land(0.3);
         if (unplaced.length > 0) {
             setPhase('over');
             haptics.error();
+            window.setTimeout(() => sfx.gameOver(), 450);
             window.clearTimeout(resultsTimerRef.current);
             resultsTimerRef.current = window.setTimeout(() => setModal(md => md ?? 'results'), RESULTS_DELAY_MS);
         }
@@ -436,13 +449,13 @@ const OrbitGame = () => {
             letters: boardLetters(grid),
             phase,
             wavesDropped,
-            meter,
+            spins,
             score,
             words: [...words],
             actionLog: [...actionLog],
         };
         setUndoStack(s => [...s.slice(-9), snap]);
-    }, [grid, phase, wavesDropped, meter, score, words, actionLog]);
+    }, [grid, phase, wavesDropped, spins, score, words, actionLog]);
 
     const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
     const topUndo = undoStack[undoStack.length - 1];
@@ -456,13 +469,14 @@ const OrbitGame = () => {
         setGrid(boardFromLetters(snap.letters));
         setPhase(snap.phase);
         setWavesDropped(snap.wavesDropped);
-        setMeter(snap.meter);
+        setSpins(snap.spins);
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
         setUndoStack(s => s.slice(0, -1));
         if (snap.kind === 'turn') setUndosUsed(u => u + 1);
         haptics.select();
+        sfx.undo();
     }, [canUndo, undoStack, clearTransient]);
 
     // ---------- selection + validation ----------
@@ -483,6 +497,23 @@ const OrbitGame = () => {
     useEffect(() => {
         if (selectedLetters.length >= WORD_MIN) ensureDict();
     }, [selectedLetters, ensureDict]);
+
+    const selectedCells = useMemo(
+        () => selected.map(id => grid.find(c => c.id === id)).filter((c): c is HexCell => !!c),
+        [selected, grid]
+    );
+    const wordScore = useMemo(
+        () => (match ? scoreWord(selectedCells.map(c => c.letter), selectedCells.filter(c => c.isGem).length) : null),
+        [match, selectedCells]
+    );
+    const currentWave = waveSize(wavesDropped, spins);
+
+    // A chime the moment a path becomes a real word
+    const prevMatchRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (match && match !== prevMatchRef.current) sfx.valid();
+        prevMatchRef.current = match;
+    }, [match]);
 
     // ---------- ring arming ----------
 
@@ -569,6 +600,7 @@ const OrbitGame = () => {
         setPreviewSteps(previewRef.current);
         applyPreviewTransforms(previewRef.current, true);
         haptics.select();
+        sfx.spinTick();
     }, [applyPreviewTransforms]);
 
     const resetPreview = useCallback(() => {
@@ -588,9 +620,13 @@ const OrbitGame = () => {
         ring.cells.forEach((src, i) => {
             const dst = byId.get(ring.cells[mod(i + k, ring.n)].id)!;
             dst.letter = src.letter;
+            dst.isGem = src.isGem;
             dst.isPlaced = src.isPlaced;
         });
-        if (ring.cells.every(c => byId.get(c.id)!.letter === c.letter)) {
+        if (ring.cells.every(c => {
+            const d = byId.get(c.id)!;
+            return d.letter === c.letter && !!d.isGem === !!c.isGem;
+        })) {
             resetPreview();
             return;
         }
@@ -618,9 +654,10 @@ const OrbitGame = () => {
         setPreviewSteps(0);
         setSelected([]);
         haptics.success();
-        setMeter(m => m + 1);
+        sfx.spinLock(spins < FREE_SPINS);
+        setSpins(n => n + 1);
         setGrid(newGrid);
-    }, [phase, grid, queueMove, clearPreviewTransforms, resetPreview, pushUndo]);
+    }, [phase, grid, spins, queueMove, clearPreviewTransforms, resetPreview, pushUndo]);
 
     // ---------- drag (the dial) ----------
 
@@ -677,6 +714,7 @@ const OrbitGame = () => {
         if (detent !== d.lastDetent) {
             d.lastDetent = detent;
             haptics.select();
+            sfx.spinTick();
         }
         if (!d.raf) {
             d.raf = requestAnimationFrame(() => {
@@ -708,50 +746,72 @@ const OrbitGame = () => {
 
     // ---------- player actions ----------
 
-    const submit = useCallback(() => {
-        if (phase !== 'storm' || !match || selected.length < WORD_MIN) return;
-        pushUndo('turn');
-        // Out-spell the flood: a word at least as long as the wave cools it
-        // by one, shrinking the very wave about to drop
-        const cooled = selected.length >= meter
-            ? Math.max(meterFloor(wavesDropped), meter - 1)
-            : meter;
-        const points = wordPoints(selected.length);
-        const clearedCells = selected
-            .map(id => grid.find(c => c.id === id))
-            .filter((c): c is HexCell => !!c);
+    const celebrate = useCallback((len: number, gems: number, points: number) => {
+        const text = praiseFor(len, gems, points);
+        if (text) {
+            setPraise({ text, key: Date.now() });
+            const t = window.setTimeout(() => setPraise(null), 1300);
+            fxTimersRef.current.push(t);
+        }
+        if (!reducedMotion && (len >= 7 || points >= 60)) {
+            import('canvas-confetti').then(({ default: confetti }) => {
+                const r = boardRef.current?.getBoundingClientRect();
+                const origin = r
+                    ? { x: (r.left + r.width / 2) / window.innerWidth, y: (r.top + r.height / 3) / window.innerHeight }
+                    : { x: 0.5, y: 0.4 };
+                confetti({
+                    particleCount: len >= 8 ? 140 : 80,
+                    spread: 75,
+                    origin,
+                    colors: ['#3FD8C7', '#F2C14E', '#F2EFE8', '#6FE8DA'],
+                    disableForReducedMotion: true,
+                });
+            }).catch(() => { /* confetti is decoration only */ });
+        }
+    }, [reducedMotion]);
 
-        const fx = clearedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
-        const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
+    const submit = useCallback(() => {
+        if (phase !== 'storm' || !match || !wordScore || selected.length < WORD_MIN) return;
+        pushUndo('turn');
+        // Out-spell the flood: a word at least as long as the wave shrinks
+        // the very wave about to drop
+        const incoming = outSpelled(selected.length, currentWave) ? currentWave - 1 : currentWave;
+        const points = wordScore.total;
+
+        const fx = selectedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
+        const cx = fx.reduce((sum, f) => sum + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
         setClearFx(fx);
-        setScoreFx({ x: cx, y: cy, text: `+${points}${cooled < meter ? ' · wave −1' : ''}`, key: Date.now() });
+        setScoreFx({ x: cx, y: cy, text: `+${points}${incoming < currentWave ? ' · wave −1' : ''}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
-        const t2 = window.setTimeout(() => setScoreFx(null), 750);
+        const t2 = window.setTimeout(() => setScoreFx(null), 900);
         fxTimersRef.current.push(t1, t2);
 
-        const { newGrid, moveSources } = clearTilesAndApplyGravity(grid, selected);
+        const { newGrid, moveSources } = clearAndSettle(grid, selected);
         moveSources.forEach((srcId, dstId) => {
             const src = grid.find(c => c.id === srcId);
             const dst = newGrid.find(c => c.id === dstId);
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
-        setScore(s => s + points);
+        setScore(sc => sc + points);
         setWords(w => [...w, match]);
         setSelected([]);
         setActionLog(log => [...log, selected.length]);
         haptics.success();
-        afterAction(newGrid, cooled, cooled);
-    }, [phase, match, selected, grid, meter, wavesDropped, queueMove, afterAction, pushUndo]);
+        sfx.word(selected.length, wordScore.gems);
+        celebrate(selected.length, wordScore.gems, points);
+        afterAction(newGrid, incoming);
+    }, [phase, match, wordScore, selected, selectedCells, grid, currentWave, queueMove, afterAction, pushUndo, celebrate]);
 
-    // Passing drops the current wave AND permanently grows the flood by one
+    // Passing clears nothing and takes the whole wave
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
         pushUndo('turn');
         setSelected([]);
         setActionLog(log => [...log, 'pass']);
-        afterAction(grid.map(c => ({ ...c })), meter, meter + 1);
-    }, [phase, grid, meter, afterAction, pushUndo]);
+        sfx.pass();
+        afterAction(grid.map(c => ({ ...c })), currentWave);
+    }, [phase, grid, currentWave, afterAction, pushUndo]);
 
     useEffect(() => () => {
         fxTimersRef.current.forEach(t => window.clearTimeout(t));
@@ -786,18 +846,17 @@ const OrbitGame = () => {
                     : idx === selected.length - 1 ? selected.slice(0, -1)
                     : selected.slice(0, idx + 1)
             );
-            return;
-        }
-        if (selected.length === 0) {
-            setSelected([cell.id]);
+            sfx.deselect();
             return;
         }
         // Path rule: each tile must touch the LAST selected tile
         const last = grid.find(c => c.id === selected[selected.length - 1]);
         if (last && areCellsAdjacent(cell, last)) {
             setSelected([...selected, cell.id]);
+            sfx.select(selected.length);
         } else {
             setSelected([cell.id]);
+            sfx.select(0);
         }
     }, [phase, selected, grid, commitRotation, resetPreview]);
 
@@ -891,12 +950,23 @@ const OrbitGame = () => {
 
     // ---------- derived ----------
 
-    // The NEXT strip is exactly the wave about to drop: `meter` letters of
-    // this wave's own stream — spins visibly grow it, long words shrink it
+    // The NEXT strip is exactly the wave about to drop: this wave's own
+    // stream, grown by extra spins this turn
     const nextWindow = useMemo(
-        () => (phase === 'storm' && seedStr ? waveLetters(seedStr, waveTag(wavesDropped), meter) : []),
-        [phase, seedStr, wavesDropped, meter]
+        () => (phase === 'storm' && seedStr ? waveTiles(seedStr, waveTag(wavesDropped), currentWave) : []),
+        [phase, seedStr, wavesDropped, currentWave]
     );
+
+    // Danger: the incoming wave won't fit the board as it stands
+    const overflow = useMemo(
+        () => (phase === 'storm' && grid.length ? overflowCount(grid, currentWave) : 0),
+        [phase, grid, currentWave]
+    );
+    const wasDangerRef = useRef(false);
+    useEffect(() => {
+        if (overflow > 0 && !wasDangerRef.current) sfx.danger();
+        wasDangerRef.current = overflow > 0;
+    }, [overflow]);
 
     const bestWord = useMemo(() => longestWord(words), [words]);
     const summary = useMemo(() => summarizeStats(stats, dateStr), [stats, dateStr]);
@@ -964,8 +1034,16 @@ const OrbitGame = () => {
 
     const wordState = selectedLetters.length >= WORD_MIN && dict ? (match ? 'valid' : 'invalid') : 'neutral';
     const quietRing = previewSteps !== 0 || dragging;
-    const cools = !!match && selected.length >= meter && meter > meterFloor(wavesDropped);
-    const matchPoints = match ? wordPoints(selected.length) : 0;
+    const cools = !!match && outSpelled(selected.length, currentWave);
+    const matchPoints = wordScore?.total ?? 0;
+    const nextSpinCosts = spins >= FREE_SPINS;
+
+    const toggleSound = () => {
+        const next = !soundOn;
+        sfx.setMuted(!next);
+        setSoundOn(next);
+        if (next) sfx.select(2);
+    };
 
     const modePills = (
         <div className="flex gap-1.5 items-center" role="tablist" aria-label="Game mode">
@@ -999,6 +1077,14 @@ const OrbitGame = () => {
     const iconButtons = (
         <div className="flex gap-1">
             <button
+                onClick={toggleSound}
+                className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-secondary/25 transition-colors"
+                aria-label={soundOn ? 'Mute sound' : 'Turn sound on'}
+                aria-pressed={soundOn}
+            >
+                {soundOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            </button>
+            <button
                 onClick={() => setModal('help')}
                 className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-secondary/25 transition-colors"
                 aria-label="How to play"
@@ -1017,16 +1103,22 @@ const OrbitGame = () => {
 
     const nextChips = (size: string) => (
         <div className="flex flex-wrap justify-center gap-1">
-            {nextWindow.map((letter, idx) => (
+            {nextWindow.map((tile, idx) => (
                 <div
                     key={`${wavesDropped}-${idx}`}
                     className={cn(
                         size,
-                        'bg-bg-secondary border border-secondary/40 rounded-md flex items-center justify-center font-semibold text-text-primary anim-chip-in'
+                        'border rounded-md flex items-center justify-center font-semibold anim-chip-in',
+                        tile.gem
+                            ? 'bg-gold border-gold text-bg-primary'
+                            : 'bg-bg-secondary border-secondary/40 text-text-primary',
+                        // Tiles bought with extra spins this turn
+                        idx >= currentWave - Math.max(0, spins - FREE_SPINS) && 'ring-1 ring-red-400/70'
                     )}
                     style={{ animationDelay: `${idx * 50}ms` }}
+                    title={tile.gem ? 'Gold tile: doubles any word that uses it' : undefined}
                 >
-                    {letter}
+                    {tile.letter}
                 </div>
             ))}
         </div>
@@ -1048,7 +1140,7 @@ const OrbitGame = () => {
     if (previewSteps !== 0) {
         status = (
             <span className="text-xs font-medium text-amber text-center">
-                Tap the centre tile to lock the spin (+1 flood)
+                Tap the centre tile to lock it in{nextSpinCosts ? ' (+1 tile this wave)' : ' (free spin)'}
                 <span className="hidden md:inline"> · Enter to lock, Esc to cancel</span>
             </span>
         );
@@ -1061,15 +1153,28 @@ const OrbitGame = () => {
                 wordState === 'neutral' && 'text-text-primary bg-secondary/20'
             )}>
                 {selectedLetters}
-                {match && (
-                    <span className="text-sm font-sans font-semibold">
-                        +{matchPoints}{cools && <span className="text-text-secondary font-medium"> · wave −1</span>}
+                {wordScore && (
+                    <span className="text-sm font-sans font-semibold flex items-baseline gap-1.5">
+                        +{wordScore.total}
+                        <span className="text-[11px] text-text-secondary font-medium">
+                            {wordScore.letters}
+                            {wordScore.lengthMult > 1 && ` ×${wordScore.lengthMult}`}
+                            {wordScore.gems > 0 && <span className="text-gold"> ×{2 ** wordScore.gems}</span>}
+                            {cools && ' · wave −1'}
+                        </span>
                     </span>
                 )}
             </span>
         );
     } else if (phase === 'over') {
         status = <span className="text-xs text-text-muted">The board is full. Tap Results to see how you did.</span>;
+    } else if (overflow > 0) {
+        status = (
+            <span className="text-xs font-semibold text-red-400 text-center flex items-center gap-1.5 orbit-danger-text">
+                <AlertTriangle size={14} />
+                {overflow === 1 ? '1 tile' : `${overflow} tiles`} won't fit. Clear space or the run ends!
+            </span>
+        );
     } else {
         status = (
             <span className="text-xs text-text-muted italic text-center">
@@ -1100,8 +1205,11 @@ const OrbitGame = () => {
                         <span className="text-xs text-text-secondary">pts</span>
                     </div>
                     {phase === 'storm' && nextWindow.length > 0 && (
-                        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-amber/10 border border-amber/25 rounded-xl px-2 py-1 max-w-[62%]">
-                            <span className="text-[9px] font-semibold uppercase tracking-wider text-amber">Next</span>
+                        <div className={cn(
+                            'absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 border rounded-xl px-2 py-1 max-w-[62%]',
+                            overflow > 0 ? 'bg-red-500/15 border-red-400/60 orbit-danger' : 'bg-amber/10 border-amber/25'
+                        )}>
+                            <span className={cn('text-[9px] font-semibold uppercase tracking-wider', overflow > 0 ? 'text-red-400' : 'text-amber')}>Next</span>
                             {nextChips(nextWindow.length >= 7 ? 'w-4 h-4 text-[10px]' : nextWindow.length >= 6 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
                         </div>
                     )}
@@ -1169,8 +1277,14 @@ const OrbitGame = () => {
 
                     {phase === 'storm' && nextWindow.length > 0 && (
                         <div className="relative">
-                            <div className="bg-amber/10 border border-amber/25 rounded-xl p-3 pt-4">
+                            <div className={cn(
+                                'border rounded-xl p-3 pt-4',
+                                overflow > 0 ? 'bg-red-500/15 border-red-400/60 orbit-danger' : 'bg-amber/10 border-amber/25'
+                            )}>
                                 {nextChips(nextWindow.length >= 8 ? 'w-5 h-5 text-[11px]' : 'w-7 h-7 text-sm')}
+                                <p className="text-[11px] text-text-secondary text-center mt-2">
+                                    {spins === 0 ? 'Free spin available' : spins > FREE_SPINS ? `+${spins - FREE_SPINS} from spins this turn` : 'Free spin used · more spins add tiles'}
+                                </p>
                             </div>
                             <div className="absolute -top-3 left-4">
                                 <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
@@ -1227,7 +1341,7 @@ const OrbitGame = () => {
                                         data-letter={cell.letter}
                                         onClick={() => handleCellTap(cell)}
                                         role={cell.letter ? 'button' : undefined}
-                                        aria-label={cell.letter || undefined}
+                                        aria-label={cell.letter ? `${cell.letter}, ${letterValue(cell.letter)} points${cell.isGem ? ', gold' : ''}` : undefined}
                                         aria-pressed={cell.letter ? isSelected : undefined}
                                         className={cn(
                                             'orbit-cell',
@@ -1242,11 +1356,13 @@ const OrbitGame = () => {
                                             <div
                                                 className={cn(
                                                     'orbit-tile',
+                                                    cell.isGem && 'orbit-tile--gem',
                                                     isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
                                                 )}
                                                 style={{ animationDelay: jigglePhase }}
                                             >
-                                                {cell.letter}
+                                                <span className="orbit-tile__letter">{cell.letter}</span>
+                                                <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
                                                 {isSelected && selected.length > 1 && (
                                                     <span className="orbit-tile__order">{selected.indexOf(cell.id) + 1}</span>
                                                 )}
@@ -1266,8 +1382,13 @@ const OrbitGame = () => {
                                 </div>
                             ))}
                             {scoreFx && (
-                                <div key={scoreFx.key} className="orbit-scorefx" style={{ left: scoreFx.x, top: scoreFx.y - 10 }}>
+                                <div key={`score-${scoreFx.key}`} className="orbit-scorefx" style={{ left: scoreFx.x, top: scoreFx.y - 10 }}>
                                     {scoreFx.text}
+                                </div>
+                            )}
+                            {praise && (
+                                <div key={`praise-${praise.key}`} className="orbit-praise" aria-live="polite">
+                                    {praise.text}
                                 </div>
                             )}
                         </div>
@@ -1276,7 +1397,7 @@ const OrbitGame = () => {
                     <div className="min-h-10 mt-3 mb-2 flex items-center justify-center px-2" aria-live="polite">
                         {pivotHint && selected.length === 1 ? (
                             <span className="text-xs font-medium text-amber text-center">
-                                Drag around it to spin · +1 flood per spin
+                                Drag around it to spin · {nextSpinCosts ? 'next spin adds +1 tile to this wave' : 'first spin this turn is free'}
                             </span>
                         ) : status}
                     </div>

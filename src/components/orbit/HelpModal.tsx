@@ -1,27 +1,32 @@
 import { Button } from '../ui/Button';
 import { OrbitModal } from './OrbitModal';
-import { wordPoints, DAILY_UNDOS } from '../../lib/orbit';
+import { DAILY_UNDOS } from '../../lib/orbit';
 
 const RULES: Array<{ icon: string; title: string; body: string }> = [
     {
         icon: '🔤',
         title: 'Build words.',
-        body: 'Tap tiles in order, each touching the last, to spell a word of 3+ letters. Longer words score far more.',
+        body: 'Tap tiles in order, each touching the last, to spell 3+ letters. Score = letter points, ×2 for 5–6 letters, ×3 for 7+.',
+    },
+    {
+        icon: '🟨',
+        title: 'Gold tiles',
+        body: 'double any word that uses them. Two gold tiles? ×4.',
     },
     {
         icon: '🌊',
         title: 'The flood follows.',
-        body: 'Every word or pass ends your turn, and the NEXT letters pour in from the top. When a letter has nowhere to land, the game is over.',
+        body: 'After every word or pass, the NEXT tiles pour in from the top. When one has nowhere to land, the run is over.',
     },
     {
         icon: '🔄',
         title: 'Spin to set up.',
-        body: 'Tap one tile, then drag around it to rotate its neighbours. Spins are free and never end your turn, but each one makes every later wave one tile bigger. So does passing.',
+        body: 'Tap one tile, then drag around it to rotate its neighbours. Your first spin each turn is free; each extra spin adds a tile to this turn’s wave.',
     },
     {
         icon: '✂️',
         title: 'Out-spell the flood.',
-        body: 'A word at least as long as the NEXT row shrinks it by one. The minimum wave size creeps up every 4 waves.',
+        body: 'A word at least as long as the NEXT row shrinks that wave by one. Waves grow as the game goes on.',
     },
 ];
 
@@ -41,16 +46,12 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
                     </p>
                 ))}
             </div>
-            <div className="grid grid-cols-6 gap-1 text-center mb-4" aria-label="Points by word length">
-                {[3, 4, 5, 6, 7, 8].map(n => (
-                    <div key={n} className="rounded-lg bg-secondary/15 py-1.5">
-                        <div className="text-[10px] uppercase tracking-wide text-text-muted">{n} ltr</div>
-                        <div className="text-sm font-bold text-amber tabular-nums">+{wordPoints(n)}</div>
-                    </div>
-                ))}
+            <div className="rounded-xl bg-secondary/15 px-3 py-2 mb-4 text-xs text-text-secondary text-center">
+                <span className="font-mono font-bold text-text-primary">PLANTED</span> = 10 pts × 3 (7 letters) = <span className="font-bold text-amber">30</span>
+                <span className="block mt-0.5">…with one gold tile in it: <span className="font-bold text-gold">60</span></span>
             </div>
             <p className="text-xs text-text-muted text-center mb-5">
-                Daily: same letters for everyone, {DAILY_UNDOS} undos. Practice: endless undos.
+                Daily: same tiles for everyone, {DAILY_UNDOS} undos. Practice: endless undos.
                 <span className="hidden md:inline"> Keys: Enter submits, Backspace drops a letter, Esc clears.</span>
             </p>
             <Button onClick={onClose} className="w-full">Let's go</Button>

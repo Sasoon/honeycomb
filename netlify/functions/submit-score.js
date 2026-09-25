@@ -8,12 +8,15 @@ const STORE_NAMES = {
     dailyIndex: 'leaderboard-daily-index',
     alltime: 'leaderboard-alltime',
     alltimeIndex: 'leaderboard-alltime-index',
+    maxPointsPerWord: 50,
   },
   orbit: {
     daily: 'orbit-daily',
     dailyIndex: 'orbit-daily-index',
     alltime: 'orbit-alltime',
     alltimeIndex: 'orbit-alltime-index',
+    // Letter values x length x gold tiles: a whole run can't average this
+    maxPointsPerWord: 400,
   },
 };
 
@@ -109,8 +112,8 @@ export default async function handler(request, context) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    // Generous upper bound: ~50 points per word is unreachable
-    if (numericScore > Math.max(numericTotalWords, 1) * 50) {
+    // Generous per-game upper bound on average points per word
+    if (numericScore > Math.max(numericTotalWords, 1) * stores.maxPointsPerWord) {
       return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }

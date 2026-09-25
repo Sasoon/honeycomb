@@ -5,24 +5,55 @@ import { createSeededRNG, LETTER_WEIGHTS, type SeededRNG } from './seededRNG';
 
 // ==================== ORBIT TUNING ====================
 // Classic-size board: the 19-cell diamond. Small board is the pressure;
-// path words + free orbits are the player's power
+// path words + spins are the player's power
 export const ROW_COUNTS = [3, 4, 5, 4, 3];
-// Ratchet economy: the flood meter IS the next wave's size. Spins and
-// passes each grow it by one — for good. The only relief: a word at
-// least as long as the wave pushes it back one (out-spell the flood).
-// The floor (sea level) creeps up every 4 waves
-export const METER_START = 4;
-// The sea never sits below 3: cooling brakes your own ratcheting, it
-// can't drain the opening to a trickle
-export const meterFloor = (waves: number) => 3 + Math.floor(waves / 4);
 export const SEED_TILES = 8;
 export const WORD_MIN = 3;
 export const DAILY_UNDOS = 3;
+// The flood runs on a fixed schedule: every wave is a little bigger than
+// the last few, so pressure builds on its own instead of punishing play
+export const WAVE_START = 3;
+export const WAVE_GROWTH_EVERY = 4;
+export const baseWave = (wave: number) => WAVE_START + Math.floor(wave / WAVE_GROWTH_EVERY);
+// Spins are the signature move, so the first each turn is free. Every
+// extra spin adds one tile to THIS turn's wave only
+export const FREE_SPINS = 1;
+export const waveSize = (wave: number, spins: number) => baseWave(wave) + Math.max(0, spins - FREE_SPINS);
+// Out-spell the flood: a word at least as long as the wave shrinks it by one
+export const outSpelled = (wordLen: number, size: number) => wordLen >= size;
+// Roughly one gold tile every other wave
+const GEM_CHANCE = 0.13;
 const DAILY_EPOCH = '2026-06-10';
 // =======================================================
 
-// Long words carry the run: +2 per letter beyond 4 (3=3, 4=4, 5=7, 6=10…)
-export const wordPoints = (len: number) => len + 2 * Math.max(0, len - 4);
+// ---------- scoring ----------
+// Scrabble values: familiar, and they turn rare letters into prizes
+const LETTER_VALUES: Record<string, number> = {
+    A: 1, E: 1, I: 1, O: 1, U: 1, L: 1, N: 1, R: 1, S: 1, T: 1,
+    D: 2, G: 2,
+    B: 3, C: 3, M: 3, P: 3,
+    F: 4, H: 4, V: 4, W: 4, Y: 4,
+    K: 5,
+    J: 8, X: 8,
+    Q: 10, Z: 10,
+};
+export const letterValue = (l: string) => LETTER_VALUES[l.toUpperCase()] ?? 1;
+// Long words carry the run
+export const lengthMult = (len: number) => (len >= 7 ? 3 : len >= 5 ? 2 : 1);
+
+export interface WordScore {
+    letters: number;
+    lengthMult: number;
+    gems: number;
+    total: number;
+}
+
+// Letter points x length bonus, doubled for every gold tile in the word
+export function scoreWord(letters: string[], gems: number): WordScore {
+    const sum = letters.reduce((a, l) => a + letterValue(l), 0);
+    const mult = lengthMult(letters.length);
+    return { letters: sum, lengthMult: mult, gems, total: sum * mult * 2 ** gems };
+}
 
 export const RING_OFFSETS: Array<[number, number]> = [
     [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
@@ -49,35 +80,42 @@ export function buildBoard(): HexCell[] {
     return cells;
 }
 
-export type BoardLetters = Array<[string, string]>;
+// Saved board: [cellId, letter] or [cellId, letter, 1] for a gold tile
+export type BoardLetters = Array<[string, string] | [string, string, 1]>;
 
 export const boardLetters = (grid: HexCell[]): BoardLetters =>
-    grid.filter(c => c.letter).map(c => [c.id, c.letter] as [string, string]);
+    grid.filter(c => c.letter).map(c => (c.isGem ? [c.id, c.letter, 1] : [c.id, c.letter]) as [string, string] | [string, string, 1]);
 
 export function boardFromLetters(letters: BoardLetters): HexCell[] {
     const board = buildBoard();
-    const byId = new Map(letters);
+    const byId = new Map(letters.map(t => [t[0], t]));
     board.forEach(c => {
-        const l = byId.get(c.id);
-        if (l) { c.letter = l; c.isPlaced = true; }
+        const t = byId.get(c.id);
+        if (t) {
+            c.letter = t[1];
+            c.isPlaced = true;
+            c.isGem = t[2] === 1;
+        }
     });
     return board;
 }
+
+export type Tile = { letter: string; gem: boolean };
 
 // Flood placement: each tile enters the top row and sinks to the globally
 // deepest reachable empty cell. A tile with no way in ends the game
 export function orbitFlood(
     grid: HexCell[],
-    letters: string[],
+    tiles: Tile[],
     rng: SeededRNG
-): { newGrid: HexCell[]; paths: Record<string, string[]>; unplaced: string[] } {
+): { newGrid: HexCell[]; paths: Record<string, string[]>; unplaced: Tile[] } {
     const newGrid = grid.map(c => ({ ...c, placedThisTurn: false }));
     const byPos = new Map(newGrid.map(c => [`${c.position.row},${c.position.col}`, c]));
     const byId = new Map(newGrid.map(c => [c.id, c]));
     const paths: Record<string, string[]> = {};
-    const unplaced: string[] = [];
+    const unplaced: Tile[] = [];
 
-    for (const letter of letters) {
+    for (const tile of tiles) {
         const parent = new Map<string, string | null>();
         const queue: HexCell[] = [];
         newGrid.forEach(c => {
@@ -97,7 +135,7 @@ export function orbitFlood(
             }
         }
         if (parent.size === 0) {
-            unplaced.push(letter);
+            unplaced.push(tile);
             continue;
         }
         let best: HexCell[] = [];
@@ -111,12 +149,63 @@ export function orbitFlood(
         for (let id: string | null = target.id; id !== null; id = parent.get(id) ?? null) {
             path.unshift(id);
         }
-        target.letter = letter;
+        target.letter = tile.letter;
+        target.isGem = tile.gem;
         target.isPlaced = true;
         target.placedThisTurn = true;
         paths[target.id] = path;
     }
     return { newGrid, paths, unplaced };
+}
+
+// How many of `count` incoming tiles would find no room (0 = the wave fits)
+export function overflowCount(grid: HexCell[], count: number): number {
+    const dummy = Array.from({ length: count }, () => ({ letter: 'A', gem: false }));
+    return orbitFlood(grid, dummy, createSeededRNG(1)).unplaced.length;
+}
+
+// Clear the word's cells and let everything above settle: each tile slides
+// down to its lower-left neighbour when empty, else its lower-right.
+// Returns where every moved tile came from (dst -> src) for animation
+export function clearAndSettle(
+    grid: HexCell[],
+    clearIds: string[]
+): { newGrid: HexCell[]; moveSources: Map<string, string> } {
+    const newGrid: HexCell[] = grid.map(c => ({ ...c, placedThisTurn: false }));
+    const byPos = new Map(newGrid.map(c => [`${c.position.row},${c.position.col}`, c]));
+    const clear = new Set(clearIds);
+    newGrid.forEach(c => {
+        if (clear.has(c.id)) { c.letter = ''; c.isGem = false; c.isPlaced = false; }
+    });
+    // origin[cellId] = the cell the resident tile started this settle in
+    const origin = new Map<string, string>();
+    newGrid.forEach(c => { if (c.letter) origin.set(c.id, c.id); });
+    let moved = true;
+    while (moved) {
+        moved = false;
+        for (let row = ROW_COUNTS.length - 2; row >= 0; row--) {
+            for (const c of newGrid) {
+                if (c.position.row !== row || !c.letter) continue;
+                const below = [-0.5, 0.5]
+                    .map(dc => byPos.get(`${row + 1},${c.position.col + dc}`))
+                    .filter((n): n is HexCell => !!n && !n.letter);
+                if (!below.length) continue;
+                const dst = below[0];
+                dst.letter = c.letter;
+                dst.isGem = c.isGem;
+                dst.isPlaced = true;
+                origin.set(dst.id, origin.get(c.id)!);
+                origin.delete(c.id);
+                c.letter = '';
+                c.isGem = false;
+                c.isPlaced = false;
+                moved = true;
+            }
+        }
+    }
+    const moveSources = new Map<string, string>();
+    origin.forEach((src, dst) => { if (src !== dst) moveSources.set(dst, src); });
+    return { newGrid, moveSources };
 }
 
 export const hashSeed = (s: string) => {
@@ -163,19 +252,24 @@ function nextWaveLetter(rng: SeededRNG, prefix: string[]): string {
     return 'E';
 }
 
-const streamCache = new Map<string, { rng: SeededRNG; letters: string[] }>();
+const streamCache = new Map<string, { rng: SeededRNG; tiles: Tile[] }>();
 
-export function waveLetters(seed: string, tag: string, count: number): string[] {
-    const key = `${seed}|letters|${tag}`;
+export function waveTiles(seed: string, tag: string, count: number): Tile[] {
+    const key = `${seed}|tiles|${tag}`;
     let entry = streamCache.get(key);
     if (!entry) {
-        entry = { rng: createSeededRNG(hashSeed(key)), letters: [] };
+        entry = { rng: createSeededRNG(hashSeed(key)), tiles: [] };
         streamCache.set(key, entry);
     }
-    while (entry.letters.length < count) {
-        entry.letters.push(nextWaveLetter(entry.rng, entry.letters));
+    while (entry.tiles.length < count) {
+        const prefix = entry.tiles.map(t => t.letter);
+        const letter = nextWaveLetter(entry.rng, prefix);
+        // At most one gold tile per wave, drawn after the letter so the
+        // stream stays prefix-stable
+        const gem = !entry.tiles.some(t => t.gem) && entry.rng.next() < GEM_CHANCE;
+        entry.tiles.push({ letter, gem });
     }
-    return entry.letters.slice(0, count);
+    return entry.tiles.slice(0, count);
 }
 
 export const waveTag = (wave: number) => `w${wave}`;

@@ -33,6 +33,7 @@ export default {
                     light: 'var(--success-light)',
                     dark: 'var(--success-dark)',
                 },
+                gold: 'var(--gold)',
                 amber: {
                     DEFAULT: 'var(--amber)',
                     light: 'var(--amber-light)',

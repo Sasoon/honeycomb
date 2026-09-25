@@ -1,6 +1,16 @@
 import { Link } from 'react-router-dom';
-import { RefreshCw, Waves, Type, Scissors, CalendarDays, Undo2 } from 'lucide-react';
-import { DAILY_UNDOS, METER_START, wordPoints } from '../lib/orbit';
+import { RefreshCw, Waves, Type, Scissors, CalendarDays, Undo2, Gem } from 'lucide-react';
+import { DAILY_UNDOS, WAVE_GROWTH_EVERY, WAVE_START } from '../lib/orbit';
+
+const VALUE_GROUPS: Array<[string, number]> = [
+  ['A E I O U L N R S T', 1],
+  ['D G', 2],
+  ['B C M P', 3],
+  ['F H V W Y', 4],
+  ['K', 5],
+  ['J X', 8],
+  ['Q Z', 10],
+];
 
 const card = 'rounded-2xl border border-secondary/40 bg-bg-secondary/60 p-6 section-spacing';
 
@@ -26,17 +36,35 @@ const HowToPlay = () => {
           that order, 3 letters or more. Valid words light up; press <span className="font-semibold text-text-primary">Submit</span> to
           score them. The tiles vanish and everything above them slides down.
         </p>
-        <p className="text-text-secondary mb-3">Long words are worth much more than several short ones:</p>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 max-w-lg">
-          {[3, 4, 5, 6, 7, 8].map(n => (
-            <div key={n} className="rounded-xl bg-bg-primary border border-secondary/40 py-2 text-center">
-              <div className="text-xs uppercase tracking-wide text-text-muted">{n} letters</div>
-              <div className="text-lg font-bold text-amber tabular-nums">+{wordPoints(n)}</div>
+        <p className="text-text-secondary mb-3">
+          Every tile shows its letter value, Scrabble style. A word scores the sum of its letters, then
+          <span className="font-semibold text-text-primary"> ×2 for 5–6 letters</span> and
+          <span className="font-semibold text-text-primary"> ×3 for 7 or more</span>. Rare letters are prizes, not junk.
+        </p>
+        <div className="flex flex-wrap gap-2 max-w-xl">
+          {VALUE_GROUPS.map(([letters, v]) => (
+            <div key={letters} className="rounded-xl bg-bg-primary border border-secondary/40 px-3 py-1.5 text-center">
+              <div className="text-xs font-mono tracking-wider text-text-secondary">{letters}</div>
+              <div className="text-sm font-bold text-amber tabular-nums">{v}</div>
             </div>
           ))}
         </div>
+        <p className="text-sm text-text-secondary mt-3">
+          Example: <span className="font-mono font-semibold text-text-primary">PLANTED</span> is 3+1+1+1+1+1+2 = 10 points, ×3 for seven letters = <span className="font-bold text-amber">30</span>.
+        </p>
         <p className="text-sm text-text-muted mt-3">
           Tap the last tile again to drop it, an earlier tile to trim back to it, or the first tile to start over.
+        </p>
+      </div>
+
+      <div className={card}>
+        <h2 className="text-xl font-semibold mb-3 text-text-primary flex items-center gap-2">
+          <Gem className="w-5 h-5 text-gold" /> Gold tiles
+        </h2>
+        <p className="text-text-secondary">
+          Some waves carry a <span className="font-semibold text-gold">gold tile</span> (you'll see it gold in NEXT before it lands).
+          Any word that uses it scores double; two gold tiles make it ×4. They stay on the board until you use them,
+          so a gold tile is worth steering toward with a spin.
         </p>
       </div>
 
@@ -50,8 +78,8 @@ const HowToPlay = () => {
           as they can. You always know exactly what's coming.
         </p>
         <p className="text-text-secondary">
-          The first wave is {METER_START} tiles. The smallest a wave can get starts at 3 and rises by one every 4 waves,
-          so the pressure keeps building.
+          Waves start at {WAVE_START} tiles and grow by one every {WAVE_GROWTH_EVERY} waves, so the pressure keeps building.
+          If the next wave won't fit, NEXT turns red and warns you. Clear space or the run ends.
         </p>
       </div>
 
@@ -61,12 +89,13 @@ const HowToPlay = () => {
         </h2>
         <p className="text-text-secondary mb-3">
           Tap a single tile and its neighbours start to wiggle. Drag around it to rotate that ring of letters
-          (on a computer you can also scroll or use the arrow keys, then press Enter). Spinning is free and doesn't
-          end your turn, so you can line up a word and then submit it.
+          (on a computer you can also scroll or use the arrow keys, then press Enter). Spinning doesn't end your turn,
+          so you can line up a word and then submit it.
         </p>
         <p className="text-text-secondary">
-          The catch: <span className="font-semibold text-text-primary">every spin makes each later wave one tile bigger, for good.</span> Passing
-          does the same. Spin when it wins you a big word, not to go fishing.
+          <span className="font-semibold text-text-primary">Your first spin each turn is free.</span> Every extra spin
+          that turn adds one tile to the wave about to drop (only that wave). Spin freely to set up a word;
+          spin twice when the word is worth an extra tile.
         </p>
       </div>
 
@@ -76,7 +105,7 @@ const HowToPlay = () => {
         </h2>
         <p className="text-text-secondary">
           Submit a word at least as long as the NEXT row and that wave shrinks by one tile before it drops.
-          Long words score more and also ease the pressure. It's the only way to shrink the flood.
+          Long words score more and also ease the pressure. It's the only way to shrink a wave.
         </p>
       </div>
 
@@ -85,7 +114,7 @@ const HowToPlay = () => {
           <CalendarDays className="w-5 h-5 text-amber" /> Daily & practice
         </h2>
         <ul className="space-y-2 text-text-secondary">
-          <li>• <span className="font-semibold text-text-primary">Daily:</span> everyone gets the same starting board and the same letters. One run per day, then share your result and post it to the leaderboard.</li>
+          <li>• <span className="font-semibold text-text-primary">Daily:</span> everyone gets the same starting board and the same tiles. One run per day, then share your result and post it to the leaderboard.</li>
           <li className="flex gap-1">
             <span>•</span>
             <span>
@@ -100,10 +129,11 @@ const HowToPlay = () => {
       <div className={card}>
         <h2 className="text-xl font-semibold mb-3 text-text-primary">Tips</h2>
         <ul className="space-y-2 text-text-secondary">
-          <li>• Check NEXT before you move: a word that matches the wave's length keeps it from growing.</li>
+          <li>• Check NEXT before you move: a word as long as the wave shrinks it, and gold tiles show up there first.</li>
           <li>• Keep the top row open. A clear path down from the top keeps you alive.</li>
           <li>• Plurals and endings (-S, -ED, -ER, -ING) turn a 4-letter word into a 6-letter one.</li>
-          <li>• One spin that sets up a 6-letter word pays for itself; three spins for a 4-letter word don't.</li>
+          <li>• A Q, Z, J or X in a 5-letter word is worth more than most 7-letter words. Use them, don't bury them.</li>
+          <li>• Use your free spin every turn. It costs nothing and often turns a 4-letter word into a 5.</li>
           <li>• Keyboard: Enter submits, Backspace drops the last letter, Esc clears, Ctrl/⌘+Z undoes.</li>
         </ul>
       </div>

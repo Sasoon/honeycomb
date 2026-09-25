@@ -8,12 +8,15 @@ const STORE_NAMES = {
     dailyIndex: 'leaderboard-daily-index',
     alltime: 'leaderboard-alltime',
     alltimeIndex: 'leaderboard-alltime-index',
+    maxPointsPerWord: 50,
   },
   orbit: {
     daily: 'orbit-daily',
     dailyIndex: 'orbit-daily-index',
     alltime: 'orbit-alltime',
     alltimeIndex: 'orbit-alltime-index',
+    // Letter values x length x gold tiles: a whole run can't average this
+    maxPointsPerWord: 400,
   },
 };
 
@@ -100,7 +103,7 @@ async function getDailyLeaderboard(isLocal, context, limit, stores, today) {
       if (built) data = built;
     }
 
-    const entries = (Array.isArray(data?.leaderboard) ? data.leaderboard : []).filter(isPlausibleEntry);
+    const entries = (Array.isArray(data?.leaderboard) ? data.leaderboard : []).filter(e => isPlausibleEntry(e, stores.maxPointsPerWord));
 
     // Sort by score (descending), then by submission time (ascending - earlier is better for ties)
     const sorted = [...entries].sort((a, b) => {
@@ -181,7 +184,7 @@ async function getAllTimeLeaderboard(isLocal, context, limit, stores) {
       if (built) data = built;
     }
 
-    const entries = (Array.isArray(data?.leaderboard) ? data.leaderboard : []).filter(isPlausibleEntry);
+    const entries = (Array.isArray(data?.leaderboard) ? data.leaderboard : []).filter(e => isPlausibleEntry(e, stores.maxPointsPerWord));
 
     // Sort by score (descending), then by submission time (ascending)
     const sorted = [...entries].sort((a, b) => {
@@ -231,10 +234,10 @@ async function getAllTimeLeaderboard(isLocal, context, limit, stores) {
   }
 }
 
-// Hide implausible legacy/forged entries (~50 points per word is unreachable)
-function isPlausibleEntry(entry) {
+// Hide implausible legacy/forged entries (average points per word too high)
+function isPlausibleEntry(entry, maxPointsPerWord) {
   if (!entry) return false;
-  return entry.score <= Math.max(entry.totalWords || 0, 1) * 50;
+  return entry.score <= Math.max(entry.totalWords || 0, 1) * maxPointsPerWord;
 }
 
 async function buildDailyIndex({ siteID, isLocal, date, stores }) {
