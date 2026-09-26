@@ -24,6 +24,7 @@ import {
     canExtend,
     clearAndSettle,
     isAdjacent,
+    leapOver,
     letterValue,
     longestWord,
     orbitFlood,
@@ -44,7 +45,7 @@ import {
 } from '../lib/orbit';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
-import { trailColor } from '../lib/orbitTiles';
+import { keyedTiles, leapGlyph, unit } from '../lib/orbitKeys';
 import { sfx } from '../lib/sfx';
 
 const FLOOD_STAGGER_MS = 50;
@@ -84,6 +85,16 @@ const SNAP_K = 5;
 const SNAP_NORM = 2 * Math.tanh(SNAP_K / 2);
 const snapF = (f: number) => 0.5 + Math.tanh((f - 0.5) * SNAP_K) / SNAP_NORM;
 
+// Word order as light: selected tiles ramp from a cooled teal on the first
+// tap to full accent on the newest, so direction reads at a glance
+const RAMP = { valid: ['#1B8F84', '#3FD8C7'], invalid: ['#33435A', '#5A6C84'] } as const;
+const hexRgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function trailColor(i: number, n: number, invalid: boolean): string {
+    const [a, b] = RAMP[invalid ? 'invalid' : 'valid'].map(hexRgb);
+    const t = n <= 1 ? 1 : i / (n - 1);
+    return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`;
+}
+const centreOf = (c: HexCell): [number, number] => [cellX(c) + TILE_W / 2, cellY(c) + TILE_H / 2];
 
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
@@ -1138,19 +1149,28 @@ const OrbitGame = () => {
         <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
     );
 
-    // Word order lives in each tile's one slot: the points number becomes the
-    // tile's place in the word (ink disc), and the two ends of a leap become
-    // open rings. Nothing is drawn between tiles, so a leap over picked tiles
-    // or a spin can't mislead
+    // Word order lives on the tiles: each tile keys into the next (the seam
+    // between them bends into a chevron along the word), the teal ramp runs
+    // from the first tap to the newest, and a leap puts a double chevron on
+    // the tile it left and the tile it reached. While the leap is unused, the
+    // tiles it could reach show that chevron ghosted
     const trail = useMemo(() => {
         const n = selectedCells.length;
-        const order = new Map(selectedCells.map((c, k) => [c.id, k]));
-        let leap: [string, string] | null = null;
-        for (let k = 1; k < n; k++) {
-            if (!isAdjacent(selectedCells[k - 1], selectedCells[k])) leap = [selectedCells[k - 1].id, selectedCells[k].id];
+        const byId = new Map(grid.map(c => [c.id, c]));
+        const centre = (id: string) => centreOf(byId.get(id)!);
+        const keyed = keyedTiles(selected, centre, (a, b) => isAdjacent(byId.get(a)!, byId.get(b)!));
+        const leapTaken = selectedCells.some((c, i) => i > 0 && !isAdjacent(selectedCells[i - 1], c));
+        const ghosts = new Map<string, string>();
+        if (n && !leapTaken && phase === 'storm') {
+            const last = selectedCells[n - 1];
+            grid.forEach(c => {
+                if (c.letter && !keyed.has(c.id) && leapOver(last, c, grid)) {
+                    ghosts.set(c.id, leapGlyph(unit(centreOf(last), centreOf(c)), true));
+                }
+            });
         }
-        return { n, order, leap };
-    }, [selectedCells]);
+        return { n, keyed, ghosts };
+    }, [selected, selectedCells, grid, phase]);
     const invalidWord = wordState === 'invalid';
 
     let status: React.ReactNode;
@@ -1340,28 +1360,23 @@ const OrbitGame = () => {
                         <div
                             ref={boardRef}
                             className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
-                            style={{
-                                width: BOARD_W,
-                                height: BOARD_H,
-                                transform: `scale(${scale})`,
-                                transformOrigin: 'top left',
-                                // keep slot numerals readable when the board shrinks
-                                '--slot-k': Math.min(1.35, Math.max(1, 0.8 / scale)),
-                            } as CSSProperties}
+                            style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
                             onPointerDown={onBoardPointerDown}
                             onPointerMove={onBoardPointerMove}
                             onPointerUp={onBoardPointerUp}
                             onPointerCancel={onBoardPointerUp}
                         >
                             {grid.map(cell => {
-                                const k = trail.order.get(cell.id);
-                                const picked = k !== undefined;
-                                const isHead = picked && trail.n > 1 && k === trail.n - 1;
-                                const leapEnd = picked && trail.leap
-                                    ? trail.leap[0] === cell.id ? 'from' : trail.leap[1] === cell.id ? 'to' : null
-                                    : null;
+                                const isSelected = selected.includes(cell.id);
+                                const kt = trail.keyed.get(cell.id);
+                                const ghost = previewSteps === 0 && !dragging ? trail.ghosts.get(cell.id) : undefined;
                                 const cellStyle: CSSProperties = { left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H };
-                                if (picked) Object.assign(cellStyle, { '--tile': trailColor(k, trail.n, invalidWord) });
+                                if (kt) {
+                                    Object.assign(cellStyle, {
+                                        '--tile': trailColor(kt.k, trail.n, invalidWord),
+                                        ...(kt.hex ? { '--hex': kt.hex } : null),
+                                    });
+                                }
                                 const inRing = ringIds.has(cell.id);
                                 const isPivot = pivotCell?.id === cell.id && armed;
                                 // Desync the ring jiggle: 31/17 mod 9 puts every hex-neighbour
@@ -1374,44 +1389,49 @@ const OrbitGame = () => {
                                         data-letter={cell.letter}
                                         onClick={() => handleCellTap(cell)}
                                         role={cell.letter ? 'button' : undefined}
-                                        aria-label={cell.letter ? `${cell.letter}, ${picked
-                                            ? `letter ${k + 1} of your word${leapEnd === 'to' ? ', leapt here' : leapEnd === 'from' ? ', leapt from here' : ''}`
-                                            : `${letterValue(cell.letter)} points`}${cell.isGem ? ', gold' : ''}` : undefined}
-                                        aria-pressed={cell.letter ? picked : undefined}
+                                        aria-label={cell.letter ? `${cell.letter}, ${letterValue(cell.letter)} points${cell.isGem ? ', gold' : ''}` : undefined}
+                                        aria-pressed={cell.letter ? isSelected : undefined}
                                         className={cn(
                                             'orbit-cell',
                                             inRing && 'orbit-cell--ring',
                                             inRing && quietRing && 'orbit-cell--quiet',
                                             isPivot && 'orbit-cell--pivot',
-                                            picked && (invalidWord ? 'orbit-cell--bad' : 'orbit-cell--sel'),
-                                            isHead && 'orbit-cell--head',
+                                            kt && (invalidWord ? 'orbit-cell--bad' : 'orbit-cell--sel'),
+                                            kt?.isHead && trail.n > 1 && 'orbit-cell--head',
                                             cell.isGem && 'orbit-cell--gem'
                                         )}
                                         style={cellStyle}
                                     >
+                                        {kt?.key && (
+                                            <svg className="orbit-key" viewBox="-10 -10 90 100" aria-hidden="true">
+                                                <path d={kt.key} />
+                                            </svg>
+                                        )}
                                         <div className="orbit-hexbg" />
                                         {cell.letter && (
                                             <div
                                                 className={cn(
                                                     'orbit-tile',
                                                     cell.isGem && 'orbit-tile--gem',
-                                                    picked && (invalidWord ? 'orbit-tile--invalid' : 'orbit-tile--selected')
+                                                    isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
                                                 )}
                                                 style={{ animationDelay: jigglePhase }}
                                             >
+                                                {(kt?.leap.length || ghost) && (
+                                                    <svg className="orbit-cues" viewBox="0 0 70 80" aria-hidden="true">
+                                                        {kt?.leap.map((d, i) => <path key={i} className="orbit-cue--leap" d={d} />)}
+                                                        {ghost && <path className="orbit-cue--ghost" d={ghost} />}
+                                                    </svg>
+                                                )}
                                                 <span className="orbit-tile__letter">{cell.letter}</span>
-                                                <span className="orbit-tile__value" aria-hidden="true">{letterValue(cell.letter)}</span>
-                                                {picked && (
-                                                    <span
-                                                        aria-hidden="true"
-                                                        className={cn(
-                                                            'orbit-tile__order',
-                                                            k === 0 && 'orbit-tile__order--start',
-                                                            leapEnd && 'orbit-tile__order--leap',
-                                                            k >= 9 && 'orbit-tile__order--wide'
-                                                        )}
-                                                    >
-                                                        {k + 1}
+                                                <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
+                                                {kt && trail.n > 1 && (
+                                                    <span className={cn(
+                                                        'orbit-tile__order',
+                                                        kt.isStart && 'orbit-tile__order--start',
+                                                        kt.lowOrder && 'orbit-tile__order--low'
+                                                    )}>
+                                                        {kt.k + 1}
                                                     </span>
                                                 )}
                                             </div>
