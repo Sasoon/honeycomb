@@ -38,9 +38,9 @@ const HowToPlay = () => {
         </p>
         <p className="text-text-secondary mb-4">
           <span className="font-semibold text-amber">Leap:</span> once per word, you may leap from your last tile to any tile two
-          steps away. On the board, each picked tile keys into the next one, so the seam between them bends into an arrow
-          along your word. A leap is marked » on the tile you left and the tile you landed on, and faint » marks show
-          where a leap can still land.
+          steps away. A line threads your word from letter to letter, starting at the dot; a leap shows as an arc hopping
+          over the tile it skips. Tiles your word can't reach next fade back, so once the leap is used you'll see only the
+          neighbours stay bright.
         </p>
         <p className="text-text-secondary mb-3">
           Every tile shows its letter value, Scrabble style. A word scores the sum of its letters, then
@@ -99,9 +99,9 @@ const HowToPlay = () => {
           so you can line up a word and then submit it.
         </p>
         <p className="text-text-secondary">
-          <span className="font-semibold text-text-primary">Your first spin each turn is free.</span> Every extra spin
-          that turn adds one tile to the wave about to drop (only that wave). Spin freely to set up a word;
-          spin twice when the word is worth an extra tile.
+          <span className="font-semibold text-text-primary">Every turn brings a free spin, and an unused one carries over</span> (you
+          can hold two). Every spin beyond your free ones adds one tile to the wave about to drop (only that wave). Save a
+          spin to line up a two-spin word next turn, or spend an extra one when the word is worth a tile.
         </p>
       </div>
 
@@ -139,7 +139,7 @@ const HowToPlay = () => {
           <li>• Keep the top row open. A clear path down from the top keeps you alive.</li>
           <li>• Plurals and endings (-S, -ED, -ER, -ING) turn a 4-letter word into a 6-letter one.</li>
           <li>• A Q, Z, J or X in a 5-letter word is worth more than most 7-letter words. Use them, don't bury them.</li>
-          <li>• Use your free spin every turn. It costs nothing and often turns a 4-letter word into a 5.</li>
+          <li>• A free spin costs nothing and often turns a 4-letter word into a 5. If you don't need it, save it: two spins can build a 7.</li>
           <li>• Keyboard: Enter submits, Backspace drops the last letter, Esc clears, Ctrl/⌘+Z undoes.</li>
         </ul>
       </div>

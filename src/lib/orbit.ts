@@ -17,10 +17,13 @@ export const WAVE_START = 3;
 // (simulated no-spin runs: 14-20 waves, ~17.5 on average)
 export const WAVE_GROWTH_EVERY = 3;
 export const baseWave = (wave: number) => WAVE_START + Math.floor(wave / WAVE_GROWTH_EVERY);
-// Spins are the signature move, so the first each turn is free. Every
-// extra spin adds one tile to THIS turn's wave only
-export const FREE_SPINS = 1;
-export const waveSize = (wave: number, spins: number) => baseWave(wave) + Math.max(0, spins - FREE_SPINS);
+// Spins are the signature move: every turn brings one free spin, and an
+// unused one carries over, up to SPIN_BANK. Every spin beyond the free ones
+// adds one tile to THIS turn's wave only
+export const SPIN_BANK = 2;
+export const waveSize = (wave: number, spins: number, free: number) => baseWave(wave) + Math.max(0, spins - free);
+// Free spins for the next turn: what's left over, plus the new one
+export const nextFreeSpins = (free: number, spins: number) => Math.min(SPIN_BANK, Math.max(0, free - spins) + 1);
 // Out-spell the flood: a word at least as long as the wave shrinks it by one
 export const outSpelled = (wordLen: number, size: number) => wordLen >= size;
 // Roughly one gold tile every other wave

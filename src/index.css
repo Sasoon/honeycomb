@@ -1411,8 +1411,7 @@ button {
 .orbit-tile {
   position: absolute;
   inset: 0;
-  /* --hex: selected tiles get a socket cut where the previous tile keys in */
-  clip-path: var(--hex, polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%));
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 
 .orbit-hexbg {
@@ -1427,12 +1426,12 @@ button {
   font-size: 1.15rem;
   background-color: #F2EFE8;
   color: #15202E;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease, opacity 150ms ease;
   will-change: transform;
 }
 
-/* Tile anatomy: letter centred, Scrabble value below it, tap order (selected
-   only) above it. Everything sits over the gem inlay */
+/* Tile anatomy: letter centred, Scrabble value below it. Both sit over the
+   gem inlay */
 .orbit-tile__letter {
   position: relative;
   z-index: 3;
@@ -1440,8 +1439,7 @@ button {
   margin-top: -4px;
 }
 
-.orbit-tile__value,
-.orbit-tile__order {
+.orbit-tile__value {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -1455,37 +1453,6 @@ button {
   bottom: 15%;
   opacity: 0.55;
 }
-
-.orbit-tile__order {
-  top: 13%;
-  font-size: 0.58rem;
-  font-weight: 700;
-  opacity: 0.5;
-  font-variant-numeric: tabular-nums;
-}
-
-/* a leap glyph occupies the top corner */
-.orbit-tile__order--low { top: 16%; }
-
-/* the first tap's number sits on an ink disc */
-.orbit-tile__order--start {
-  opacity: 1;
-  color: var(--amber);
-  background: #0E1B2C;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: -2px;
-}
-
-.orbit-cell--bad .orbit-tile__order--start {
-  background: #F2EFE8;
-  color: #354356;
-}
-
 
 /* Gold tile: warm fill; selected, it keeps a gold rim around the accent */
 .orbit-tile--gem {
@@ -1584,58 +1551,36 @@ button {
   100% { transform: translate(-50%, -36px); opacity: 0; }
 }
 
-/* Keyed tiles: each selected tile grows a key (an unclipped SVG painted in
-   the tile's colour) from the edge facing the next tile, and the next tile's
-   outline has a matching socket, so the dark seam bends into a chevron along
-   the word. Selected tiles paint above their neighbours so keys never hide */
+/* Selected tiles paint above their neighbours so the head's glow shows */
 .orbit-cell--sel,
 .orbit-cell--bad { z-index: 1; }
-.orbit-cell--sel { --cue: rgba(14, 27, 44, 0.82); }
-.orbit-cell--bad { --cue: rgba(242, 239, 232, 0.9); }
 
-.orbit-key {
+/* Word thread: one stroke letter to letter over the board (a dark casing
+   under a bone core, so it reads on teal, bone and the dark seams alike).
+   A leap is an arc; the dot marks the first letter */
+.orbit-thread {
   position: absolute;
-  left: -10px;
-  top: -10px;
-  width: 90px;
-  height: 100px;
+  left: 0;
+  top: 0;
+  z-index: 5;
   overflow: visible;
   pointer-events: none;
+  animation: orbitThreadIn 160ms ease-out;
 }
 
-.orbit-key path {
-  fill: var(--tile, var(--amber));
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: orbitKeyIn 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-/* A leap gets the only glyph: a double chevron on the tile it left (facing
-   the landing) and the tile it reached (facing back where it came from).
-   Ghosted, it marks every tile a leap could still reach */
-.orbit-cues {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.orbit-cue--leap,
-.orbit-cue--ghost {
+.orbit-thread path {
   fill: none;
-  stroke: var(--cue);
-  stroke-width: 2.3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.orbit-cue--ghost {
-  stroke: #27A89B;
-  stroke-width: 2;
-  opacity: 0.6;
-  animation: orbitGhost 2.6s ease-in-out infinite;
+.orbit-thread__case { stroke: #0E1B2C; stroke-width: 7; }
+.orbit-thread__line { stroke: #F2EFE8; stroke-width: 3; }
+.orbit-thread__start { fill: #F2EFE8; stroke: #0E1B2C; stroke-width: 2.5; }
+
+/* Tiles the word can't reach next step back */
+.orbit-cell--far .orbit-tile {
+  opacity: 0.55;
 }
 
 /* The newest tile: an inner rim (the gold tile's idiom) and a soft lift */
@@ -1658,14 +1603,9 @@ button {
 .orbit-cell--head:not(.orbit-cell--gem) .orbit-tile::after { inset: 6px; background: var(--tile, var(--amber)); }
 .orbit-cell--head.orbit-cell--bad:not(.orbit-cell--gem) .orbit-tile::before { background: rgba(242, 239, 232, 0.5); }
 
-@keyframes orbitKeyIn {
-  from { opacity: 0; transform: scale(0.3); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes orbitGhost {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0.28; }
+@keyframes orbitThreadIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Praise callout for big words: pops over the board, then floats away */
@@ -1704,10 +1644,10 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .orbit-praise { animation: none; opacity: 0; }
-  .orbit-key path,
-  .orbit-cue--ghost { animation: none; }
+  .orbit-thread { animation: none; }
   .orbit-danger { animation: none; }
   .orbit-cell--ring .orbit-tile { animation: none; }
   .orbit-clearfx { animation: none; opacity: 0; }
   .orbit-scorefx { animation: none; opacity: 0; }
 }
+

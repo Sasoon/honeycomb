@@ -34,9 +34,8 @@ test('passing drops the wave; undo takes it back for a charge', async ({ page })
     expect(await letters(page)).toBe(before);
 });
 
-test('the first spin each turn is free, the second grows the wave', async ({ page }) => {
-    await dismissRules(page);
-    // Find a pivot whose ring actually spins, then spin it with the keyboard
+// Find a pivot whose ring actually spins, then spin it with the keyboard
+const spinOnce = async (page: Page) => {
     const ids = await page.$$eval('[data-ocell]', els => els.map(e => (e as HTMLElement).dataset.ocell!));
     for (const id of ids) {
         const cell = page.locator(`[data-ocell="${id}"]`);
@@ -48,18 +47,24 @@ test('the first spin each turn is free, the second grows the wave', async ({ pag
     }
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
+};
+
+test('the first spin each turn is free, the second grows the wave', async ({ page }) => {
+    await dismissRules(page);
+    await spinOnce(page);
     await expect(nextChips(page)).toHaveCount(3);
-    // Spin again from a fresh pivot selection
-    for (const id of ids) {
-        const cell = page.locator(`[data-ocell="${id}"]`);
-        if (!(await cell.getAttribute('data-letter'))) continue;
-        await cell.click();
-        await page.waitForTimeout(350);
-        if (await page.locator('.orbit-cell--ring').count()) break;
-        await page.keyboard.press('Escape');
-    }
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('Enter');
+    await spinOnce(page);
+    await expect(nextChips(page)).toHaveCount(4);
+});
+
+test('an unused free spin carries over to the next turn', async ({ page }) => {
+    await dismissRules(page);
+    await page.getByRole('button', { name: /Pass/ }).click();
+    await expect(page.getByText('2 free spins')).toBeVisible();
+    await spinOnce(page);
+    await spinOnce(page);
+    await expect(nextChips(page)).toHaveCount(3);
+    await spinOnce(page);
     await expect(nextChips(page)).toHaveCount(4);
 });
 

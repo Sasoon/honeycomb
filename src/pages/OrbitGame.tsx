@@ -10,10 +10,10 @@ import { loadDictionary, peekDictionary } from '../lib/wordValidator';
 import {
     COLS,
     DAILY_UNDOS,
-    FREE_SPINS,
     RING_OFFSETS,
     ROW_COUNTS,
     SEED_TILES,
+    SPIN_BANK,
     WORD_MIN,
     actionStrip,
     boardFromLetters,
@@ -24,9 +24,9 @@ import {
     canExtend,
     clearAndSettle,
     isAdjacent,
-    leapOver,
     letterValue,
     longestWord,
+    nextFreeSpins,
     orbitFlood,
     outSpelled,
     overflowCount,
@@ -45,7 +45,6 @@ import {
 } from '../lib/orbit';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
-import { keyedTiles, leapGlyph, unit } from '../lib/orbitKeys';
 import { sfx } from '../lib/sfx';
 
 const FLOOD_STAGGER_MS = 50;
@@ -94,7 +93,19 @@ function trailColor(i: number, n: number, invalid: boolean): string {
     const t = n <= 1 ? 1 : i / (n - 1);
     return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`;
 }
-const centreOf = (c: HexCell): [number, number] => [cellX(c) + TILE_W / 2, cellY(c) + TILE_H / 2];
+type Pt = [number, number];
+const centreOf = (c: HexCell): Pt => [cellX(c) + TILE_W / 2, cellY(c) + TILE_H / 2];
+// The thread stops this far from a letter's centre so it never crosses a glyph
+const THREAD_GAP = 17;
+// How far a leap's arc control point sits off the chord: a straight hop must
+// clear the hopped letter, a bent one only needs to read as a hop
+const LEAP_BOW_STRAIGHT = 50;
+const LEAP_BOW_BENT = 26;
+const toward = (a: Pt, b: Pt, d: number): Pt => {
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return [a[0] + (b[0] - a[0]) / l * d, a[1] + (b[1] - a[1]) / l * d];
+};
+const pt = (p: Pt) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
 
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
@@ -108,6 +119,7 @@ type Snapshot = {
     phase: Phase;
     wavesDropped: number;
     spins: number;
+    freeSpins: number;
     score: number;
     words: string[];
     actionLog: Action[];
@@ -160,6 +172,8 @@ const OrbitGame = () => {
     const [wavesDropped, setWavesDropped] = useState(0);
     // Spins made this turn: the first is free, each extra adds a tile to this wave
     const [spins, setSpins] = useState(0);
+    // Free spins this turn: one per turn, an unused one carries over
+    const [freeSpins, setFreeSpins] = useState(1);
     const [score, setScore] = useState(0);
     const [words, setWords] = useState<string[]>([]);
     const [actionLog, setActionLog] = useState<Action[]>([]);
@@ -296,6 +310,7 @@ const OrbitGame = () => {
         setPhase(run.phase);
         setWavesDropped(run.wavesDropped);
         setSpins(run.spins ?? 0);
+        setFreeSpins(run.freeSpins ?? 1);
         setScore(run.score);
         setWords(run.words);
         setActionLog(run.actionLog);
@@ -312,6 +327,7 @@ const OrbitGame = () => {
         setSeedStr(seed);
         setGrid(newGrid);
         setSpins(0);
+        setFreeSpins(1);
         setPhase('storm');
         setWavesDropped(0);
         setScore(0);
@@ -339,6 +355,7 @@ const OrbitGame = () => {
                 setActionLog(result.strip);
                 setWavesDropped(result.waves ?? 0);
                 setSpins(0);
+                setFreeSpins(1);
                 setUndoStack([]);
                 setUndosUsed(0);
                 if (showResults) setModal(md => md ?? 'results');
@@ -391,6 +408,7 @@ const OrbitGame = () => {
             phase,
             wavesDropped,
             spins,
+            freeSpins,
             score,
             words,
             actionLog,
@@ -399,7 +417,7 @@ const OrbitGame = () => {
             undosUsed,
         };
         storage.set(runKey(mode), JSON.stringify(run));
-    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, spins, score, words, actionLog, undoStack, undosUsed]);
+    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, spins, freeSpins, score, words, actionLog, undoStack, undosUsed]);
 
     useEffect(() => {
         if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
@@ -441,6 +459,7 @@ const OrbitGame = () => {
         const { newGrid, paths, unplaced } = orbitFlood(g, waveTiles(seedStr, tag, count), placementRng(seedStr, tag));
         queueFloodAnims(newGrid, paths);
         setWavesDropped(wavesDropped + 1);
+        setFreeSpins(nextFreeSpins(freeSpins, spins));
         setSpins(0);
         setGrid(newGrid);
         sfx.land(0.3);
@@ -451,7 +470,7 @@ const OrbitGame = () => {
             window.clearTimeout(resultsTimerRef.current);
             resultsTimerRef.current = window.setTimeout(() => setModal(md => md ?? 'results'), RESULTS_DELAY_MS);
         }
-    }, [wavesDropped, seedStr, queueFloodAnims]);
+    }, [wavesDropped, seedStr, freeSpins, spins, queueFloodAnims]);
 
     // ---------- undo ----------
 
@@ -464,12 +483,13 @@ const OrbitGame = () => {
             phase,
             wavesDropped,
             spins,
+            freeSpins,
             score,
             words: [...words],
             actionLog: [...actionLog],
         };
         setUndoStack(s => [...s.slice(-9), snap]);
-    }, [grid, phase, wavesDropped, spins, score, words, actionLog]);
+    }, [grid, phase, wavesDropped, spins, freeSpins, score, words, actionLog]);
 
     const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
     const topUndo = undoStack[undoStack.length - 1];
@@ -484,6 +504,7 @@ const OrbitGame = () => {
         setPhase(snap.phase);
         setWavesDropped(snap.wavesDropped);
         setSpins(snap.spins);
+        setFreeSpins(snap.freeSpins ?? 1);
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
@@ -520,7 +541,7 @@ const OrbitGame = () => {
         () => (match ? scoreWord(selectedCells.map(c => c.letter), selectedCells.filter(c => c.isGem).length) : null),
         [match, selectedCells]
     );
-    const currentWave = waveSize(wavesDropped, spins);
+    const currentWave = waveSize(wavesDropped, spins, freeSpins);
 
     // A chime the moment a path becomes a real word
     const prevMatchRef = useRef<string | null>(null);
@@ -668,10 +689,10 @@ const OrbitGame = () => {
         setPreviewSteps(0);
         setSelected([]);
         haptics.success();
-        sfx.spinLock(spins < FREE_SPINS);
+        sfx.spinLock(spins < freeSpins);
         setSpins(n => n + 1);
         setGrid(newGrid);
-    }, [phase, grid, spins, queueMove, clearPreviewTransforms, resetPreview, pushUndo]);
+    }, [phase, grid, spins, freeSpins, queueMove, clearPreviewTransforms, resetPreview, pushUndo]);
 
     // ---------- drag (the dial) ----------
 
@@ -1049,7 +1070,8 @@ const OrbitGame = () => {
     const quietRing = previewSteps !== 0 || dragging;
     const cools = !!match && outSpelled(selected.length, currentWave);
     const matchPoints = wordScore?.total ?? 0;
-    const nextSpinCosts = spins >= FREE_SPINS;
+    const freeLeft = Math.max(0, freeSpins - spins);
+    const nextSpinCosts = freeLeft === 0;
 
     const toggleSound = () => {
         const next = !soundOn;
@@ -1126,7 +1148,7 @@ const OrbitGame = () => {
                             ? 'bg-gold border-gold text-bg-primary'
                             : 'bg-bg-secondary border-secondary/40 text-text-primary',
                         // Tiles bought with extra spins this turn
-                        idx >= currentWave - Math.max(0, spins - FREE_SPINS) && 'ring-1 ring-red-400/70'
+                        idx >= currentWave - Math.max(0, spins - freeSpins) && 'ring-1 ring-red-400/70'
                     )}
                     style={{ animationDelay: `${idx * 50}ms` }}
                     title={tile.gem ? 'Gold tile: doubles any word that uses it' : undefined}
@@ -1149,27 +1171,48 @@ const OrbitGame = () => {
         <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
     );
 
-    // Word order lives on the tiles: each tile keys into the next (the seam
-    // between them bends into a chevron along the word), the teal ramp runs
-    // from the first tap to the newest, and a leap puts a double chevron on
-    // the tile it left and the tile it reached. While the leap is unused, the
-    // tiles it could reach show that chevron ghosted
+    // Word order is a thread: one stroke from letter to letter, stopping
+    // short of each glyph, with a dot where the word starts. A step runs
+    // straight; a leap bows into an arc around the tile it hops. Tiles the
+    // word can't reach next fade back, so the open moves (and whether the
+    // leap is still unused) read at a glance
     const trail = useMemo(() => {
         const n = selectedCells.length;
-        const byId = new Map(grid.map(c => [c.id, c]));
-        const centre = (id: string) => centreOf(byId.get(id)!);
-        const keyed = keyedTiles(selected, centre, (a, b) => isAdjacent(byId.get(a)!, byId.get(b)!));
-        const leapTaken = selectedCells.some((c, i) => i > 0 && !isAdjacent(selectedCells[i - 1], c));
-        const ghosts = new Map<string, string>();
-        if (n && !leapTaken && phase === 'storm') {
-            const last = selectedCells[n - 1];
+        const order = new Map(selected.map((id, k) => [id, k]));
+        const segs: Array<{ d: string; from: Pt }> = [];
+        for (let k = 0; k < n - 1; k++) {
+            const a = selectedCells[k];
+            const b = selectedCells[k + 1];
+            const pa = centreOf(a);
+            const pb = centreOf(b);
+            if (isAdjacent(a, b)) {
+                const from = toward(pa, pb, THREAD_GAP);
+                segs.push({ d: `M${pt(from)}L${pt(toward(pb, pa, THREAD_GAP))}`, from });
+                continue;
+            }
+            // Bow away from the hopped tile(s); a dead-straight hop has its
+            // hopped tile on the chord, so it bows away from the board centre
+            const m: Pt = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
+            const len = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
+            const nrm: Pt = [-(pb[1] - pa[1]) / len, (pb[0] - pa[0]) / len];
+            const hopped = grid.filter(c => c.letter && isAdjacent(a, c) && isAdjacent(c, b)).map(centreOf);
+            const side = (from: Pt) => (m[0] - from[0]) * nrm[0] + (m[1] - from[1]) * nrm[1];
+            const h: Pt = hopped.length
+                ? [hopped.reduce((t, p) => t + p[0], 0) / hopped.length, hopped.reduce((t, p) => t + p[1], 0) / hopped.length]
+                : m;
+            const away = Math.abs(side(h)) > 1 ? side(h) : side([BOARD_W / 2, BOARD_H / 2]) || 1;
+            const bow = (hopped.length === 1 ? LEAP_BOW_STRAIGHT : LEAP_BOW_BENT) * Math.sign(away);
+            const ctrl: Pt = [m[0] + nrm[0] * bow, m[1] + nrm[1] * bow];
+            const from = toward(pa, ctrl, THREAD_GAP);
+            segs.push({ d: `M${pt(from)}Q${pt(ctrl)} ${pt(toward(pb, ctrl, THREAD_GAP))}`, from });
+        }
+        const far = new Set<string>();
+        if (n && phase === 'storm') {
             grid.forEach(c => {
-                if (c.letter && !keyed.has(c.id) && leapOver(last, c, grid)) {
-                    ghosts.set(c.id, leapGlyph(unit(centreOf(last), centreOf(c)), true));
-                }
+                if (c.letter && !order.has(c.id) && !canExtend(selectedCells, c, grid)) far.add(c.id);
             });
         }
-        return { n, keyed, ghosts };
+        return { n, order, segs, far };
     }, [selected, selectedCells, grid, phase]);
     const invalidWord = wordState === 'invalid';
 
@@ -1322,7 +1365,7 @@ const OrbitGame = () => {
                             )}>
                                 {nextChips(nextWindow.length >= 8 ? 'w-5 h-5 text-[11px]' : 'w-7 h-7 text-sm')}
                                 <p className="text-[11px] text-text-secondary text-center mt-2">
-                                    {spins === 0 ? 'Free spin available' : spins > FREE_SPINS ? `+${spins - FREE_SPINS} from spins this turn` : 'Free spin used · more spins add tiles'}
+                                    {freeLeft > 0 ? `${freeLeft} free ${freeLeft === 1 ? 'spin' : 'spins'}${freeLeft < SPIN_BANK ? ' · save it to have 2 next turn' : ''}` : spins > freeSpins ? `+${spins - freeSpins} from spins this turn` : 'Free spins used · more spins add tiles'}
                                 </p>
                             </div>
                             <div className="absolute -top-3 left-4">
@@ -1368,14 +1411,10 @@ const OrbitGame = () => {
                         >
                             {grid.map(cell => {
                                 const isSelected = selected.includes(cell.id);
-                                const kt = trail.keyed.get(cell.id);
-                                const ghost = previewSteps === 0 && !dragging ? trail.ghosts.get(cell.id) : undefined;
+                                const k = trail.order.get(cell.id);
                                 const cellStyle: CSSProperties = { left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H };
-                                if (kt) {
-                                    Object.assign(cellStyle, {
-                                        '--tile': trailColor(kt.k, trail.n, invalidWord),
-                                        ...(kt.hex ? { '--hex': kt.hex } : null),
-                                    });
+                                if (k !== undefined) {
+                                    Object.assign(cellStyle, { '--tile': trailColor(k, trail.n, invalidWord) });
                                 }
                                 const inRing = ringIds.has(cell.id);
                                 const isPivot = pivotCell?.id === cell.id && armed;
@@ -1396,17 +1435,13 @@ const OrbitGame = () => {
                                             inRing && 'orbit-cell--ring',
                                             inRing && quietRing && 'orbit-cell--quiet',
                                             isPivot && 'orbit-cell--pivot',
-                                            kt && (invalidWord ? 'orbit-cell--bad' : 'orbit-cell--sel'),
-                                            kt?.isHead && trail.n > 1 && 'orbit-cell--head',
-                                            cell.isGem && 'orbit-cell--gem'
+                                            k !== undefined && (invalidWord ? 'orbit-cell--bad' : 'orbit-cell--sel'),
+                                            k === trail.n - 1 && trail.n > 1 && 'orbit-cell--head',
+                                            cell.isGem && 'orbit-cell--gem',
+                                            trail.far.has(cell.id) && 'orbit-cell--far'
                                         )}
                                         style={cellStyle}
                                     >
-                                        {kt?.key && (
-                                            <svg className="orbit-key" viewBox="-10 -10 90 100" aria-hidden="true">
-                                                <path d={kt.key} />
-                                            </svg>
-                                        )}
                                         <div className="orbit-hexbg" />
                                         {cell.letter && (
                                             <div
@@ -1417,28 +1452,21 @@ const OrbitGame = () => {
                                                 )}
                                                 style={{ animationDelay: jigglePhase }}
                                             >
-                                                {(kt?.leap.length || ghost) && (
-                                                    <svg className="orbit-cues" viewBox="0 0 70 80" aria-hidden="true">
-                                                        {kt?.leap.map((d, i) => <path key={i} className="orbit-cue--leap" d={d} />)}
-                                                        {ghost && <path className="orbit-cue--ghost" d={ghost} />}
-                                                    </svg>
-                                                )}
                                                 <span className="orbit-tile__letter">{cell.letter}</span>
                                                 <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
-                                                {kt && trail.n > 1 && (
-                                                    <span className={cn(
-                                                        'orbit-tile__order',
-                                                        kt.isStart && 'orbit-tile__order--start',
-                                                        kt.lowOrder && 'orbit-tile__order--low'
-                                                    )}>
-                                                        {kt.k + 1}
-                                                    </span>
-                                                )}
                                             </div>
                                         )}
                                     </div>
                                 );
                             })}
+
+                            {trail.segs.length > 0 && (
+                                <svg className={cn('orbit-thread', invalidWord && 'orbit-thread--bad')} width={BOARD_W} height={BOARD_H} aria-hidden="true">
+                                    {trail.segs.map((sg, i) => <path key={`c${i}`} className="orbit-thread__case" d={sg.d} />)}
+                                    {trail.segs.map((sg, i) => <path key={`l${i}`} className="orbit-thread__line" d={sg.d} />)}
+                                    <circle className="orbit-thread__start" cx={trail.segs[0].from[0]} cy={trail.segs[0].from[1]} r={4.5} />
+                                </svg>
+                            )}
 
                             {clearFx.map(fx => (
                                 <div
@@ -1465,7 +1493,7 @@ const OrbitGame = () => {
                     <div className="min-h-10 mt-3 mb-2 flex items-center justify-center px-2" aria-live="polite">
                         {pivotHint && selected.length === 1 ? (
                             <span className="text-xs font-medium text-amber text-center">
-                                Drag around it to spin · {nextSpinCosts ? 'next spin adds +1 tile to this wave' : 'first spin this turn is free'}
+                                Drag around it to spin · {nextSpinCosts ? 'next spin adds +1 tile to this wave' : `${freeLeft} free ${freeLeft === 1 ? 'spin' : 'spins'} this turn`}
                             </span>
                         ) : status}
                     </div>
