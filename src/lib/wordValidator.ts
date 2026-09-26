@@ -5,7 +5,7 @@
 let words: Set<string> | null = null;
 let loadPromise: Promise<Set<string>> | null = null;
 
-function loadDictionary(): Promise<Set<string>> {
+export function loadDictionary(): Promise<Set<string>> {
     if (!loadPromise) {
         loadPromise = fetch('/dictionary.txt')
             .then(res => {
@@ -24,6 +24,9 @@ function loadDictionary(): Promise<Set<string>> {
     }
     return loadPromise;
 }
+
+// The dictionary if it has already loaded, else null
+export const peekDictionary = (): Set<string> | null => words;
 
 export const wordValidator = {
     get isReady(): boolean {

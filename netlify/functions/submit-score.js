@@ -1,5 +1,38 @@
 import { getStore } from '@netlify/blobs';
 
+// Each game keeps its own leaderboard stores, so Orbit scores never mix
+// with the classic game's
+const STORE_NAMES = {
+  classic: {
+    daily: 'leaderboard-daily',
+    dailyIndex: 'leaderboard-daily-index',
+    alltime: 'leaderboard-alltime',
+    alltimeIndex: 'leaderboard-alltime-index',
+    maxPointsPerWord: 50,
+  },
+  orbit: {
+    daily: 'orbit-daily',
+    dailyIndex: 'orbit-daily-index',
+    alltime: 'orbit-alltime',
+    alltimeIndex: 'orbit-alltime-index',
+    // Letter values x length x gold tiles: a whole run can't average this
+    maxPointsPerWord: 400,
+  },
+};
+
+function storeNamesFor(game) {
+  return STORE_NAMES[game] || STORE_NAMES.classic;
+}
+
+// Daily puzzles follow each player's local calendar day, so "today" is
+// anywhere from UTC yesterday to UTC tomorrow depending on time zone
+function isCurrentDailyDate(date) {
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const utcToday = Date.parse(new Date().toISOString().slice(0, 10));
+  const diffDays = Math.round((Date.parse(date) - utcToday) / 86400000);
+  return Math.abs(diffDays) <= 1;
+}
+
 export default async function handler(request, context) {
   try {
     if (request.method !== 'POST') {
@@ -19,7 +52,8 @@ export default async function handler(request, context) {
       });
     }
 
-    const { playerName, score, round, totalWords, longestWord, timeSpent, date } = parsed;
+    const { playerName, score, round, totalWords, longestWord, timeSpent, date, game } = parsed;
+    const stores = storeNamesFor(game);
 
     // Validate required fields
     if (!playerName || score === undefined || !round || !date) {
@@ -41,13 +75,7 @@ export default async function handler(request, context) {
       });
     }
 
-    // Date validation: allow both UTC and local YYYY-MM-DD
-    const now = new Date();
-    const utcToday = now.toISOString().split('T')[0];
-    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const isToday = date === utcToday || date === localToday;
-
-    if (!isToday) {
+    if (!isCurrentDailyDate(date)) {
       return new Response(JSON.stringify({ success: false, error: 'Can only submit scores for today\'s challenge' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -84,8 +112,8 @@ export default async function handler(request, context) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    // Generous upper bound: ~50 points per word is unreachable
-    if (numericScore > Math.max(numericTotalWords, 1) * 50) {
+    // Generous per-game upper bound on average points per word
+    if (numericScore > Math.max(numericTotalWords, 1) * stores.maxPointsPerWord) {
       return new Response(JSON.stringify({ success: false, error: 'Invalid submission' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -120,7 +148,7 @@ export default async function handler(request, context) {
     };
 
     // Use runtime-injected site context for blobs
-    const dailyStore = getStore('leaderboard-daily');
+    const dailyStore = getStore(stores.daily);
 
     let existingScore;
     try {
@@ -146,7 +174,7 @@ export default async function handler(request, context) {
     await dailyStore.set(playerKey, JSON.stringify(scoreEntry));
 
     // Update all-time leaderboard if this is a new personal best
-    const allTimeStore = getStore('leaderboard-alltime');
+    const allTimeStore = getStore(stores.alltime);
 
     let allTimeBest;
     try {
@@ -162,13 +190,13 @@ export default async function handler(request, context) {
     }
 
     // Update strongly-consistent daily index and compute player's rank from it
-    await updateDailyIndex({ isLocal, date, entry: scoreEntry });
+    await updateDailyIndex({ isLocal, date, entry: scoreEntry, stores });
 
     // Also update strongly-consistent all-time index
-    await updateAllTimeIndex({ isLocal, entry: scoreEntry });
+    await updateAllTimeIndex({ isLocal, entry: scoreEntry, stores });
 
     // Get player's rank in daily leaderboard (reads the index with strong consistency)
-    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score);
+    const dailyRank = await getDailyRank(isLocal, date, scoreEntry.score, stores);
 
     return new Response(JSON.stringify({
       success: true,
@@ -203,10 +231,10 @@ function sanitizePlayerName(name) {
 }
 
 // Maintain a strongly-consistent daily index for instant reads after writes
-async function updateDailyIndex({ isLocal, date, entry }) {
+async function updateDailyIndex({ isLocal, date, entry, stores }) {
   const keyPrefix = isLocal ? 'dev_' : '';
   const indexKey = `${keyPrefix}${date}`;
-  const indexStore = getStore('leaderboard-daily-index');
+  const indexStore = getStore(stores.dailyIndex);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -261,10 +289,10 @@ async function updateDailyIndex({ isLocal, date, entry }) {
 }
 
 // Maintain a strongly-consistent all-time index for instant reads after writes
-async function updateAllTimeIndex({ isLocal, entry }) {
+async function updateAllTimeIndex({ isLocal, entry, stores }) {
   const keyPrefix = isLocal ? 'dev_' : '';
   const indexKey = `${keyPrefix}all`;
-  const indexStore = getStore('leaderboard-alltime-index');
+  const indexStore = getStore(stores.alltimeIndex);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -314,10 +342,10 @@ async function updateAllTimeIndex({ isLocal, entry }) {
 }
 
 // Get player's rank in daily leaderboard
-async function getDailyRank(isLocal, date, playerScore) {
+async function getDailyRank(isLocal, date, playerScore, stores) {
   try {
     const keyPrefix = isLocal ? 'dev_' : '';
-    const store = getStore('leaderboard-daily-index');
+    const store = getStore(stores.dailyIndex);
     const data = await store.get(`${keyPrefix}${date}`, { type: 'json', consistency: 'strong' });
 
     if (!data || !Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {

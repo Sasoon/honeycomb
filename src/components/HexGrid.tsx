@@ -17,6 +17,7 @@ export type HexCell = {
   isPlaced: boolean;
   placedThisTurn?: boolean;
   isAutoClear?: boolean;
+  isGem?: boolean; // Orbit gold tile: doubles any word that uses it
 };
 
 export interface HexGridProps {

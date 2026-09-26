@@ -1,106 +1,38 @@
 # WAXLE
 
-A falling tile word game with letter blocks. Form words to clear tiles from the board in this fast-paced puzzle variant.
+A daily word game on a honeycomb. Spell words on a 19-tile hex board while a flood of letters pours in from the top. Clear space fast enough and you survive another wave. When a letter has nowhere to land, the run is over.
 
-## Features
+Play at https://waxle.netlify.app
 
-- Falling tiles with letter blocks
-- Form words to clear tiles and score points  
-- Flood mechanics with cascading tile placement
-- Mobile-responsive design with touch controls
-- Orbit mechanic for rotating tiles around a pivot
-- Lock mode to prevent tiles from moving
-- Progressive difficulty with increasing tile counts
+## How to play
 
-## Getting Started
+- **Build words.** Tap tiles in order, each touching the last, to spell a word of 3+ letters. Each picked tile keys into the next, so the seam between them bends into an arrow along the word. Every tile shows its Scrabble value; a word scores its letter total ×2 at 5–6 letters and ×3 at 7+.
+- **Gold tiles** arrive in some waves and double any word that uses them (two make it ×4).
+- **The flood.** Submitting a word or passing ends your turn. The tiles under **NEXT** then drop in and sink as deep as they can. Waves start at 3 tiles and grow by one every 4 waves. If the next wave won't fit, NEXT turns red and warns you.
+- **Spin.** Tap one tile, then drag around it (or scroll, or use ←/→ and Enter) to rotate its neighbours. The first spin each turn is free; each extra spin adds one tile to that turn's wave only.
+- **Out-spell the flood.** A word at least as long as the NEXT row shrinks that wave by one.
+- **Daily vs practice.** The daily gives everyone the same tiles and 3 turn undos (spin undos are free). After the run you can share an emoji summary and post your score to the leaderboard. Practice is a random board with unlimited undos.
 
-### Prerequisites
+Keyboard: Enter submits, Backspace drops the last letter, Esc clears, Ctrl/⌘+Z undoes. Sound can be muted from the speaker icon.
 
-- Node.js (14.x or later)
-- npm or yarn
-
-### Installation
+## Development
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/waxle.git
-cd waxle
-
-# Install dependencies
 npm install
-# or
-yarn
-
-# Start the development server
-npm run dev
-# or
-yarn dev
+npm run dev        # Vite dev server on :5173
+npm run build      # typecheck + production build
+npm run lint
+npm run test:e2e   # Playwright smoke tests (needs the dev server running)
 ```
 
-## How to Play
+Leaderboard functions live in `netlify/functions` and run under `netlify dev`. See `docs/claude.md` for how the blob stores work.
 
-1. **Placement Phase**: Add up to 2 letter tiles to the grid
-2. **Word Formation Phase**: Trace a path to form a word (3+ letters)
-3. Score points based on word length and bonuses
-4. Reach 100 points in the fewest turns to win!
+### Layout
 
-## Technologies Used
+- `src/pages/OrbitGame.tsx`: the game screen (input, spin dial, animation, persistence)
+- `src/lib/orbit.ts`: pure game logic and tuning (board, flood placement, scoring, seeded per-wave tile streams, stats, sharing)
+- `src/lib/sfx.ts`: synthesized WebAudio sound effects
+- `src/components/orbit/`: help and results dialogs
+- `public/dictionary.txt`: word list, built by `npm run build:dictionary`
 
-- React.js
-- TypeScript
-- Tailwind CSS
-- Zustand for state management
-
-### Game Concept
-*Honeycomb* is a single-player word-building puzzle game played on a grid of interlocking hexagonal tiles, like a waxle shape. Players strategically place letter tiles to form words along connected paths, leveraging special tiles and mechanics to maximize their score while aiming to reach a target score in the fewest turns possible.
-
-### Core Components
-- **Grid**: A waxle-shaped hexagonal grid with 19 interlocked hexagons arranged in a natural waxle pattern, with the middle row containing 5 hexagons and rows above and below having fewer hexagons (creating the tapered waxle shape).
-- **Letter Tiles**: 100 tiles, distributed by frequency:
-    - 61 common
-    - 26 medium
-    - 9 uncommon
-    - 4 rare
-- **Player's Hand**: Maintained at 5 letter tiles, refilled from the bag after each turn if tiles remain.
-- **Starting Setup**: Begins with a small cluster of 3–5 pre-placed tiles on the grid for immediate engagement.
-
-### Gameplay Loop
-1. **Placement Phase**: Place 2 letter tiles from your hand onto empty hexes, each adjacent to at least one existing tile. No valid word is required during placement.
-2. **Scoring Phase**: Trace a connected path through tiles to form a single word. Each unique word (defined by its exact path) can be scored **only once per game**.
-3. **Draw Phase**: Draw tiles to maintain a hand of 5, if tiles are available.
-
-### Important Clarification
-- **Tile Placement**: Players can place tiles freely without forming valid words.
-- **Word Scoring**: Valid words are required only during the scoring phase, with each unique path scored once.
-
-### Word Formation Rules
-- Words must be at least 3 letters long.
-- Must follow a connected path through adjacent hexes.
-- No tile can be reused within the same word.
-- Words must be in the English dictionary.
-- Only one word can be scored per turn.
-
-### Special Mechanics
-- **Jump Tiles**: Earned after using 3 rare letters; allows skipping one tile in a word path during scoring, acting as a bridge.
-- **Wild Tiles**: Earned by completing hexes; can overwrite an existing tile with any letter, keeping the grid dynamic.
-- **Burn System**: Burn a tile to draw a new one.
-- **Double Score Tiles**: Two special hexes on the grid. When a word's path includes a Double Score tile, its base score (1 point per letter) is doubled for that turn. Each Double Score tile can be used only once per game, deactivating after scoring, encouraging strategic clustering toward these high-value spots.
-
-### Density Incentives
-- **Adjacency Bonus**: Letters connected to more than 2 others award +1 point when used in a word.
-- **Hex Formation Bonus**: Completing a full hexagon (a tile surrounded by 6 letters) awards 5 points and generates a Wild Tile.
-
-### Scoring
-- **Base Score**: 1 point per letter in the word.
-- **Double Letter Bonus**: +2 points for words with consecutive identical letters.
-- **Double Score Bonus**: +1 point per letter when a Double Score tile is used.
-- **End-Game Bonuses**:
-    - No shuffles used: +5 points
-    - Scored a 10+ letter word: +5 points
-
-### Win Condition
-The game ends when the player reaches a **preset score of 100 points**. The objective is to achieve this score in as few turns as possible, emphasizing efficiency and strategic planning.
-
-### Additional Features
-- **Daily Challenge Mode**: All players receive the same setup and compete on leaderboards.
-- **Statistics Tracking**: Records words formed, average word length, high scores, and fewest turns to reach the target score.
+The classic game (`WaxleGame.tsx`, `DailyChallenge.tsx` and the zustand store) is still in the source tree but no longer routed.

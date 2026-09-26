@@ -1,56 +1,76 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { ChevronDown, Hourglass, Undo2 } from 'lucide-react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { AlertTriangle, BarChart3, Check, ChevronDown, CircleHelp, Hourglass, RotateCcw, SkipForward, Undo2, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { OptimizedCounter } from '../components/OptimizedCounter';
 import { HexCell } from '../components/HexGrid';
+import { HelpModal } from '../components/orbit/HelpModal';
+import { ResultsModal } from '../components/orbit/ResultsModal';
+import { loadDictionary, peekDictionary } from '../lib/wordValidator';
 import {
-    clearTilesAndApplyGravity,
-    generateDropLettersSmart,
-    areCellsAdjacent,
-} from '../lib/waxleGameUtils';
-import { createSeededRNG, SeededRNG } from '../lib/seededRNG';
+    COLS,
+    DAILY_UNDOS,
+    FREE_SPINS,
+    RING_OFFSETS,
+    ROW_COUNTS,
+    SEED_TILES,
+    WORD_MIN,
+    actionStrip,
+    boardFromLetters,
+    boardLetters,
+    buildBoard,
+    dayNumber,
+    loadStats,
+    canExtend,
+    clearAndSettle,
+    letterValue,
+    longestWord,
+    orbitFlood,
+    outSpelled,
+    overflowCount,
+    placementRng,
+    saveStats,
+    summarizeStats,
+    scoreWord,
+    todayStr,
+    waveSize,
+    waveTag,
+    waveTiles,
+    type Action,
+    type BoardLetters,
+    type DailyResult,
+    type OrbitStats,
+} from '../lib/orbit';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
+import { keyedTiles } from '../lib/orbitKeys';
+import { sfx } from '../lib/sfx';
 
-// ==================== ORBIT TUNING ====================
-// Classic-size board: the 19-cell diamond. Small board is the pressure;
-// path words + free orbits are the player's power
-const ROW_COUNTS = [3, 4, 5, 4, 3];
-// Ratchet economy: the flood meter IS the next wave's size. Spins and
-// passes each grow it by one — for good. The only relief: a word at
-// least as long as the wave pushes it back one (out-spell the flood).
-// The floor (sea level) creeps up every 4 waves
-const METER_START = 4;
-// The sea never sits below 3: cooling brakes your own ratcheting, it
-// can't drain the opening to a trickle
-const meterFloor = (waves: number) => 3 + Math.floor(waves / 4);
-const SEED_TILES = 8;
-const WORD_MIN = 3; // smallest playable word
-const WORD_MAX = 8; // largest word indexed
 const FLOOD_STAGGER_MS = 50;
 const HANDLE_DELAY_MS = 250;
 const DRAG_THRESHOLD_PX = 8;
 const DEG_PER_STEP = 60;
 const WHEEL_PER_STEP = 40;
-const DAILY_UNDOS = 3;
-const DAILY_EPOCH = '2026-06-10';
-// =======================================================
+// Let the final wave land before the results sheet covers it
+const RESULTS_DELAY_MS = 1100;
 
-const LS_RUN = 'waxle-orbit-run-v8';
-const LS_STATS = 'waxle-orbit-stats-v1';
-const LS_ONBOARDED = 'waxle-orbit-onboarded-v5';
+// Callouts for big plays, by word length
+const praiseFor = (len: number, gems: number, points: number) =>
+    len >= 8 ? 'Legendary!' : len >= 7 ? 'Superb!' : points >= 60 ? 'Jackpot!'
+        : len >= 6 ? 'Great!' : gems > 0 ? 'Golden!' : len >= 5 ? 'Nice!' : null;
 
-const RING_OFFSETS: Array<[number, number]> = [
-    [-1, -0.5], [-1, 0.5], [0, 1], [1, 0.5], [1, -0.5], [0, -1],
-];
+// v12: path words again, leap removed (older saved runs are dropped)
+const LS_RUN_DAILY = 'waxle-orbit-run-v12';
+const LS_RUN_PRACTICE = 'waxle-orbit-practice-v3';
+const LS_ONBOARDED = 'waxle-orbit-onboarded-v7';
+const LS_MODE = 'waxle-orbit-mode';
+const LS_NAME = 'waxle-player-name';
 
 // Classic tile metrics (70px tiles, uniform hex lattice spacing)
 const TILE_W = 70;
 const TILE_H = 80;
 const PITCH_X = 76;
 const PITCH_Y = 65;
-const COLS = Math.max(...ROW_COUNTS);
 const BOARD_W = (COLS - 1) * PITCH_X + TILE_W;
 const BOARD_H = (ROW_COUNTS.length - 1) * PITCH_Y + TILE_H;
 
@@ -62,196 +82,107 @@ const mod = (a: number, n: number) => ((a % n) + n) % n;
 const SNAP_K = 5;
 const SNAP_NORM = 2 * Math.tanh(SNAP_K / 2);
 const snapF = (f: number) => 0.5 + Math.tanh((f - 0.5) * SNAP_K) / SNAP_NORM;
-// Long words carry the run: +2 per letter beyond 4 (3=3, 4=4, 5=7, 6=10…)
-const wordPoints = (len: number) => len + 2 * Math.max(0, len - 4);
 
-function buildBoard(): HexCell[] {
-    const cells: HexCell[] = [];
-    ROW_COUNTS.forEach((count, row) => {
-        const offset = (COLS - count) / 2;
-        for (let i = 0; i < count; i++) {
-            cells.push({
-                id: `o${row}-${i}`,
-                position: { row, col: i + offset },
-                letter: '',
-                isPrePlaced: false,
-                isSelected: false,
-                isPlaced: false,
-            });
-        }
-    });
-    return cells;
+// Word order as light: selected tiles ramp from a cooled teal on the first
+// tap to full accent on the newest, so direction reads at a glance
+const RAMP = { valid: ['#1B8F84', '#3FD8C7'], invalid: ['#33435A', '#5A6C84'] } as const;
+const hexRgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function trailColor(i: number, n: number, invalid: boolean): string {
+    const [a, b] = RAMP[invalid ? 'invalid' : 'valid'].map(hexRgb);
+    const t = n <= 1 ? 1 : i / (n - 1);
+    return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`;
 }
-
-// Constant reference board for seed-pure letter generation (never mutated)
-const EMPTY_BOARD = buildBoard();
+const centreOf = (c: HexCell): [number, number] => [cellX(c) + TILE_W / 2, cellY(c) + TILE_H / 2];
 
 type Phase = 'storm' | 'over';
 type Mode = 'daily' | 'practice';
-type Action = 'word' | 'pass';
+type Modal = 'help' | 'results' | null;
 type PendingAnim = { keyframes: Keyframe[]; duration: number; delay: number; easing?: string };
 type ClearFx = { id: string; letter: string; left: number; top: number };
 type RingInfo = { pivotId: string; cells: HexCell[]; slots: Array<{ x: number; y: number }>; n: number };
 type Snapshot = {
     kind: 'spin' | 'turn';
-    letters: Array<[string, string]>;
+    letters: BoardLetters;
     phase: Phase;
     wavesDropped: number;
-    meter: number;
-    streamPos: number;
+    spins: number;
     score: number;
     words: string[];
     actionLog: Action[];
 };
-
-interface DailyResult {
-    score: number;
-    strip: Action[];
-    best: string;
-    wordCount: number;
-    waves: number;
-}
-
-interface OrbitStats {
-    streak: number;
-    lastDate: string;
-    games: number;
-    sweeps: number;
-    results: Record<string, DailyResult>;
-}
-
-const ACTION_EMOJI: Record<Action, string> = { word: '🟩', pass: '⏭' };
-
-const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+type SavedRun = Omit<Snapshot, 'kind'> & {
+    dateStr?: string;
+    seedStr: string;
+    undoStack: Snapshot[];
+    undosUsed: number;
 };
-const dayNumber = (date: string) =>
-    Math.max(1, Math.round((Date.parse(date) - Date.parse(DAILY_EPOCH)) / 86400000) + 1);
-const hashSeed = (s: string) => {
-    let h = 2166136261;
-    for (let i = 0; i < s.length; i++) {
-        h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
-    }
-    return h;
-};
-const yesterdayOf = (date: string) => {
-    const d = new Date(Date.parse(date) - 86400000);
-    return d.toISOString().slice(0, 10);
-};
-function loadStats(): OrbitStats {
+
+const runKey = (m: Mode) => (m === 'daily' ? LS_RUN_DAILY : LS_RUN_PRACTICE);
+
+function readRun(m: Mode): SavedRun | null {
     try {
-        const raw = localStorage.getItem(LS_STATS);
-        if (raw) return JSON.parse(raw) as OrbitStats;
-    } catch { /* fall through to fresh stats */ }
-    return { streak: 0, lastDate: '', games: 0, sweeps: 0, results: {} };
+        const raw = localStorage.getItem(runKey(m));
+        if (!raw) return null;
+        const run = JSON.parse(raw) as SavedRun;
+        return run && typeof run.seedStr === 'string' && Array.isArray(run.letters) ? run : null;
+    } catch {
+        return null;
+    }
 }
 
-// Dictionary words, keyed exactly: a selection is valid only if the tiles
-// spell the word in tap order
-let wordSetPromise: Promise<Set<string>> | null = null;
-function loadWordSet(): Promise<Set<string>> {
-    if (!wordSetPromise) {
-        wordSetPromise = fetch('/dictionary.txt')
-            .then(r => r.text())
-            .then(text => {
-                const set = new Set<string>();
-                for (const w of text.split('\n')) {
-                    if (w.length >= WORD_MIN && w.length <= WORD_MAX) set.add(w);
-                }
-                return set;
-            })
-            .catch(() => { wordSetPromise = null; return new Set<string>(); });
-    }
-    return wordSetPromise;
-}
+const storage = {
+    get(key: string) {
+        try { return localStorage.getItem(key); } catch { return null; }
+    },
+    set(key: string, value: string) {
+        try { localStorage.setItem(key, value); } catch { /* storage full/blocked */ }
+    },
+    remove(key: string) {
+        try { localStorage.removeItem(key); } catch { /* non-fatal */ }
+    },
+};
 
-// Flood placement: globally deepest reachable cell per tile
-function orbitFlood(
-    grid: HexCell[],
-    letters: string[],
-    rng?: SeededRNG
-): { newGrid: HexCell[]; paths: Record<string, string[]>; unplaced: string[] } {
-    const newGrid = grid.map(c => ({ ...c, placedThisTurn: false }));
-    const byPosLocal = new Map(newGrid.map(c => [`${c.position.row},${c.position.col}`, c]));
-    const paths: Record<string, string[]> = {};
-    const unplaced: string[] = [];
-    const rand = () => (rng ? rng.next() : Math.random());
-
-    for (const letter of letters) {
-        const parent = new Map<string, string | null>();
-        const queue: HexCell[] = [];
-        newGrid.forEach(c => {
-            if (c.position.row === 0 && !c.letter) {
-                parent.set(c.id, null);
-                queue.push(c);
-            }
-        });
-        while (queue.length) {
-            const cur = queue.shift()!;
-            for (const dc of [-0.5, 0.5]) {
-                const n = byPosLocal.get(`${cur.position.row + 1},${cur.position.col + dc}`);
-                if (n && !n.letter && !parent.has(n.id)) {
-                    parent.set(n.id, cur.id);
-                    queue.push(n);
-                }
-            }
-        }
-        if (parent.size === 0) {
-            unplaced.push(letter);
-            continue;
-        }
-        let best: HexCell[] = [];
-        for (const id of parent.keys()) {
-            const c = newGrid.find(x => x.id === id)!;
-            if (!best.length || c.position.row > best[0].position.row) best = [c];
-            else if (c.position.row === best[0].position.row) best.push(c);
-        }
-        const target = best[Math.floor(rand() * best.length)];
-        const path: string[] = [];
-        for (let id: string | null = target.id; id !== null; id = parent.get(id) ?? null) {
-            path.unshift(id);
-        }
-        target.letter = letter;
-        target.isPlaced = true;
-        target.placedThisTurn = true;
-        paths[target.id] = path;
-    }
-    return { newGrid, paths, unplaced };
+// Open straight into the daily until it's done; after that, wherever the
+// player last was
+function initialMode(): Mode {
+    if (!loadStats().results[todayStr()]) return 'daily';
+    return storage.get(LS_MODE) === 'practice' ? 'practice' : 'daily';
 }
 
 const OrbitGame = () => {
     const [mode, setMode] = useState<Mode>('daily');
-    const [dateStr] = useState(todayStr);
+    const [dateStr, setDateStr] = useState(todayStr);
+    const [seedStr, setSeedStr] = useState('');
     const [grid, setGrid] = useState<HexCell[]>([]);
     const [phase, setPhase] = useState<Phase>('storm');
     const [wavesDropped, setWavesDropped] = useState(0);
-    const [meter, setMeter] = useState(METER_START);
-    const [streamPos, setStreamPos] = useState(SEED_TILES);
-    const [streamEpoch, setStreamEpoch] = useState(0);
+    // Spins made this turn: the first is free, each extra adds a tile to this wave
+    const [spins, setSpins] = useState(0);
     const [score, setScore] = useState(0);
     const [words, setWords] = useState<string[]>([]);
     const [actionLog, setActionLog] = useState<Action[]>([]);
     const [selected, setSelected] = useState<string[]>([]);
-    const [match, setMatch] = useState<string | null>(null);
     const [armed, setArmed] = useState(false);
     const [statsOpen, setStatsOpen] = useState(false);
     const [previewSteps, setPreviewSteps] = useState(0);
     const [dragging, setDragging] = useState(false);
     const [clearFx, setClearFx] = useState<ClearFx[]>([]);
     const [scoreFx, setScoreFx] = useState<{ x: number; y: number; text: string; key: number } | null>(null);
+    const [praise, setPraise] = useState<{ text: string; key: number } | null>(null);
+    const [soundOn, setSoundOn] = useState(() => !sfx.muted);
     const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
     const [undosUsed, setUndosUsed] = useState(0);
     const [stats, setStats] = useState<OrbitStats>(loadStats);
-    const [showOnboarding, setShowOnboarding] = useState(
-        () => typeof window !== 'undefined' && !localStorage.getItem(LS_ONBOARDED)
-    );
+    const [dict, setDict] = useState<Set<string> | null>(peekDictionary);
+    const [modal, setModal] = useState<Modal>(() => (storage.get(LS_ONBOARDED) ? null : 'help'));
 
     const boardRef = useRef<HTMLDivElement>(null);
     const pendingAnimsRef = useRef<Map<string, PendingAnim>>(new Map());
-    const validateSeqRef = useRef(0);
     const fxTimersRef = useRef<number[]>([]);
+    const resultsTimerRef = useRef(0);
     const recordedRef = useRef(false);
+    const modeRef = useRef<Mode>('daily');
+    const initRef = useRef(false);
     const ringRef = useRef<RingInfo | null>(null);
     const previewRef = useRef(0);
     const suppressClickRef = useRef(false);
@@ -305,161 +236,12 @@ const OrbitGame = () => {
         });
     }, []);
 
-    // ---------- deterministic flood stream ----------
-    // Every flood letter and placement tie-break derives from the run seed
-    // and absolute stream position alone, so undoing a turn and replaying
-    // (even differently) can never reroll a wave
-    const seedStrRef = useRef('');
-    const streamRef = useRef<string[]>([]);
-    const streamRngRef = useRef<SeededRNG>(createSeededRNG(0));
-
-    const initStream = useCallback((seed: string) => {
-        seedStrRef.current = seed;
-        streamRef.current = [];
-        streamRngRef.current = createSeededRNG(hashSeed(`${seed}|letters`));
-    }, []);
-
-    const takeLetters = useCallback((start: number, count: number) => {
-        const stream = streamRef.current;
-        while (stream.length < start + count) {
-            stream.push(generateDropLettersSmart(1, EMPTY_BOARD, streamRngRef.current)[0]);
-        }
-        return stream.slice(start, start + count);
-    }, []);
-
-    const placementRng = useCallback((tag: string) =>
-        createSeededRNG(hashSeed(`${seedStrRef.current}|p|${tag}`)), []);
-
-    // ---------- init / restore / persistence ----------
-
-    const startFresh = useCallback((m: Mode) => {
-        initStream(m === 'daily' ? dateStr : `practice-${Math.floor(Math.random() * 1e9)}`);
-        const fresh = buildBoard();
-        const seedLetters = takeLetters(0, SEED_TILES);
-        const { newGrid } = orbitFlood(fresh, seedLetters, placementRng('seed'));
-        newGrid.forEach(c => { c.placedThisTurn = false; });
-        pendingAnimsRef.current.clear();
-        recordedRef.current = false;
-        setGrid(newGrid);
-        setMeter(METER_START);
-        setStreamPos(SEED_TILES);
-        setStreamEpoch(e => e + 1);
-        setPhase('storm');
-        setWavesDropped(0);
-        setScore(0);
-        setWords([]);
-        setActionLog([]);
-        setSelected([]);
-        setMatch(null);
-        setUndoStack([]);
-        setUndosUsed(0);
-    }, [dateStr, initStream, takeLetters, placementRng]);
-
-    const enterMode = useCallback((m: Mode) => {
-        setMode(m);
-        setSelected([]);
-        setMatch(null);
-        if (m === 'practice') {
-            startFresh('practice');
-            return;
-        }
-        const result = loadStats().results[dateStr];
-        if (result) {
-            recordedRef.current = true;
-            const fresh = buildBoard();
-            setGrid(fresh);
-            setPhase('over');
-            setScore(result.score);
-            setWords(result.best ? [result.best] : []);
-            setActionLog(result.strip);
-            setWavesDropped(result.waves ?? 0);
-            return;
-        }
-        try {
-            const raw = localStorage.getItem(LS_RUN);
-            if (raw) {
-                const run = JSON.parse(raw);
-                if (run.dateStr === dateStr && run.phase !== 'over') {
-                    const board = buildBoard();
-                    const letterById = new Map<string, string>(run.letters);
-                    board.forEach(c => {
-                        const l = letterById.get(c.id);
-                        if (l) { c.letter = l; c.isPlaced = true; }
-                    });
-                    initStream(run.seedStr || dateStr);
-                    recordedRef.current = false;
-                    pendingAnimsRef.current.clear();
-                    setGrid(board);
-                    setPhase(run.phase);
-                    setWavesDropped(run.wavesDropped);
-                    setMeter(run.meter ?? METER_START);
-                    setStreamPos(run.streamPos ?? SEED_TILES);
-                    setStreamEpoch(e => e + 1);
-                    setScore(run.score);
-                    setWords(run.words);
-                    setActionLog(run.actionLog);
-                    setUndoStack(run.undoStack || []);
-                    setUndosUsed(run.undosUsed || 0);
-                    return;
-                }
-            }
-        } catch { /* corrupted snapshot — start over */ }
-        startFresh('daily');
-    }, [dateStr, startFresh, initStream]);
-
-    useEffect(() => { enterMode('daily'); }, [enterMode]);
-
-    useEffect(() => {
-        if (mode !== 'daily' || grid.length === 0 || phase === 'over') return;
-        try {
-            localStorage.setItem(LS_RUN, JSON.stringify({
-                dateStr,
-                phase,
-                wavesDropped,
-                meter,
-                streamPos,
-                score,
-                words,
-                actionLog,
-                seedStr: seedStrRef.current,
-                letters: grid.filter(c => c.letter).map(c => [c.id, c.letter]),
-                undoStack,
-                undosUsed,
-            }));
-        } catch { /* storage full/blocked — run just won't resume */ }
-    }, [mode, dateStr, grid, phase, wavesDropped, meter, streamPos, score, words, actionLog, undoStack, undosUsed]);
-
-    useEffect(() => {
-        if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
-        recordedRef.current = true;
-        const best = words.reduce((a, b) => (b.length > a.length ? b : a), '');
-        setStats(prev => {
-            const next: OrbitStats = {
-                ...prev,
-                games: prev.games + 1,
-                streak: prev.lastDate === yesterdayOf(dateStr) ? prev.streak + 1
-                    : prev.lastDate === dateStr ? prev.streak
-                    : 1,
-                lastDate: dateStr,
-                results: {
-                    ...prev.results,
-                    [dateStr]: { score, strip: actionLog, best, wordCount: words.length, waves: wavesDropped },
-                },
-            };
-            try { localStorage.setItem(LS_STATS, JSON.stringify(next)); } catch { /* non-fatal */ }
-            return next;
-        });
-        try { localStorage.removeItem(LS_RUN); } catch { /* non-fatal */ }
-    }, [mode, phase, words, score, actionLog, dateStr, wavesDropped]);
-
-    // ---------- game flow ----------
-
     const queueFloodAnims = useCallback((newGrid: HexCell[], paths: Record<string, string[]>) => {
-        const placed = newGrid.filter(c => c.placedThisTurn);
-        const specs = placed.map(c => {
+        const byId = new Map(newGrid.map(c => [c.id, c]));
+        const specs = newGrid.filter(c => c.placedThisTurn).map(c => {
             const ids = paths[c.id]?.length ? paths[c.id] : [c.id];
             const pts = ids
-                .map(id => newGrid.find(x => x.id === id))
+                .map(id => byId.get(id))
                 .filter((x): x is HexCell => !!x)
                 .map(x => ({ x: cellX(x), y: cellY(x) }));
             pts.unshift({ x: pts[0].x, y: pts[0].y - TILE_H * 0.9 });
@@ -495,47 +277,197 @@ const OrbitGame = () => {
         });
     }, []);
 
-    // Word/pass ends the turn: the flood drops `waveCount` tiles, then the
-    // meter settles at `meterAfter` (never below the creeping floor)
-    const afterAction = useCallback((g: HexCell[], waveCount: number, meterAfter: number) => {
-        if (phase === 'storm') {
-            const letters = takeLetters(streamPos, waveCount);
-            const { newGrid, paths, unplaced } = orbitFlood(g, letters, placementRng(`p${streamPos}`));
-            queueFloodAnims(newGrid, paths);
-            const nextWaves = wavesDropped + 1;
-            setWavesDropped(nextWaves);
-            setStreamPos(streamPos + waveCount);
-            setMeter(Math.max(meterAfter, meterFloor(nextWaves)));
-            setGrid(newGrid);
-            if (unplaced.length > 0) {
+    const clearTransient = useCallback(() => {
+        window.clearTimeout(resultsTimerRef.current);
+        pendingAnimsRef.current.clear();
+        setSelected([]);
+        setClearFx([]);
+        setScoreFx(null);
+    }, []);
+
+    // ---------- init / restore / persistence ----------
+
+    const applyRun = useCallback((run: SavedRun) => {
+        recordedRef.current = false;
+        setSeedStr(run.seedStr);
+        setGrid(boardFromLetters(run.letters));
+        setPhase(run.phase);
+        setWavesDropped(run.wavesDropped);
+        setSpins(run.spins ?? 0);
+        setScore(run.score);
+        setWords(run.words);
+        setActionLog(run.actionLog);
+        setUndoStack(run.undoStack || []);
+        setUndosUsed(run.undosUsed || 0);
+    }, []);
+
+    const startFresh = useCallback((m: Mode) => {
+        clearTransient();
+        const seed = m === 'daily' ? dateStr : `practice-${Math.floor(Math.random() * 1e9)}`;
+        const { newGrid, paths } = orbitFlood(buildBoard(), waveTiles(seed, 'seed', SEED_TILES), placementRng(seed, 'seed'));
+        queueFloodAnims(newGrid, paths);
+        recordedRef.current = false;
+        setSeedStr(seed);
+        setGrid(newGrid);
+        setSpins(0);
+        setPhase('storm');
+        setWavesDropped(0);
+        setScore(0);
+        setWords([]);
+        setActionLog([]);
+        setUndoStack([]);
+        setUndosUsed(0);
+        setModal(md => (md === 'results' ? null : md));
+    }, [dateStr, clearTransient, queueFloodAnims]);
+
+    const enterMode = useCallback((m: Mode, showResults = false) => {
+        modeRef.current = m;
+        setMode(m);
+        storage.set(LS_MODE, m);
+        clearTransient();
+        if (m === 'daily') {
+            const result = loadStats().results[dateStr];
+            if (result) {
+                recordedRef.current = true;
+                setSeedStr(dateStr);
+                setGrid(result.board ? boardFromLetters(result.board) : buildBoard());
                 setPhase('over');
-                haptics.error();
+                setScore(result.score);
+                setWords(result.words ?? (result.best ? [result.best] : []));
+                setActionLog(result.strip);
+                setWavesDropped(result.waves ?? 0);
+                setSpins(0);
+                setUndoStack([]);
+                setUndosUsed(0);
+                if (showResults) setModal(md => md ?? 'results');
+                return;
             }
-        } else {
-            setGrid(g);
         }
-    }, [phase, wavesDropped, streamPos, takeLetters, placementRng, queueFloodAnims]);
+        const run = readRun(m);
+        if (run && run.phase !== 'over' && (m === 'practice' || run.dateStr === dateStr)) {
+            applyRun(run);
+            setModal(md => (md === 'results' ? null : md));
+            return;
+        }
+        startFresh(m);
+    }, [dateStr, clearTransient, applyRun, startFresh]);
+
+    // Mount opens the right mode; a new calendar day reloads the daily
+    useEffect(() => {
+        if (!initRef.current) {
+            initRef.current = true;
+            enterMode(initialMode(), true);
+        } else if (modeRef.current === 'daily') {
+            enterMode('daily');
+        }
+    }, [enterMode]);
+
+    useEffect(() => {
+        const check = () => {
+            const t = todayStr();
+            setDateStr(d => (d === t ? d : t));
+        };
+        const iv = window.setInterval(check, 30000);
+        document.addEventListener('visibilitychange', check);
+        window.addEventListener('focus', check);
+        return () => {
+            window.clearInterval(iv);
+            document.removeEventListener('visibilitychange', check);
+            window.removeEventListener('focus', check);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (grid.length === 0 || !seedStr) return;
+        if (phase === 'over') {
+            if (mode === 'practice') storage.remove(LS_RUN_PRACTICE);
+            return;
+        }
+        const run: SavedRun = {
+            dateStr: mode === 'daily' ? dateStr : undefined,
+            seedStr,
+            phase,
+            wavesDropped,
+            spins,
+            score,
+            words,
+            actionLog,
+            letters: boardLetters(grid),
+            undoStack,
+            undosUsed,
+        };
+        storage.set(runKey(mode), JSON.stringify(run));
+    }, [mode, dateStr, seedStr, grid, phase, wavesDropped, spins, score, words, actionLog, undoStack, undosUsed]);
+
+    useEffect(() => {
+        if (mode !== 'daily' || phase !== 'over' || recordedRef.current) return;
+        recordedRef.current = true;
+        const result: DailyResult = {
+            score,
+            strip: actionLog,
+            best: longestWord(words),
+            wordCount: words.length,
+            waves: wavesDropped,
+            board: boardLetters(grid),
+            words,
+        };
+        setStats(prev => {
+            const next: OrbitStats = { results: { ...prev.results, [dateStr]: result } };
+            saveStats(next);
+            return next;
+        });
+        storage.remove(LS_RUN_DAILY);
+    }, [mode, phase, words, score, actionLog, dateStr, wavesDropped, grid]);
+
+    // ---------- dictionary ----------
+
+    const ensureDict = useCallback(() => {
+        if (dict) return;
+        loadDictionary().then(setDict, () => {
+            toastService.error("Couldn't load the word list. Check your connection.");
+        });
+    }, [dict]);
+
+    useEffect(() => { ensureDict(); }, [ensureDict]);
+
+    // ---------- game flow ----------
+
+    // Word/pass ends the turn: the flood drops `count` tiles and the turn's
+    // spin tally resets
+    const afterAction = useCallback((g: HexCell[], count: number) => {
+        const tag = waveTag(wavesDropped);
+        const { newGrid, paths, unplaced } = orbitFlood(g, waveTiles(seedStr, tag, count), placementRng(seedStr, tag));
+        queueFloodAnims(newGrid, paths);
+        setWavesDropped(wavesDropped + 1);
+        setSpins(0);
+        setGrid(newGrid);
+        sfx.land(0.3);
+        if (unplaced.length > 0) {
+            setPhase('over');
+            haptics.error();
+            window.setTimeout(() => sfx.gameOver(), 450);
+            window.clearTimeout(resultsTimerRef.current);
+            resultsTimerRef.current = window.setTimeout(() => setModal(md => md ?? 'results'), RESULTS_DELAY_MS);
+        }
+    }, [wavesDropped, seedStr, queueFloodAnims]);
 
     // ---------- undo ----------
-
-    const takeSnapshot = useCallback((kind: 'spin' | 'turn'): Snapshot => ({
-        kind,
-        letters: grid.filter(c => c.letter).map(c => [c.id, c.letter] as [string, string]),
-        phase,
-        wavesDropped,
-        meter,
-        streamPos,
-        score,
-        words: [...words],
-        actionLog: [...actionLog],
-    }), [grid, phase, wavesDropped, meter, streamPos, score, words, actionLog]);
 
     const pushUndo = useCallback((kind: 'spin' | 'turn') => {
         // Snapshot eagerly: inside the updater it would run at render time,
         // after the action has already changed the state being captured
-        const snap = takeSnapshot(kind);
+        const snap: Snapshot = {
+            kind,
+            letters: boardLetters(grid),
+            phase,
+            wavesDropped,
+            spins,
+            score,
+            words: [...words],
+            actionLog: [...actionLog],
+        };
         setUndoStack(s => [...s.slice(-9), snap]);
-    }, [takeSnapshot]);
+    }, [grid, phase, wavesDropped, spins, score, words, actionLog]);
 
     const undosLeft = mode === 'daily' ? DAILY_UNDOS - undosUsed : Infinity;
     const topUndo = undoStack[undoStack.length - 1];
@@ -543,44 +475,68 @@ const OrbitGame = () => {
     const canUndo = phase !== 'over' && !!topUndo && (topUndo.kind === 'spin' || undosLeft > 0);
 
     const undo = useCallback(() => {
-        if (phase === 'over' || undoStack.length === 0) return;
+        if (!canUndo) return;
         const snap = undoStack[undoStack.length - 1];
-        if (snap.kind === 'turn' && mode === 'daily' && undosUsed >= DAILY_UNDOS) return;
-        const board = buildBoard();
-        const letterById = new Map(snap.letters);
-        board.forEach(c => {
-            const l = letterById.get(c.id);
-            if (l) { c.letter = l; c.isPlaced = true; }
-        });
-        pendingAnimsRef.current.clear();
-        setGrid(board);
+        clearTransient();
+        setGrid(boardFromLetters(snap.letters));
         setPhase(snap.phase);
         setWavesDropped(snap.wavesDropped);
-        setMeter(snap.meter);
-        setStreamPos(snap.streamPos);
+        setSpins(snap.spins);
         setScore(snap.score);
         setWords(snap.words);
         setActionLog(snap.actionLog);
         setUndoStack(s => s.slice(0, -1));
         if (snap.kind === 'turn') setUndosUsed(u => u + 1);
-        setSelected([]);
-        setMatch(null);
-        setClearFx([]);
-        setScoreFx(null);
         haptics.select();
-    }, [phase, undoStack, mode, undosUsed]);
+        sfx.undo();
+    }, [canUndo, undoStack, clearTransient]);
 
-    // ---------- ring arming ----------
+    // ---------- selection + validation ----------
 
     const selectedLetters = useMemo(
         () => selected.map(id => grid.find(c => c.id === id)?.letter || '').join(''),
         [selected, grid]
     );
 
+    // Validation is synchronous against the loaded word list, so the match
+    // can never lag behind (or outlive) the selection it describes
+    const match = useMemo(() => {
+        if (selectedLetters.length < WORD_MIN || !dict) return null;
+        const w = selectedLetters.toLowerCase();
+        return dict.has(w) ? w : null;
+    }, [selectedLetters, dict]);
+
+    useEffect(() => {
+        if (selectedLetters.length >= WORD_MIN) ensureDict();
+    }, [selectedLetters, ensureDict]);
+
+    const selectedCells = useMemo(
+        () => selected.map(id => grid.find(c => c.id === id)).filter((c): c is HexCell => !!c),
+        [selected, grid]
+    );
+    const wordScore = useMemo(
+        () => (match ? scoreWord(selectedCells.map(c => c.letter), selectedCells.filter(c => c.isGem).length) : null),
+        [match, selectedCells]
+    );
+    const currentWave = waveSize(wavesDropped, spins);
+
+    // A chime the moment a path becomes a real word
+    const prevMatchRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (match && match !== prevMatchRef.current) sfx.valid();
+        prevMatchRef.current = match;
+    }, [match]);
+
+    // ---------- ring arming ----------
+
+    // A tile arms as a pivot only when spinning its ring would actually move
+    // letters: an empty (or uniform) ring can't be spun into anything new
     const pivotCell = useMemo(() => {
         if (phase === 'over' || selected.length !== 1) return null;
-        const c = grid.find(x => x.id === selected[0]) || null;
-        return c && ringOf(c).length >= 3 ? c : null;
+        const c = grid.find(x => x.id === selected[0]);
+        if (!c) return null;
+        const ring = ringOf(c);
+        return ring.length >= 3 && new Set(ring.map(r => r.letter)).size > 1 ? c : null;
     }, [phase, selected, grid, ringOf]);
 
     useEffect(() => {
@@ -656,22 +612,36 @@ const OrbitGame = () => {
         setPreviewSteps(previewRef.current);
         applyPreviewTransforms(previewRef.current, true);
         haptics.select();
+        sfx.spinTick();
     }, [applyPreviewTransforms]);
 
     const resetPreview = useCallback(() => {
-        if (previewRef.current === 0) return;
         previewRef.current = 0;
         setPreviewSteps(0);
         clearPreviewTransforms(true);
     }, [clearPreviewTransforms]);
 
     // Orbits never end the turn, but each one permanently grows the flood
-    // by one tile per wave
+    // by one tile per wave. A spin that lands every letter back where it
+    // was (full turn, or a repeating ring) is cancelled for free
     const commitRotation = useCallback((k: number, fromP: number) => {
         const ring = ringRef.current;
         if (!ring || phase === 'over') return;
-        const kk = mod(k, ring.n);
-        if (kk === 0) return;
+        const newGrid = grid.map(c => ({ ...c }));
+        const byId = new Map(newGrid.map(c => [c.id, c]));
+        ring.cells.forEach((src, i) => {
+            const dst = byId.get(ring.cells[mod(i + k, ring.n)].id)!;
+            dst.letter = src.letter;
+            dst.isGem = src.isGem;
+            dst.isPlaced = src.isPlaced;
+        });
+        if (ring.cells.every(c => {
+            const d = byId.get(c.id)!;
+            return d.letter === c.letter && !!d.isGem === !!c.isGem;
+        })) {
+            resetPreview();
+            return;
+        }
         pushUndo('spin');
 
         const kf = Math.floor(fromP);
@@ -692,21 +662,14 @@ const OrbitGame = () => {
         });
         clearPreviewTransforms(false);
 
-        const newGrid = grid.map(c => ({ ...c }));
-        const find = (id: string) => newGrid.find(c => c.id === id)!;
-        ring.cells.forEach((src, i) => {
-            const dst = find(ring.cells[mod(i + k, ring.n)].id);
-            dst.letter = src.letter;
-            dst.isPlaced = src.isPlaced;
-        });
         previewRef.current = 0;
         setPreviewSteps(0);
         setSelected([]);
-        setMatch(null);
         haptics.success();
-        setMeter(m => m + 1);
+        sfx.spinLock(spins < FREE_SPINS);
+        setSpins(n => n + 1);
         setGrid(newGrid);
-    }, [phase, grid, queueMove, clearPreviewTransforms, pushUndo]);
+    }, [phase, grid, spins, queueMove, clearPreviewTransforms, resetPreview, pushUndo]);
 
     // ---------- drag (the dial) ----------
 
@@ -763,6 +726,7 @@ const OrbitGame = () => {
         if (detent !== d.lastDetent) {
             d.lastDetent = detent;
             haptics.select();
+            sfx.spinTick();
         }
         if (!d.raf) {
             d.raf = requestAnimationFrame(() => {
@@ -786,97 +750,85 @@ const OrbitGame = () => {
         const k = Math.round(p);
         const ring = ringRef.current;
         if (!ring || mod(k, ring.n) === 0) {
-            previewRef.current = 0;
-            setPreviewSteps(0);
-            clearPreviewTransforms(true);
+            resetPreview();
             return;
         }
         commitRotation(k, p);
-    }, [clearPreviewTransforms, commitRotation]);
-
-    // ---------- wheel + keyboard ----------
-
-    useEffect(() => {
-        const el = boardRef.current;
-        if (!el) return;
-        let acc = 0;
-        const onWheel = (e: WheelEvent) => {
-            if (!ringRef.current || phase === 'over' || dragRef.current?.active) return;
-            e.preventDefault();
-            acc += e.deltaY;
-            while (acc >= WHEEL_PER_STEP) { acc -= WHEEL_PER_STEP; bumpPreview(1); }
-            while (acc <= -WHEEL_PER_STEP) { acc += WHEEL_PER_STEP; bumpPreview(-1); }
-        };
-        el.addEventListener('wheel', onWheel, { passive: false });
-        return () => el.removeEventListener('wheel', onWheel);
-    }, [phase, bumpPreview]);
-
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (!ringRef.current || phase === 'over') return;
-            if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') { e.preventDefault(); bumpPreview(-1); }
-            else if (e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') { e.preventDefault(); bumpPreview(1); }
-            else if (e.key === 'Enter' && previewRef.current !== 0) { e.preventDefault(); commitRotation(previewRef.current, previewRef.current); }
-            else if (e.key === 'Escape') { resetPreview(); }
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [phase, bumpPreview, commitRotation, resetPreview]);
+    }, [resetPreview, commitRotation]);
 
     // ---------- player actions ----------
 
-    const submit = useCallback(() => {
-        if (phase === 'over' || !match || selected.length < WORD_MIN) return;
-        pushUndo('turn');
-        // Out-spell the flood: a word at least as long as the wave cools it
-        // by one, shrinking the very wave about to drop
-        const cooled = selected.length >= meter
-            ? Math.max(meterFloor(wavesDropped), meter - 1)
-            : meter;
-        const clearedCells = selected
-            .map(id => grid.find(c => c.id === id))
-            .filter((c): c is HexCell => !!c);
+    const celebrate = useCallback((len: number, gems: number, points: number) => {
+        const text = praiseFor(len, gems, points);
+        if (text) {
+            setPraise({ text, key: Date.now() });
+            const t = window.setTimeout(() => setPraise(null), 1300);
+            fxTimersRef.current.push(t);
+        }
+        if (!reducedMotion && (len >= 7 || points >= 60)) {
+            import('canvas-confetti').then(({ default: confetti }) => {
+                const r = boardRef.current?.getBoundingClientRect();
+                const origin = r
+                    ? { x: (r.left + r.width / 2) / window.innerWidth, y: (r.top + r.height / 3) / window.innerHeight }
+                    : { x: 0.5, y: 0.4 };
+                confetti({
+                    particleCount: len >= 8 ? 140 : 80,
+                    spread: 75,
+                    origin,
+                    colors: ['#3FD8C7', '#F2C14E', '#F2EFE8', '#6FE8DA'],
+                    disableForReducedMotion: true,
+                });
+            }).catch(() => { /* confetti is decoration only */ });
+        }
+    }, [reducedMotion]);
 
-        const fx = clearedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
-        const cx = fx.reduce((s, f) => s + f.left, 0) / fx.length + TILE_W / 2;
+    const submit = useCallback(() => {
+        if (phase !== 'storm' || !match || !wordScore || selected.length < WORD_MIN) return;
+        pushUndo('turn');
+        // Out-spell the flood: a word at least as long as the wave shrinks
+        // the very wave about to drop
+        const incoming = outSpelled(selected.length, currentWave) ? currentWave - 1 : currentWave;
+        const points = wordScore.total;
+
+        const fx = selectedCells.map(c => ({ id: c.id, letter: c.letter, left: cellX(c), top: cellY(c) }));
+        const cx = fx.reduce((sum, f) => sum + f.left, 0) / fx.length + TILE_W / 2;
         const cy = Math.min(...fx.map(f => f.top));
         setClearFx(fx);
-        setScoreFx({
-            x: cx,
-            y: cy,
-            text: `+${wordPoints(selected.length)}${cooled < meter ? ' · 🌊↓' : ''}`,
-            key: Date.now(),
-        });
+        setScoreFx({ x: cx, y: cy, text: `+${points}${incoming < currentWave ? ' · wave −1' : ''}`, key: Date.now() });
         const t1 = window.setTimeout(() => setClearFx([]), 400);
-        const t2 = window.setTimeout(() => setScoreFx(null), 750);
+        const t2 = window.setTimeout(() => setScoreFx(null), 900);
         fxTimersRef.current.push(t1, t2);
 
-        const { newGrid, moveSources } = clearTilesAndApplyGravity(grid, selected);
+        const { newGrid, moveSources } = clearAndSettle(grid, selected);
         moveSources.forEach((srcId, dstId) => {
             const src = grid.find(c => c.id === srcId);
             const dst = newGrid.find(c => c.id === dstId);
             if (src && dst) queueMove(dstId, cellX(src) - cellX(dst), cellY(src) - cellY(dst));
         });
-        setScore(s => s + wordPoints(selected.length));
+        setScore(sc => sc + points);
         setWords(w => [...w, match]);
         setSelected([]);
-        setMatch(null);
-        if (phase === 'storm') setActionLog(log => [...log, 'word']);
+        setActionLog(log => [...log, selected.length]);
         haptics.success();
-        afterAction(newGrid, cooled, cooled);
-    }, [phase, match, selected, grid, meter, wavesDropped, queueMove, afterAction, pushUndo]);
+        sfx.word(selected.length, wordScore.gems);
+        celebrate(selected.length, wordScore.gems, points);
+        afterAction(newGrid, incoming);
+    }, [phase, match, wordScore, selected, selectedCells, grid, currentWave, queueMove, afterAction, pushUndo, celebrate]);
 
-    // Passing drops the current wave AND permanently grows the flood by one
+    // Passing clears nothing and takes the whole wave
     const endTurn = useCallback(() => {
         if (phase !== 'storm') return;
         pushUndo('turn');
         setSelected([]);
-        setMatch(null);
         setActionLog(log => [...log, 'pass']);
-        afterAction(grid.map(c => ({ ...c })), meter, meter + 1);
-    }, [phase, grid, meter, afterAction, pushUndo]);
+        sfx.pass();
+        afterAction(grid.map(c => ({ ...c })), currentWave);
+    }, [phase, grid, currentWave, afterAction, pushUndo]);
 
-    useEffect(() => () => { fxTimersRef.current.forEach(t => window.clearTimeout(t)); }, []);
+    useEffect(() => () => {
+        fxTimersRef.current.forEach(t => window.clearTimeout(t));
+        window.clearTimeout(resultsTimerRef.current);
+    }, []);
 
     // ---------- cluster selection ----------
 
@@ -906,31 +858,69 @@ const OrbitGame = () => {
                     : idx === selected.length - 1 ? selected.slice(0, -1)
                     : selected.slice(0, idx + 1)
             );
+            sfx.deselect();
             return;
         }
-        if (selected.length === 0) {
-            setSelected([cell.id]);
-            return;
-        }
-        // Path rule: each tile must touch the LAST selected tile
-        const last = grid.find(c => c.id === selected[selected.length - 1]);
-        if (last && areCellsAdjacent(cell, last)) {
+        // Path rule: each tile touches the last one
+        if (canExtend(selectedCells, cell)) {
             setSelected([...selected, cell.id]);
+            sfx.select(selected.length);
         } else {
             setSelected([cell.id]);
+            sfx.select(0);
         }
-    }, [phase, selected, grid, commitRotation, resetPreview]);
+    }, [phase, selected, selectedCells, commitRotation, resetPreview]);
 
-    // Path validation: the tap-order letters must spell a dictionary word
+    // ---------- wheel + keyboard ----------
+
     useEffect(() => {
-        if (selectedLetters.length < WORD_MIN) { setMatch(null); return; }
-        const seq = ++validateSeqRef.current;
-        loadWordSet().then(words => {
-            if (validateSeqRef.current !== seq) return;
-            const w = selectedLetters.toLowerCase();
-            setMatch(words.has(w) ? w : null);
-        });
-    }, [selectedLetters]);
+        const el = boardRef.current;
+        if (!el) return;
+        let acc = 0;
+        const onWheel = (e: WheelEvent) => {
+            if (!ringRef.current || phase === 'over' || dragRef.current?.active) return;
+            e.preventDefault();
+            acc += e.deltaY;
+            while (acc >= WHEEL_PER_STEP) { acc -= WHEEL_PER_STEP; bumpPreview(1); }
+            while (acc <= -WHEEL_PER_STEP) { acc += WHEEL_PER_STEP; bumpPreview(-1); }
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, [phase, bumpPreview]);
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (modal) return;
+            const t = e.target as HTMLElement | null;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
+                e.preventDefault();
+                undo();
+                return;
+            }
+            if (e.metaKey || e.ctrlKey || e.altKey || phase === 'over') return;
+            if (ringRef.current) {
+                if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') { e.preventDefault(); bumpPreview(-1); return; }
+                if (e.key === 'e' || e.key === 'E' || e.key === 'ArrowRight') { e.preventDefault(); bumpPreview(1); return; }
+                if (previewRef.current !== 0) {
+                    if (e.key === 'Enter') { e.preventDefault(); commitRotation(previewRef.current, previewRef.current); return; }
+                    if (e.key === 'Escape') { resetPreview(); return; }
+                }
+            }
+            if (e.key === 'Enter' && match) {
+                // preventDefault also stops a focused button from firing too
+                e.preventDefault();
+                submit();
+            } else if (e.key === 'Backspace' && selected.length) {
+                e.preventDefault();
+                setSelected(s => s.slice(0, -1));
+            } else if (e.key === 'Escape') {
+                setSelected([]);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [modal, phase, match, selected.length, undo, submit, bumpPreview, commitRotation, resetPreview]);
 
     // ---------- animation ----------
 
@@ -939,8 +929,7 @@ const OrbitGame = () => {
         if (m.size === 0) return;
         if (!reducedMotion && boardRef.current) {
             m.forEach((a, id) => {
-                const el = boardRef.current!.querySelector<HTMLElement>(`[data-ocell="${CSS.escape(id)}"] .orbit-tile`);
-                el?.animate(a.keyframes, {
+                tileEl(id)?.animate(a.keyframes, {
                     duration: a.duration,
                     delay: a.delay,
                     easing: a.easing ?? 'linear',
@@ -949,16 +938,21 @@ const OrbitGame = () => {
             });
         }
         m.clear();
-    }, [grid, reducedMotion]);
-
+    }, [grid, reducedMotion, tileEl]);
 
     // ---------- responsive scale ----------
 
+    // Fit the board to both axes: width after the sidebar/gutters, height
+    // after the header, mobile HUD rows and the control block
     const [scale, setScale] = useState(1);
     useEffect(() => {
         const update = () => {
-            const reserved = window.innerWidth >= 768 ? 320 : 28;
-            setScale(Math.min(1, (window.innerWidth - reserved) / BOARD_W));
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const desktop = w >= 768;
+            const availW = w - (desktop ? 288 + 48 : 24);
+            const availH = h - 68 - (desktop ? 0 : 60 + 48) - 150;
+            setScale(Math.max(0.55, Math.min(desktop ? 1.3 : 1.1, availW / BOARD_W, availH / BOARD_H)));
         };
         update();
         window.addEventListener('resize', update);
@@ -967,29 +961,40 @@ const OrbitGame = () => {
 
     // ---------- derived ----------
 
-    // The NEXT strip is a live window into the seed-pure stream: exactly
-    // `meter` letters — spins visibly grow it, words shrink it
+    // The NEXT strip is exactly the wave about to drop: this wave's own
+    // stream, grown by extra spins this turn
     const nextWindow = useMemo(
-        () => (phase === 'storm' ? takeLetters(streamPos, meter) : []),
-        // streamEpoch invalidates the window when a new run resets the stream
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [phase, streamPos, meter, streamEpoch, takeLetters]
+        () => (phase === 'storm' && seedStr ? waveTiles(seedStr, waveTag(wavesDropped), currentWave) : []),
+        [phase, seedStr, wavesDropped, currentWave]
     );
 
-    const bestWord = useMemo(
-        () => words.reduce((a, b) => (b.length > a.length ? b : a), ''),
-        [words]
+    // Danger: the incoming wave won't fit the board as it stands
+    const overflow = useMemo(
+        () => (phase === 'storm' && grid.length ? overflowCount(grid, currentWave) : 0),
+        [phase, grid, currentWave]
     );
-    const bestDaily = useMemo(
-        () => Object.values(stats.results).reduce((m, r) => Math.max(m, r.score), 0),
-        [stats]
-    );
+    const wasDangerRef = useRef(false);
+    useEffect(() => {
+        if (overflow > 0 && !wasDangerRef.current) sfx.danger();
+        wasDangerRef.current = overflow > 0;
+    }, [overflow]);
+
+    const bestWord = useMemo(() => longestWord(words), [words]);
+    const summary = useMemo(() => summarizeStats(stats, dateStr), [stats, dateStr]);
     const dailyNo = dayNumber(dateStr);
+    const dailyResult = mode === 'daily' ? stats.results[dateStr] : undefined;
+    const wordCount = dailyResult?.wordCount ?? words.length;
 
     const share = useCallback(() => {
-        const title = mode === 'daily' ? `WAXLE ORBIT #${dailyNo}` : 'WAXLE ORBIT (practice)';
-        const strip = actionLog.map(a => ACTION_EMOJI[a]).join('');
-        const text = `${title} — ${score} pts · ${wavesDropped} waves 🌊\n${strip}${bestWord ? `\nBest: ${bestWord.toUpperCase()}` : ''}\nhttps://waxle.netlify.app/orbit`;
+        const title = mode === 'daily' ? `WAXLE Orbit #${dailyNo}` : 'WAXLE Orbit (practice)';
+        const best = dailyResult?.best ?? bestWord;
+        const text = [
+            `${title} · ${score} pts`,
+            `🌊 ${wavesDropped} waves · ${wordCount} ${wordCount === 1 ? 'word' : 'words'}`,
+            actionStrip(actionLog),
+            best ? `Best: ${best.toUpperCase()}` : '',
+            'https://waxle.netlify.app',
+        ].filter(Boolean).join('\n');
         const copy = () => navigator.clipboard.writeText(text).then(
             () => toastService.success('Result copied!'),
             () => toastService.error('Could not copy')
@@ -1001,154 +1006,289 @@ const OrbitGame = () => {
         } else {
             copy();
         }
-    }, [mode, dailyNo, actionLog, score, wavesDropped, bestWord]);
+    }, [mode, dailyNo, dailyResult, bestWord, score, wavesDropped, wordCount, actionLog]);
 
-    const dismissOnboarding = useCallback(() => {
-        setShowOnboarding(false);
-        try { localStorage.setItem(LS_ONBOARDED, '1'); } catch { /* non-fatal */ }
-    }, []);
+    const submitScore = useCallback(async (name: string) => {
+        const result = stats.results[dateStr];
+        if (!result) throw new Error('No result to submit');
+        const res = await fetch('/api/submit-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                game: 'orbit',
+                playerName: name,
+                score: result.score,
+                round: Math.max(1, result.waves),
+                totalWords: result.wordCount,
+                longestWord: result.best,
+                timeSpent: 0,
+                date: dateStr,
+            }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) throw new Error(data?.error || 'Submit failed');
+        storage.set(LS_NAME, name);
+        const submitted = { name, rank: data.dailyRank?.rank, total: data.dailyRank?.totalPlayers };
+        setStats(prev => {
+            const current = prev.results[dateStr];
+            if (!current) return prev;
+            const next: OrbitStats = { results: { ...prev.results, [dateStr]: { ...current, submitted } } };
+            saveStats(next);
+            return next;
+        });
+    }, [stats, dateStr]);
 
-    const wordState = selectedLetters.length >= WORD_MIN ? (match ? 'valid' : 'invalid') : 'neutral';
-    const dailyResult = stats.results[dateStr];
+    const closeModal = useCallback(() => {
+        if (modal === 'help') storage.set(LS_ONBOARDED, '1');
+        setModal(null);
+    }, [modal]);
+
+    const wordState = selectedLetters.length >= WORD_MIN && dict ? (match ? 'valid' : 'invalid') : 'neutral';
     const quietRing = previewSteps !== 0 || dragging;
+    const cools = !!match && outSpelled(selected.length, currentWave);
+    const matchPoints = wordScore?.total ?? 0;
+    const nextSpinCosts = spins >= FREE_SPINS;
+
+    const toggleSound = () => {
+        const next = !soundOn;
+        sfx.setMuted(!next);
+        setSoundOn(next);
+        if (next) sfx.select(2);
+    };
 
     const modePills = (
-        <div className="flex gap-1.5" role="tablist">
+        <div className="flex gap-1.5 items-center" role="tablist" aria-label="Game mode">
+            {(['daily', 'practice'] as const).map(m => (
+                <button
+                    key={m}
+                    role="tab"
+                    aria-selected={mode === m}
+                    onClick={() => { if (mode !== m) enterMode(m, true); }}
+                    className={cn(
+                        'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
+                        mode === m ? 'bg-amber text-bg-primary' : 'bg-secondary/25 text-text-secondary hover:text-text-primary'
+                    )}
+                >
+                    {m === 'daily' ? `Daily #${dailyNo}` : 'Practice'}
+                </button>
+            ))}
+            {mode === 'practice' && (
+                <button
+                    onClick={() => startFresh('practice')}
+                    className="p-1 rounded-full text-text-secondary hover:text-text-primary hover:bg-secondary/25 transition-colors"
+                    aria-label="New practice game"
+                    title="New practice game"
+                >
+                    <RotateCcw size={14} />
+                </button>
+            )}
+        </div>
+    );
+
+    const iconButtons = (
+        <div className="flex gap-1">
             <button
-                role="tab"
-                aria-selected={mode === 'daily'}
-                onClick={() => enterMode('daily')}
-                className={cn(
-                    'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
-                    mode === 'daily' ? 'bg-amber text-white' : 'bg-secondary/15 text-text-secondary'
-                )}
+                onClick={toggleSound}
+                className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-secondary/25 transition-colors"
+                aria-label={soundOn ? 'Mute sound' : 'Turn sound on'}
+                aria-pressed={soundOn}
             >
-                Daily #{dailyNo}
+                {soundOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
             </button>
             <button
-                role="tab"
-                aria-selected={mode === 'practice'}
-                onClick={() => enterMode('practice')}
-                className={cn(
-                    'px-3 py-1 rounded-full text-xs font-semibold transition-colors',
-                    mode === 'practice' ? 'bg-amber text-white' : 'bg-secondary/15 text-text-secondary'
-                )}
+                onClick={() => setModal('help')}
+                className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-secondary/25 transition-colors"
+                aria-label="How to play"
             >
-                Practice
+                <CircleHelp size={18} />
+            </button>
+            <button
+                onClick={() => setModal('results')}
+                className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-secondary/25 transition-colors"
+                aria-label="Stats"
+            >
+                <BarChart3 size={18} />
             </button>
         </div>
     );
 
     const nextChips = (size: string) => (
         <div className="flex flex-wrap justify-center gap-1">
-            {nextWindow.map((letter, idx) => (
+            {nextWindow.map((tile, idx) => (
                 <div
-                    key={`${streamPos}-${idx}`}
+                    key={`${wavesDropped}-${idx}`}
                     className={cn(
                         size,
-                        'bg-bg-secondary border border-secondary/30 rounded-lg flex items-center justify-center font-semibold text-text-primary anim-chip-in'
+                        'border rounded-md flex items-center justify-center font-semibold anim-chip-in',
+                        tile.gem
+                            ? 'bg-gold border-gold text-bg-primary'
+                            : 'bg-bg-secondary border-secondary/40 text-text-primary',
+                        // Tiles bought with extra spins this turn
+                        idx >= currentWave - Math.max(0, spins - FREE_SPINS) && 'ring-1 ring-red-400/70'
                     )}
                     style={{ animationDelay: `${idx * 50}ms` }}
+                    title={tile.gem ? 'Gold tile: doubles any word that uses it' : undefined}
                 >
-                    {letter}
+                    {tile.letter}
                 </div>
             ))}
         </div>
     );
 
+    const wordList = (limit: string) => words.length > 0 ? (
+        <div className={cn('flex flex-wrap gap-1.5 overflow-y-auto', limit)}>
+            {words.map((w, i) => (
+                <span key={i} className="text-xs font-mono text-text-secondary bg-success/10 px-2 py-0.5 rounded-lg">
+                    {w.toUpperCase()}
+                </span>
+            ))}
+        </div>
+    ) : (
+        <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
+    );
+
+    // Word order lives on the tiles: each tile keys into the next (the seam
+    // between them bends into a chevron along the word) and the teal ramp
+    // runs from the first tap to the newest
+    const trail = useMemo(() => {
+        const byId = new Map(grid.map(c => [c.id, c]));
+        const keyed = keyedTiles(selected, id => centreOf(byId.get(id)!));
+        return { n: selected.length, keyed };
+    }, [selected, grid]);
+    const invalidWord = wordState === 'invalid';
+
+    let status: React.ReactNode;
+    if (previewSteps !== 0) {
+        status = (
+            <span className="text-xs font-medium text-amber text-center">
+                Tap the centre tile to lock it in{nextSpinCosts ? ' (+1 tile this wave)' : ' (free spin)'}
+                <span className="hidden md:inline"> · Enter to lock, Esc to cancel</span>
+            </span>
+        );
+    } else if (selectedLetters) {
+        status = (
+            <span className={cn(
+                'px-4 py-1 rounded-xl font-bold text-lg tracking-[0.12em] flex items-center gap-2',
+                wordState === 'valid' && 'text-amber bg-amber/10',
+                wordState === 'invalid' && 'text-slate-300 bg-secondary/25',
+                wordState === 'neutral' && 'text-text-primary bg-secondary/20'
+            )}>
+                {selectedLetters}
+                {wordScore ? (
+                    <span className="text-sm font-semibold tracking-normal flex items-baseline gap-1.5">
+                        +{wordScore.total}
+                        <span className="text-[11px] text-text-secondary font-medium">
+                            {wordScore.letters}
+                            {wordScore.lengthMult > 1 && ` ×${wordScore.lengthMult}`}
+                            {wordScore.gems > 0 && <span className="text-gold"> ×{2 ** wordScore.gems}</span>}
+                            {cools && ' · wave −1'}
+                        </span>
+                    </span>
+                ) : invalidWord ? (
+                    <span className="text-xs font-semibold tracking-normal text-red-300">not a word</span>
+                ) : null}
+            </span>
+        );
+    } else if (phase === 'over') {
+        status = <span className="text-xs text-text-muted">The board is full. Tap Results to see how you did.</span>;
+    } else if (overflow > 0) {
+        status = (
+            <span className="text-xs font-semibold text-red-400 text-center flex items-center gap-1.5 orbit-danger-text">
+                <AlertTriangle size={14} />
+                {overflow === 1 ? '1 tile' : `${overflow} tiles`} won't fit. Clear space or the run ends!
+            </span>
+        );
+    } else {
+        status = (
+            <span className="text-xs text-text-muted italic text-center">
+                Tap touching tiles in order · drag around a tile to spin
+            </span>
+        );
+    }
+    const pivotHint = armed && pivotCell && previewSteps === 0 && !dragging;
+
     return (
         <div className="flex-1 flex flex-col md:flex-row bg-bg-primary select-none">
-            {/* Mobile top bar (classic flush header, tap to expand stats) */}
+            {/* Mobile top bar (tap to expand the word list) */}
             <div className="md:hidden sticky top-0 z-30 w-full">
-                <div className={cn(
-                    'relative bg-bg-primary border-b border-secondary/20',
-                    'px-4 shadow-lg shadow-secondary/10 cursor-pointer',
-                    'active:bg-bg-secondary/50',
-                    'h-[60px] flex items-center justify-between'
-                )} onClick={() => setStatsOpen(o => !o)}>
+                <div
+                    role="button"
+                    className={cn(
+                        'relative w-full bg-bg-primary border-b border-secondary/30 cursor-pointer',
+                        'px-4 shadow-lg shadow-black/20',
+                        'active:bg-bg-secondary/50',
+                        'h-[60px] flex items-center justify-between'
+                    )}
+                    onClick={() => setStatsOpen(o => !o)}
+                    aria-expanded={statsOpen}
+                    aria-label={`${score} points, wave ${wavesDropped}. Show words found`}
+                >
                     <div className="flex items-baseline gap-1">
                         <span className="text-xl font-bold text-text-primary tabular-nums">{score}</span>
                         <span className="text-xs text-text-secondary">pts</span>
                     </div>
                     {phase === 'storm' && nextWindow.length > 0 && (
-                        <div className="absolute left-1/2 -translate-x-1/2 bg-amber/10 border border-amber/20 rounded-xl px-2 py-1 max-w-[58%]">
+                        <div className={cn(
+                            'absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 border rounded-xl px-2 py-1 max-w-[62%]',
+                            overflow > 0 ? 'bg-red-500/15 border-red-400/60 orbit-danger' : 'bg-amber/10 border-amber/25'
+                        )}>
+                            <span className={cn('text-[9px] font-semibold uppercase tracking-wider', overflow > 0 ? 'text-red-400' : 'text-amber')}>Next</span>
                             {nextChips(nextWindow.length >= 7 ? 'w-4 h-4 text-[10px]' : nextWindow.length >= 6 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
                         </div>
                     )}
                     <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1 text-text-secondary" aria-label={`Wave ${wavesDropped}`}>
+                        <span className="flex items-center gap-1 text-text-secondary">
                             <Hourglass size={14} className="text-amber" />
                             <span className="text-sm font-semibold tabular-nums">{wavesDropped}</span>
                         </span>
                         <div className={cn(
-                            'p-1 rounded-lg bg-secondary/10 transition-transform duration-200',
+                            'p-1 rounded-lg bg-secondary/20 transition-transform duration-200',
                             statsOpen && 'rotate-180'
                         )}>
                             <ChevronDown size={16} className="text-text-secondary" />
                         </div>
                     </div>
                 </div>
-                {/* Expandable stats panel: clipped compositor slide (classic pattern) */}
+                {/* Expandable word list: clipped compositor slide */}
                 <div className="absolute left-0 right-0 top-full overflow-hidden pointer-events-none">
                     <div className={cn(
-                        'mobile-stats-panel bg-bg-primary border-b border-secondary/20',
-                        'shadow-xl shadow-secondary/20',
+                        'mobile-stats-panel bg-bg-primary border-b border-secondary/30',
+                        'shadow-xl shadow-black/30',
                         statsOpen && 'show pointer-events-auto'
                     )}>
-                        <div className="p-4 space-y-4">
-                            <div className="flex justify-center">{modePills}</div>
-                            <div className="bg-success/10 border border-success/20 rounded-2xl p-4">
+                        <div className="p-4">
+                            <div className="bg-success/10 border border-success/25 rounded-2xl p-4">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-semibold text-text-primary">Words Found</h3>
-                                    <span className="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">
+                                    <h3 className="text-sm font-semibold text-text-primary">Words found</h3>
+                                    <span className="bg-success/20 text-text-primary px-2 py-0.5 rounded-full text-xs font-medium">
                                         {words.length}
                                     </span>
                                 </div>
-                                {words.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                                        {words.slice(-15).map((w, i) => (
-                                            <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
-                                                {w.toUpperCase()}
-                                            </span>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-xs text-text-muted italic text-center py-2">No words found yet</div>
-                                )}
+                                {wordList('max-h-28')}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Desktop sidebar (classic game sidebar) */}
-            <div className={cn(
+            {/* Desktop sidebar */}
+            <aside className={cn(
                 'hidden md:flex w-72 shrink-0 flex-col',
-                'bg-bg-primary border-r border-secondary/20',
-                'shadow-2xl shadow-secondary/20'
+                'bg-bg-primary border-r border-secondary/30',
+                'shadow-2xl shadow-black/20'
             )}>
-                <div className="flex flex-col p-6 overflow-y-auto space-y-5">
-                    {/* Primary score display */}
+                <div className="flex flex-col p-6 overflow-y-auto space-y-5 flex-1">
                     <div className={cn(
-                        'bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/20',
-                        'rounded-2xl p-6 text-center shadow-lg shadow-amber/10'
+                        'bg-gradient-to-br from-amber/10 to-amber/5 border border-amber/25',
+                        'rounded-2xl p-6 text-center shadow-lg shadow-amber/5'
                     )}>
                         <div className="text-4xl font-bold text-amber mb-1">
-                            <OptimizedCounter
-                                value={score}
-                                duration={0.6}
-                                animationType="ticker"
-                                className="tabular-nums"
-                                delay={0}
-                            />
+                            <OptimizedCounter value={score} duration={0.6} animationType="ticker" className="tabular-nums" delay={0} />
                         </div>
-                        <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">
-                            Score
-                        </div>
+                        <div className="text-text-secondary text-sm font-medium uppercase tracking-wide">Score</div>
                     </div>
 
-                    {/* Wave counter */}
-                    <div className="bg-bg-secondary border border-secondary/20 rounded-xl p-3 text-center">
+                    <div className="bg-bg-secondary border border-secondary/30 rounded-xl p-3 text-center">
                         <div className="text-xl font-semibold text-text-primary flex items-center justify-center gap-1.5">
                             <Hourglass size={16} className="text-amber" />
                             <span className="tabular-nums">{wavesDropped}</span>
@@ -1156,54 +1296,30 @@ const OrbitGame = () => {
                         <div className="text-xs text-text-secondary font-medium uppercase tracking-wide mt-1">Wave</div>
                     </div>
 
-                    {/* Mode */}
                     <div className="flex justify-center">{modePills}</div>
 
-                    {/* Next drop: grows and shrinks with the meter */}
                     {phase === 'storm' && nextWindow.length > 0 && (
                         <div className="relative">
-                            <div className="bg-amber/10 border border-amber/20 rounded-xl p-3">
-                                <div className="flex items-center justify-center flex-wrap gap-y-1">
-                                    {nextChips(nextWindow.length >= 8 ? 'w-5 h-5 text-[11px]' : 'w-6 h-6 text-xs')}
-                                </div>
+                            <div className={cn(
+                                'border rounded-xl p-3 pt-4',
+                                overflow > 0 ? 'bg-red-500/15 border-red-400/60 orbit-danger' : 'bg-amber/10 border-amber/25'
+                            )}>
+                                {nextChips(nextWindow.length >= 8 ? 'w-5 h-5 text-[11px]' : 'w-7 h-7 text-sm')}
+                                <p className="text-[11px] text-text-secondary text-center mt-2">
+                                    {spins === 0 ? 'Free spin available' : spins > FREE_SPINS ? `+${spins - FREE_SPINS} from spins this turn` : 'Free spin used · more spins add tiles'}
+                                </p>
                             </div>
                             <div className="absolute -top-3 left-4">
-                                <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">Next</span>
+                                <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
+                                    Next · {nextWindow.length} tiles
+                                </span>
                             </div>
                         </div>
                     )}
 
-                    {/* Current cluster */}
                     <div className="relative">
-                        <div className={cn(
-                            'text-lg font-mono font-bold text-center rounded-xl p-3 transition-colors duration-200',
-                            wordState === 'invalid'
-                                ? 'text-red-500 bg-red-500/10 border border-red-500/30'
-                                : 'text-amber bg-amber/10 border border-amber/30'
-                        )}>
-                            {selectedLetters
-                                ? <>{selectedLetters}{match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter && meter > meterFloor(wavesDropped) ? ' 🌊↓' : ''}</span>}</>
-                                : <span className="text-text-muted text-sm font-sans font-normal italic">no tiles selected</span>}
-                        </div>
-                        <div className="absolute -top-3 left-4">
-                            <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">Current</span>
-                        </div>
-                    </div>
-
-                    {/* Found words */}
-                    <div className="relative">
-                        <div className="bg-success/10 border border-success/20 rounded-xl p-4 pt-5">
-                            {words.length > 0 ? (
-                                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                                    {words.slice(-12).map((w, i) => (
-                                        <span key={i} className="text-xs font-mono text-text-secondary bg-success/5 px-2 py-0.5 rounded-lg">
-                                            {w.toUpperCase()}
-                                        </span>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-xs text-text-muted italic text-center py-1">No words found yet</div>
-                            )}
+                        <div className="bg-success/10 border border-success/25 rounded-xl p-4 pt-5">
+                            {wordList('max-h-48')}
                         </div>
                         <div className="absolute -top-3 left-4">
                             <span className="bg-bg-primary px-2 text-xs font-medium text-amber uppercase tracking-wide">
@@ -1211,177 +1327,184 @@ const OrbitGame = () => {
                             </span>
                         </div>
                     </div>
+
+                    <div className="flex-1" />
+                    <div className="flex justify-center">{iconButtons}</div>
                 </div>
-            </div>
+            </aside>
 
             {/* Main play area: the board group floats to the vertical centre */}
-            <div className="flex-1 flex flex-col items-center px-3 py-4">
+            <div className="flex-1 flex flex-col items-center px-3 py-3 md:py-4">
+                <div className="md:hidden w-full max-w-[400px] flex items-center justify-between">
+                    {modePills}
+                    {iconButtons}
+                </div>
                 <div className="my-auto flex flex-col items-center w-full">
-                {/* Board */}
-                <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
-                    <div
-                        ref={boardRef}
-                        className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
-                        style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-                        onPointerDown={onBoardPointerDown}
-                        onPointerMove={onBoardPointerMove}
-                        onPointerUp={onBoardPointerUp}
-                        onPointerCancel={onBoardPointerUp}
-                    >
-                        {grid.map(cell => {
-                            const isSelected = selected.includes(cell.id);
-                            const inRing = ringIds.has(cell.id);
-                            const isPivot = pivotCell?.id === cell.id && armed;
-                            // Desync the ring jiggle: 31/17 mod 9 puts every hex-neighbour
-                            // direction on a different phase of the 230ms cycle
-                            const jigglePhase = `${-((cell.position.row * 31 + Math.round(cell.position.col * 2) * 17) % 9) * 26}ms`;
-                            return (
+                    <div style={{ width: BOARD_W * scale, height: BOARD_H * scale }}>
+                        <div
+                            ref={boardRef}
+                            className={cn('relative', armed && pivotCell && 'touch-none', dragging && 'orbit-dragging')}
+                            style={{ width: BOARD_W, height: BOARD_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+                            onPointerDown={onBoardPointerDown}
+                            onPointerMove={onBoardPointerMove}
+                            onPointerUp={onBoardPointerUp}
+                            onPointerCancel={onBoardPointerUp}
+                        >
+                            {grid.map(cell => {
+                                const isSelected = selected.includes(cell.id);
+                                const kt = trail.keyed.get(cell.id);
+                                const cellStyle: CSSProperties = { left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H };
+                                if (kt) {
+                                    Object.assign(cellStyle, {
+                                        '--tile': trailColor(kt.k, trail.n, invalidWord),
+                                        ...(kt.hex ? { '--hex': kt.hex } : null),
+                                    });
+                                }
+                                const inRing = ringIds.has(cell.id);
+                                const isPivot = pivotCell?.id === cell.id && armed;
+                                // Desync the ring jiggle: 31/17 mod 9 puts every hex-neighbour
+                                // direction on a different phase of the 230ms cycle
+                                const jigglePhase = `${-((cell.position.row * 31 + Math.round(cell.position.col * 2) * 17) % 9) * 26}ms`;
+                                return (
+                                    <div
+                                        key={cell.id}
+                                        data-ocell={cell.id}
+                                        data-letter={cell.letter}
+                                        onClick={() => handleCellTap(cell)}
+                                        role={cell.letter ? 'button' : undefined}
+                                        aria-label={cell.letter ? `${cell.letter}, ${letterValue(cell.letter)} points${cell.isGem ? ', gold' : ''}` : undefined}
+                                        aria-pressed={cell.letter ? isSelected : undefined}
+                                        className={cn(
+                                            'orbit-cell',
+                                            inRing && 'orbit-cell--ring',
+                                            inRing && quietRing && 'orbit-cell--quiet',
+                                            isPivot && 'orbit-cell--pivot',
+                                            kt && (invalidWord ? 'orbit-cell--bad' : 'orbit-cell--sel'),
+                                            kt?.isHead && trail.n > 1 && 'orbit-cell--head',
+                                            cell.isGem && 'orbit-cell--gem'
+                                        )}
+                                        style={cellStyle}
+                                    >
+                                        {kt?.key && (
+                                            <svg className="orbit-key" viewBox="-10 -10 90 100" aria-hidden="true">
+                                                <path d={kt.key} />
+                                            </svg>
+                                        )}
+                                        <div className="orbit-hexbg" />
+                                        {cell.letter && (
+                                            <div
+                                                className={cn(
+                                                    'orbit-tile',
+                                                    cell.isGem && 'orbit-tile--gem',
+                                                    isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
+                                                )}
+                                                style={{ animationDelay: jigglePhase }}
+                                            >
+                                                <span className="orbit-tile__letter">{cell.letter}</span>
+                                                <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
+                                                {kt && trail.n > 1 && (
+                                                    <span className={cn('orbit-tile__order', kt.isStart && 'orbit-tile__order--start')}>
+                                                        {kt.k + 1}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+
+                            {clearFx.map(fx => (
                                 <div
-                                    key={cell.id}
-                                    data-ocell={cell.id}
-                                    data-letter={cell.letter}
-                                    onClick={() => handleCellTap(cell)}
-                                    className={cn(
-                                        'orbit-cell',
-                                        inRing && 'orbit-cell--ring',
-                                        inRing && quietRing && 'orbit-cell--quiet',
-                                        isPivot && 'orbit-cell--pivot'
-                                    )}
-                                    style={{ left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H }}
+                                    key={fx.id}
+                                    className="orbit-clearfx"
+                                    style={{ left: fx.left, top: fx.top, width: TILE_W, height: TILE_H }}
                                 >
-                                    <div className="orbit-hexbg" />
-                                    {cell.letter && (
-                                        <div
-                                            className={cn(
-                                                'orbit-tile',
-                                                isSelected && (wordState === 'invalid' ? 'orbit-tile--invalid' : 'orbit-tile--selected')
-                                            )}
-                                            style={{ animationDelay: jigglePhase }}
-                                        >
-                                            {cell.letter}
-                                        </div>
-                                    )}
+                                    {fx.letter}
                                 </div>
-                            );
-                        })}
-
-                        {clearFx.map(fx => (
-                            <div
-                                key={fx.id}
-                                className="orbit-clearfx"
-                                style={{ left: fx.left, top: fx.top, width: TILE_W, height: TILE_H }}
-                            >
-                                {fx.letter}
-                            </div>
-                        ))}
-                        {scoreFx && (
-                            <div key={scoreFx.key} className="orbit-scorefx" style={{ left: scoreFx.x, top: scoreFx.y - 10 }}>
-                                {scoreFx.text}
-                            </div>
-                        )}
+                            ))}
+                            {scoreFx && (
+                                <div key={`score-${scoreFx.key}`} className="orbit-scorefx" style={{ left: scoreFx.x, top: scoreFx.y - 10 }}>
+                                    {scoreFx.text}
+                                </div>
+                            )}
+                            {praise && (
+                                <div key={`praise-${praise.key}`} className="orbit-praise" aria-live="polite">
+                                    {praise.text}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
 
-                {/* Spin status / current word (word mirrors the sidebar on mobile) */}
-                <div className="h-9 mt-3 mb-1 flex items-center">
-                    {previewSteps !== 0 ? (
-                        <span className="text-xs font-medium text-amber">
-                            Spun {Math.abs(previewSteps)} step{Math.abs(previewSteps) === 1 ? '' : 's'} — tap the centre tile or press Enter to settle, Esc to cancel
-                        </span>
-                    ) : selectedLetters ? (
-                        <span className={cn(
-                            'md:hidden px-4 py-1 rounded-xl font-mono font-bold text-lg',
-                            wordState === 'valid' && 'text-amber bg-amber/10',
-                            wordState === 'invalid' && 'text-red-500 bg-red-500/10',
-                            wordState === 'neutral' && 'text-text-secondary bg-secondary/10'
-                        )}>
-                            {selectedLetters}
-                            {match && <span className="ml-2 text-sm">+{wordPoints(selected.length)}{selected.length >= meter && meter > meterFloor(wavesDropped) ? ' 🌊↓' : ''}</span>}
-                        </span>
-                    ) : (
-                        <span className="text-xs text-text-muted italic">
-                            Tap adjacent tiles in order · drag around a tile to spin
-                        </span>
-                    )}
-                </div>
-                <div className="flex gap-2 sm:gap-3 items-center">
-                    <Button
-                        onClick={undo}
-                        disabled={!canUndo}
-                        variant="secondary"
-                        size="gameControl"
-                        className="gap-1 relative"
-                        aria-label={mode === 'daily' ? `Undo (${Math.max(0, undosLeft)} left)` : 'Undo'}
-                    >
-                        <Undo2 className="w-4 h-4" />
-                        {mode === 'daily' && (
-                            <span className="text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center bg-secondary/30">
-                                {Math.max(0, undosLeft)}
+                    <div className="min-h-10 mt-3 mb-2 flex items-center justify-center px-2" aria-live="polite">
+                        {pivotHint && selected.length === 1 ? (
+                            <span className="text-xs font-medium text-amber text-center">
+                                Drag around it to spin · {nextSpinCosts ? 'next spin adds +1 tile to this wave' : 'first spin this turn is free'}
                             </span>
+                        ) : status}
+                    </div>
+
+                    <div className="flex gap-2 w-full max-w-[360px] md:max-w-[400px]">
+                        {phase === 'storm' ? (
+                            <>
+                                <Button
+                                    onClick={undo}
+                                    disabled={!canUndo}
+                                    variant="secondary"
+                                    className="h-12 px-3.5 shrink-0"
+                                    aria-label={mode === 'daily' ? `Undo (${Math.max(0, undosLeft)} left)` : 'Undo'}
+                                    title={mode === 'daily' ? 'Undo a spin for free, or a turn for one charge' : 'Undo'}
+                                >
+                                    <Undo2 className="w-4 h-4" />
+                                    {mode === 'daily' && (
+                                        <span className="text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center bg-secondary/40">
+                                            {Math.max(0, undosLeft)}
+                                        </span>
+                                    )}
+                                </Button>
+                                <Button onClick={endTurn} variant="secondary" className="h-12 flex-1" title="Pass: drop the wave and grow the flood by one">
+                                    <SkipForward className="w-4 h-4" /> Pass
+                                </Button>
+                                <Button onClick={submit} disabled={!match} className="h-12 flex-[1.4] text-base font-semibold">
+                                    <Check className="w-5 h-5" /> Submit{match ? ` +${matchPoints}` : ''}
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button onClick={() => setModal('results')} variant="secondary" className="h-12 flex-1">
+                                    <BarChart3 className="w-4 h-4" /> Results
+                                </Button>
+                                <Button
+                                    onClick={() => (mode === 'daily' ? enterMode('practice') : startFresh('practice'))}
+                                    className="h-12 flex-[1.4] text-base font-semibold"
+                                >
+                                    {mode === 'daily' ? 'Practice' : 'Play again'}
+                                </Button>
+                            </>
                         )}
-                    </Button>
-                    {phase === 'storm' && (
-                        <Button onClick={endTurn} variant="destructive" size="gameControl" className="gap-1 sm:gap-2">
-                            <span className="hidden sm:inline">End Turn</span>
-                            <span className="sm:hidden text-lg">⏭</span>
-                        </Button>
-                    )}
-                    <Button onClick={submit} disabled={!match || phase === 'over'} size="gameControl" className="gap-1 sm:gap-2">
-                        <span className="hidden sm:inline">Submit</span>
-                        <span className="sm:hidden text-lg">✓</span>
-                    </Button>
-                </div>
-                </div>
-
-                {/* Game over */}
-                {phase === 'over' && !showOnboarding && (
-                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
-                        <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full text-center anim-modal-in">
-                            <div className="text-4xl mb-2">🌊</div>
-                            <h2 className="text-xl font-bold text-text-primary mb-1">The board is full</h2>
-                            <p className="text-2xl font-bold text-amber mb-1 tabular-nums">
-                                {score} <span className="text-sm text-text-secondary font-medium">pts</span>
-                            </p>
-                            {actionLog.length > 0 && (
-                                <p className="text-base tracking-wide mb-2" aria-label="run history">
-                                    {actionLog.map(a => ACTION_EMOJI[a]).join('')}
-                                </p>
-                            )}
-                            <p className="text-text-secondary text-sm mb-2">
-                                {mode === 'daily' && dailyResult
-                                    ? <>{dailyResult.waves ?? wavesDropped} waves · {dailyResult.wordCount} {dailyResult.wordCount === 1 ? 'word' : 'words'}{dailyResult.best && <> · best <span className="font-mono font-semibold">{dailyResult.best.toUpperCase()}</span></>}</>
-                                    : <>{wavesDropped} waves · {words.length} {words.length === 1 ? 'word' : 'words'}{bestWord && <> · best <span className="font-mono font-semibold">{bestWord.toUpperCase()}</span></>}</>}
-                            </p>
-                            {mode === 'daily' && (
-                                <p className="text-xs text-text-secondary mb-4">
-                                    🔥 {stats.streak} day streak · 🏆 best {bestDaily} pts
-                                </p>
-                            )}
-                            <div className="flex gap-3 justify-center">
-                                <Button onClick={share} variant="secondary">Share</Button>
-                                {mode === 'daily'
-                                    ? <Button onClick={() => enterMode('practice')}>Practice</Button>
-                                    : <Button onClick={() => startFresh('practice')}>Play again</Button>}
-                            </div>
-                        </div>
                     </div>
-                )}
-
-                {/* First-run onboarding */}
-                {showOnboarding && (
-                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 anim-backdrop-in" role="dialog" aria-modal="true">
-                        <div className="bg-bg-primary border border-secondary/20 rounded-2xl p-6 shadow-2xl m-4 max-w-sm w-full anim-modal-in">
-                            <h2 className="text-xl font-bold text-text-primary mb-4 text-center">How to play Orbit</h2>
-                            <div className="space-y-3 text-sm text-text-secondary mb-5">
-                                <p><span className="text-lg mr-2">🔤</span><span className="font-semibold text-text-primary">Build words.</span> Tap adjacent tiles in order to spell a word — 5+ letters score bonus points.</p>
-                                <p><span className="text-lg mr-2">🔄</span><span className="font-semibold text-text-primary">Spins feed the flood.</span> Drag around a tile to spin its ring — free, anytime, but every spin (and every pass) makes the flood one tile bigger. For good.</p>
-                                <p><span className="text-lg mr-2">🌊</span><span className="font-semibold text-text-primary">Out-spell the flood.</span> The NEXT row is exactly what falls after your turn — and it's the bar: spell a word at least as LONG as it to push the flood back one.</p>
-                            </div>
-                            <Button onClick={dismissOnboarding} className="w-full">Let's go</Button>
-                        </div>
-                    </div>
-                )}
+                </div>
             </div>
+
+            {modal === 'help' && <HelpModal onClose={closeModal} />}
+            {modal === 'results' && (
+                <ResultsModal
+                    onClose={closeModal}
+                    mode={mode}
+                    gameOver={phase === 'over'}
+                    score={score}
+                    waves={wavesDropped}
+                    wordCount={wordCount}
+                    best={dailyResult?.best ?? bestWord}
+                    actionLog={actionLog}
+                    summary={summary}
+                    dailyResult={dailyResult}
+                    onShare={share}
+                    onPractice={() => enterMode('practice')}
+                    onNewPractice={() => startFresh('practice')}
+                    onSubmitScore={submitScore}
+                    savedName={storage.get(LS_NAME) ?? ''}
+                />
+            )}
         </div>
     );
 };

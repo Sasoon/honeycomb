@@ -1,3 +1,6 @@
+// Theme colours are CSS variables; wrap them so Tailwind can apply <alpha-value>
+const v = (name) => `color-mix(in srgb, var(--${name}) calc(<alpha-value> * 100%), transparent)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
@@ -6,50 +9,31 @@ export default {
     ],
     theme: {
         extend: {
+            // color-mix keeps index.css the single source of truth while letting
+            // opacity modifiers (bg-amber/10, border-secondary/30...) compile
             colors: {
-                // CSS Variable-based Palette System
-                primary: {
-                    DEFAULT: 'var(--primary)',
-                    light: 'var(--primary-light)',
-                    dark: 'var(--primary-dark)',
-                },
-                secondary: {
-                    DEFAULT: 'var(--secondary)',
-                    light: 'var(--secondary-light)',
-                    dark: 'var(--secondary-dark)',
-                },
-                accent: {
-                    DEFAULT: 'var(--accent)',
-                    light: 'var(--accent-light)',
-                    dark: 'var(--accent-dark)',
-                },
-                highlight: {
-                    DEFAULT: 'var(--highlight)',
-                    light: 'var(--highlight-light)',
-                    dark: 'var(--highlight-dark)',
-                },
-                success: {
-                    DEFAULT: 'var(--success)',
-                    light: 'var(--success-light)',
-                    dark: 'var(--success-dark)',
-                },
-                amber: {
-                    DEFAULT: 'var(--amber)',
-                    light: 'var(--amber-light)',
-                    dark: 'var(--amber-dark)',
-                },
-                // Direct color variables for flexibility
-                'color-1': 'var(--color-1)',
-                'color-2': 'var(--color-2)',
-                'color-3': 'var(--color-3)',
-                'color-4': 'var(--color-4)',
-                'color-5': 'var(--color-5)',
-                // Background and text variables
-                'bg-primary': 'var(--bg-primary)',
-                'bg-secondary': 'var(--bg-secondary)',
-                'text-primary': 'var(--text-primary)',
-                'text-secondary': 'var(--text-secondary)',
-                'text-muted': 'var(--text-muted)',
+                primary: { DEFAULT: v('primary'), light: v('primary-light'), dark: v('primary-dark') },
+                secondary: { DEFAULT: v('secondary'), light: v('secondary-light'), dark: v('secondary-dark') },
+                accent: { DEFAULT: v('accent'), light: v('accent-light'), dark: v('accent-dark') },
+                highlight: { DEFAULT: v('highlight'), light: v('highlight-light'), dark: v('highlight-dark') },
+                success: { DEFAULT: v('success'), light: v('success-light'), dark: v('success-dark') },
+                gold: v('gold'),
+                amber: { DEFAULT: v('amber'), light: v('amber-light'), dark: v('amber-dark') },
+                'color-1': v('color-1'),
+                'color-2': v('color-2'),
+                'color-3': v('color-3'),
+                'color-4': v('color-4'),
+                'color-5': v('color-5'),
+                'bg-primary': v('bg-primary'),
+                'bg-secondary': v('bg-secondary'),
+                'text-primary': v('text-primary'),
+                'text-secondary': v('text-secondary'),
+                'text-muted': v('text-muted'),
+                // Neutral hairlines and surfaces on the Abyss background
+                line: 'rgba(190, 210, 235, 0.12)',
+                'line-strong': 'rgba(190, 210, 235, 0.2)',
+                surface: 'rgba(190, 210, 235, 0.08)',
+                'surface-hover': 'rgba(190, 210, 235, 0.14)',
             },
             fontFamily: {
                 game: ['Poppins', 'sans-serif'],
