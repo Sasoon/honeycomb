@@ -21,7 +21,7 @@ const RULES: Array<{ icon: string; title: string; body: string }> = [
     {
         icon: '🔄',
         title: 'Spin to set up.',
-        body: 'Tap one tile, then drag around it to rotate its neighbours. You get a free spin every turn, and an unused one carries over (hold up to 2). Each spin beyond your free ones adds a tile to this turn’s wave.',
+        body: 'Tap one tile, then drag around it to rotate its neighbours. Your first spin each turn is free; each extra spin adds a tile to this turn’s wave.',
     },
     {
         icon: '✂️',
