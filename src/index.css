@@ -1464,9 +1464,6 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* a leap glyph occupies the top corner */
-.orbit-tile__order--low { top: 16%; }
-
 /* the first tap's number sits on an ink disc */
 .orbit-tile__order--start {
   opacity: 1;
@@ -1590,8 +1587,6 @@ button {
    the word. Selected tiles paint above their neighbours so keys never hide */
 .orbit-cell--sel,
 .orbit-cell--bad { z-index: 1; }
-.orbit-cell--sel { --cue: rgba(14, 27, 44, 0.82); }
-.orbit-cell--bad { --cue: rgba(242, 239, 232, 0.9); }
 
 .orbit-key {
   position: absolute;
@@ -1608,34 +1603,6 @@ button {
   transform-box: fill-box;
   transform-origin: center;
   animation: orbitKeyIn 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-/* A leap gets the only glyph: a double chevron on the tile it left (facing
-   the landing) and the tile it reached (facing back where it came from).
-   Ghosted, it marks every tile a leap could still reach */
-.orbit-cues {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.orbit-cue--leap,
-.orbit-cue--ghost {
-  fill: none;
-  stroke: var(--cue);
-  stroke-width: 2.3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.orbit-cue--ghost {
-  stroke: #27A89B;
-  stroke-width: 2;
-  opacity: 0.6;
-  animation: orbitGhost 2.6s ease-in-out infinite;
 }
 
 /* The newest tile: an inner rim (the gold tile's idiom) and a soft lift */
@@ -1661,11 +1628,6 @@ button {
 @keyframes orbitKeyIn {
   from { opacity: 0; transform: scale(0.3); }
   to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes orbitGhost {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0.28; }
 }
 
 /* Praise callout for big words: pops over the board, then floats away */
@@ -1704,8 +1666,7 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .orbit-praise { animation: none; opacity: 0; }
-  .orbit-key path,
-  .orbit-cue--ghost { animation: none; }
+  .orbit-key path { animation: none; }
   .orbit-danger { animation: none; }
   .orbit-cell--ring .orbit-tile { animation: none; }
   .orbit-clearfx { animation: none; opacity: 0; }

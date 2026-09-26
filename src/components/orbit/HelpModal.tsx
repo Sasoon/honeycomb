@@ -6,7 +6,7 @@ const RULES: Array<{ icon: string; title: string; body: string }> = [
     {
         icon: '🔤',
         title: 'Build words.',
-        body: 'Tap tiles in order, each touching the last, to spell 3+ letters. Once per word you may leap to a tile two steps away. Score = letter points, ×2 for 5–6 letters, ×3 for 7+.',
+        body: 'Tap tiles in order, each touching the last, to spell 3+ letters. Score = letter points, ×2 for 5–6 letters, ×3 for 7+.',
     },
     {
         icon: '🟨',

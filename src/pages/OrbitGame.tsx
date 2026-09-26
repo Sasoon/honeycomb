@@ -23,8 +23,6 @@ import {
     loadStats,
     canExtend,
     clearAndSettle,
-    isAdjacent,
-    leapOver,
     letterValue,
     longestWord,
     orbitFlood,
@@ -45,7 +43,7 @@ import {
 } from '../lib/orbit';
 import toastService from '../lib/toastService';
 import { haptics } from '../lib/haptics';
-import { keyedTiles, leapGlyph, unit } from '../lib/orbitKeys';
+import { keyedTiles } from '../lib/orbitKeys';
 import { sfx } from '../lib/sfx';
 
 const FLOOD_STAGGER_MS = 50;
@@ -61,8 +59,8 @@ const praiseFor = (len: number, gems: number, points: number) =>
     len >= 8 ? 'Legendary!' : len >= 7 ? 'Superb!' : points >= 60 ? 'Jackpot!'
         : len >= 6 ? 'Great!' : gems > 0 ? 'Golden!' : len >= 5 ? 'Nice!' : null;
 
-// v11: leap words (older saved runs are dropped)
-const LS_RUN_DAILY = 'waxle-orbit-run-v11';
+// v12: path words again, leap removed (older saved runs are dropped)
+const LS_RUN_DAILY = 'waxle-orbit-run-v12';
 const LS_RUN_PRACTICE = 'waxle-orbit-practice-v3';
 const LS_ONBOARDED = 'waxle-orbit-onboarded-v7';
 const LS_MODE = 'waxle-orbit-mode';
@@ -863,15 +861,15 @@ const OrbitGame = () => {
             sfx.deselect();
             return;
         }
-        // Path rule: each tile touches the last one, with one leap per word
-        if (canExtend(selectedCells, cell, grid)) {
+        // Path rule: each tile touches the last one
+        if (canExtend(selectedCells, cell)) {
             setSelected([...selected, cell.id]);
             sfx.select(selected.length);
         } else {
             setSelected([cell.id]);
             sfx.select(0);
         }
-    }, [phase, selected, selectedCells, grid, commitRotation, resetPreview]);
+    }, [phase, selected, selectedCells, commitRotation, resetPreview]);
 
     // ---------- wheel + keyboard ----------
 
@@ -1150,27 +1148,13 @@ const OrbitGame = () => {
     );
 
     // Word order lives on the tiles: each tile keys into the next (the seam
-    // between them bends into a chevron along the word), the teal ramp runs
-    // from the first tap to the newest, and a leap puts a double chevron on
-    // the tile it left and the tile it reached. While the leap is unused, the
-    // tiles it could reach show that chevron ghosted
+    // between them bends into a chevron along the word) and the teal ramp
+    // runs from the first tap to the newest
     const trail = useMemo(() => {
-        const n = selectedCells.length;
         const byId = new Map(grid.map(c => [c.id, c]));
-        const centre = (id: string) => centreOf(byId.get(id)!);
-        const keyed = keyedTiles(selected, centre, (a, b) => isAdjacent(byId.get(a)!, byId.get(b)!));
-        const leapTaken = selectedCells.some((c, i) => i > 0 && !isAdjacent(selectedCells[i - 1], c));
-        const ghosts = new Map<string, string>();
-        if (n && !leapTaken && phase === 'storm') {
-            const last = selectedCells[n - 1];
-            grid.forEach(c => {
-                if (c.letter && !keyed.has(c.id) && leapOver(last, c, grid)) {
-                    ghosts.set(c.id, leapGlyph(unit(centreOf(last), centreOf(c)), true));
-                }
-            });
-        }
-        return { n, keyed, ghosts };
-    }, [selected, selectedCells, grid, phase]);
+        const keyed = keyedTiles(selected, id => centreOf(byId.get(id)!));
+        return { n: selected.length, keyed };
+    }, [selected, grid]);
     const invalidWord = wordState === 'invalid';
 
     let status: React.ReactNode;
@@ -1217,7 +1201,7 @@ const OrbitGame = () => {
     } else {
         status = (
             <span className="text-xs text-text-muted italic text-center">
-                Tap tiles in order · leap one tile per word · drag around a tile to spin
+                Tap touching tiles in order · drag around a tile to spin
             </span>
         );
     }
@@ -1369,7 +1353,6 @@ const OrbitGame = () => {
                             {grid.map(cell => {
                                 const isSelected = selected.includes(cell.id);
                                 const kt = trail.keyed.get(cell.id);
-                                const ghost = previewSteps === 0 && !dragging ? trail.ghosts.get(cell.id) : undefined;
                                 const cellStyle: CSSProperties = { left: cellX(cell), top: cellY(cell), width: TILE_W, height: TILE_H };
                                 if (kt) {
                                     Object.assign(cellStyle, {
@@ -1417,20 +1400,10 @@ const OrbitGame = () => {
                                                 )}
                                                 style={{ animationDelay: jigglePhase }}
                                             >
-                                                {(kt?.leap.length || ghost) && (
-                                                    <svg className="orbit-cues" viewBox="0 0 70 80" aria-hidden="true">
-                                                        {kt?.leap.map((d, i) => <path key={i} className="orbit-cue--leap" d={d} />)}
-                                                        {ghost && <path className="orbit-cue--ghost" d={ghost} />}
-                                                    </svg>
-                                                )}
                                                 <span className="orbit-tile__letter">{cell.letter}</span>
                                                 <span className="orbit-tile__value">{letterValue(cell.letter)}</span>
                                                 {kt && trail.n > 1 && (
-                                                    <span className={cn(
-                                                        'orbit-tile__order',
-                                                        kt.isStart && 'orbit-tile__order--start',
-                                                        kt.lowOrder && 'orbit-tile__order--low'
-                                                    )}>
+                                                    <span className={cn('orbit-tile__order', kt.isStart && 'orbit-tile__order--start')}>
                                                         {kt.k + 1}
                                                     </span>
                                                 )}

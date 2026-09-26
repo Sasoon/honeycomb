@@ -13,9 +13,7 @@ export const DAILY_UNDOS = 3;
 // The flood runs on a fixed schedule: every wave is a little bigger than
 // the last few, so pressure builds on its own instead of punishing play
 export const WAVE_START = 3;
-// Leap finds ~3x the words of strict paths, so waves grow every 3 turns
-// (simulated no-spin runs: 14-20 waves, ~17.5 on average)
-export const WAVE_GROWTH_EVERY = 3;
+export const WAVE_GROWTH_EVERY = 4;
 export const baseWave = (wave: number) => WAVE_START + Math.floor(wave / WAVE_GROWTH_EVERY);
 // Spins are the signature move, so the first each turn is free. Every
 // extra spin adds one tile to THIS turn's wave only
@@ -50,28 +48,16 @@ export interface WordScore {
     total: number;
 }
 
-// ---------- word shape: path + one leap ----------
-// Each tile must touch the one before it, except that once per word you may
-// leap to a tile two steps away (any tile sharing a neighbour with the last)
+// ---------- word shape: path ----------
+// Each tile must touch the one before it
 
 export const isAdjacent = (a: HexCell, b: HexCell) =>
     a.position.row === b.position.row
         ? Math.abs(a.position.col - b.position.col) === 1
         : Math.abs(a.position.row - b.position.row) === 1 && Math.abs(a.position.col - b.position.col) === 0.5;
 
-// The lettered tile `a` would leap over to reach `c`, if any
-export function leapOver(a: HexCell, c: HexCell, grid: HexCell[]): HexCell | null {
-    if (isAdjacent(a, c)) return null;
-    return grid.find(m => m.letter && m.id !== a.id && m.id !== c.id && isAdjacent(a, m) && isAdjacent(m, c)) ?? null;
-}
-
-export const leapUsed = (sel: HexCell[]) => sel.some((c, i) => i > 0 && !isAdjacent(sel[i - 1], c));
-
-export function canExtend(sel: HexCell[], cell: HexCell, grid: HexCell[]): boolean {
-    if (!sel.length) return true;
-    const last = sel[sel.length - 1];
-    return isAdjacent(last, cell) || (!leapUsed(sel) && !!leapOver(last, cell, grid));
-}
+export const canExtend = (sel: HexCell[], cell: HexCell) =>
+    !sel.length || isAdjacent(sel[sel.length - 1], cell);
 
 // Letter points x length bonus, doubled for every gold tile in the word
 export function scoreWord(letters: string[], gems: number): WordScore {

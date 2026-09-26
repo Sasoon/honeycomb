@@ -37,10 +37,8 @@ const HowToPlay = () => {
           score them. The tiles vanish and everything above them slides down.
         </p>
         <p className="text-text-secondary mb-4">
-          <span className="font-semibold text-amber">Leap:</span> once per word, you may leap from your last tile to any tile two
-          steps away. On the board, each picked tile keys into the next one, so the seam between them bends into an arrow
-          along your word. A leap is marked » on the tile you left and the tile you landed on, and faint » marks show
-          where a leap can still land.
+          On the board, each picked tile keys into the next one, so the seam between them bends into an arrow along
+          your word.
         </p>
         <p className="text-text-secondary mb-3">
           Every tile shows its letter value, Scrabble style. A word scores the sum of its letters, then
